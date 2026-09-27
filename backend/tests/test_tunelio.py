@@ -1,7 +1,9 @@
 import json
+from urllib.error import HTTPError
 
+import pytest
 import app.tunelio as tunelio_module
-from app.tunelio import TunelioClient
+from app.tunelio import TunelioClient, TunelioTranscriptNotFoundError
 
 
 class FakeResponse:
@@ -92,3 +94,41 @@ def test_create_range_appends_start_and_end_to_signed_url(monkeypatch) -> None:
     assert reference.expires_at is not None
     assert second_reference.url.endswith("&start=180&end=240")
     assert calls == 1
+
+
+def test_transcript_is_cached_by_video(monkeypatch) -> None:
+    calls = 0
+
+    def fake_urlopen(request, timeout):
+        nonlocal calls
+        calls += 1
+        assert request.full_url.startswith("https://tunelio.dev/transcript?")
+        return FakeResponse(
+            {
+                "language": "ko",
+                "is_generated": True,
+                "segments": [{"start": 1, "duration": 2, "text": "테스트"}],
+                "status": "ok",
+            }
+        )
+
+    monkeypatch.setattr(tunelio_module, "urlopen", fake_urlopen)
+    client = TunelioClient("server-secret")
+
+    first = client.transcript("https://www.youtube.com/watch?v=source123")
+    second = client.transcript("https://youtu.be/source123")
+
+    assert first == second
+    assert calls == 1
+
+
+def test_transcript_404_is_distinct_from_provider_failure(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        raise HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(tunelio_module, "urlopen", fake_urlopen)
+
+    with pytest.raises(TunelioTranscriptNotFoundError):
+        TunelioClient("server-secret").transcript(
+            "https://www.youtube.com/watch?v=source123"
+        )

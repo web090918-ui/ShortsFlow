@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     tunelio_api_key: SecretStr | None = None
     tunelio_base_url: str = "https://tunelio.dev"
+    openai_api_key: SecretStr | None = None
+    openai_stt_model: str = "whisper-1"
     job_repository_backend: Literal["memory", "firestore"] = "memory"
     task_dispatcher_backend: Literal["local", "cloud_tasks"] = "local"
     worker_auth_mode: Literal["disabled", "google_oidc"] = "disabled"

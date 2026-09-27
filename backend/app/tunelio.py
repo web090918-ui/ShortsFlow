@@ -17,8 +17,12 @@ class TunelioRangeReference:
     filename: str | None
 
 
+class TunelioTranscriptNotFoundError(VideoSourceProviderError):
+    """The source has no transcript track that Tunelio can return."""
+
+
 class TunelioClient:
-    """Small server-side client for the two Tunelio endpoints used in Task 03B."""
+    """Small server-side client for ShortsFlow's Tunelio endpoints."""
 
     def __init__(
         self,
@@ -32,8 +36,10 @@ class TunelioClient:
         self._timeout_seconds = timeout_seconds
         self._info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._create_cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+        self._transcript_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._info_lock = threading.Lock()
         self._create_lock = threading.Lock()
+        self._transcript_lock = threading.Lock()
 
     @staticmethod
     def _source_cache_key(url: str) -> str:
@@ -50,7 +56,13 @@ class TunelioClient:
                 return parts[1]
         return url
 
-    def _get(self, path: str, **params: str) -> dict[str, Any]:
+    def _get(
+        self,
+        path: str,
+        *,
+        transcript_not_found: bool = False,
+        **params: str,
+    ) -> dict[str, Any]:
         request_url = f"{self._base_url}{path}?{urlencode(params)}"
         request = Request(
             request_url,
@@ -73,6 +85,10 @@ class TunelioClient:
                 message = "Tunelio API 키가 올바르지 않습니다."
             elif exc.code == 402:
                 message = "Tunelio 크레딧이 부족합니다."
+            elif exc.code == 404 and transcript_not_found:
+                raise TunelioTranscriptNotFoundError(
+                    "YouTube 영상에 사용할 수 있는 자막이 없습니다."
+                ) from exc
             elif exc.code == 404:
                 message = "공개 상태의 YouTube 영상을 찾을 수 없습니다."
             elif exc.code == 429:
@@ -96,6 +112,23 @@ class TunelioClient:
                 "영상 확보 서비스가 올바르지 않은 응답을 반환했습니다."
             )
         return payload
+
+    def transcript(self, url: str) -> dict[str, Any]:
+        cache_key = self._source_cache_key(url)
+        with self._transcript_lock:
+            cached = self._transcript_cache.get(cache_key)
+            now = time.time()
+            if cached is not None and cached[0] > now:
+                return cached[1]
+            payload = self._get(
+                "/transcript",
+                transcript_not_found=True,
+                url=url,
+                type="any",
+                format="json",
+            )
+            self._transcript_cache[cache_key] = (now + 6 * 60 * 60, payload)
+            return payload
 
     def prepare(self, url: str) -> PreparedVideoSource:
         cache_key = self._source_cache_key(url)

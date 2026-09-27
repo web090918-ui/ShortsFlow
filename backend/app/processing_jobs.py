@@ -13,6 +13,14 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.config import Settings, get_settings
 from app.downloads import MAX_RANGE_SECONDS, RenderTemplate
+from app.transcripts import (
+    FfmpegAudioExtractor,
+    OpenAIWhisperProvider,
+    TranscriptProcessor,
+    TunelioAudioAcquirer,
+    TunelioCaptionProvider,
+)
+from app.tunelio import TunelioClient
 
 
 logger = logging.getLogger(__name__)
@@ -32,6 +40,7 @@ class ProcessingJobStatus(str, Enum):
 
 class ProcessingStep(str, Enum):
     PIPELINE_BOOTSTRAP = "PIPELINE_BOOTSTRAP"
+    TRANSCRIPT = "TRANSCRIPT"
 
 
 class CreateProcessingJobRequest(BaseModel):
@@ -354,10 +363,40 @@ def _authenticator_from_settings(settings: Settings) -> WorkerAuthenticator:
     )
 
 
+def _transcript_processor_from_settings(
+    settings: Settings,
+) -> TranscriptProcessor | None:
+    if settings.tunelio_api_key is None:
+        return None
+    tunelio = TunelioClient(
+        settings.tunelio_api_key.get_secret_value(),
+        base_url=settings.tunelio_base_url,
+    )
+    stt_provider = None
+    if settings.openai_api_key is not None:
+        from openai import OpenAI
+
+        stt_provider = OpenAIWhisperProvider(
+            OpenAI(
+                api_key=settings.openai_api_key.get_secret_value(),
+                timeout=600,
+                max_retries=0,
+            ),
+            model=settings.openai_stt_model,
+        )
+    return TranscriptProcessor(
+        TunelioCaptionProvider(tunelio),
+        audio_acquirer=TunelioAudioAcquirer(tunelio),
+        audio_extractor=FfmpegAudioExtractor(),
+        stt_provider=stt_provider,
+    )
+
+
 settings = get_settings()
 repository: ProcessingJobRepository = _repository_from_settings(settings)
 dispatcher: TaskDispatcher = _dispatcher_from_settings(settings)
 worker_authenticator: WorkerAuthenticator = _authenticator_from_settings(settings)
+transcript_processor = _transcript_processor_from_settings(settings)
 router = APIRouter(tags=["processing-jobs"])
 
 
@@ -381,13 +420,23 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
 
     job = claim.job
     try:
-        # Task 04 validates durable dispatch and idempotent execution only.
-        # Task 05 replaces this bootstrap result with transcript processing.
+        if transcript_processor is None:
+            raise RuntimeError(
+                "Transcript 처리를 위해 SHORTSFLOW_TUNELIO_API_KEY를 설정해야 합니다."
+            )
+        transcript = transcript_processor.process(
+            job.source_url,
+            start_seconds=job.start_seconds,
+            end_seconds=job.end_seconds,
+        )
         completed = job.model_copy(
             update={
                 "status": ProcessingJobStatus.COMPLETED,
                 "progress": 100,
-                "result": {"next_step": "TRANSCRIPT"},
+                "result": {
+                    "next_step": "CANDIDATE",
+                    "transcript": transcript.model_dump(mode="json"),
+                },
                 "error_message": None,
                 "lease_expires_at": None,
                 "completed_at": _now(),
@@ -445,7 +494,7 @@ def create_processing_job(
         source_id=payload.source_id,
         source_url=str(payload.source_url),
         status=ProcessingJobStatus.QUEUED,
-        step=ProcessingStep.PIPELINE_BOOTSTRAP,
+        step=ProcessingStep.TRANSCRIPT,
         progress=0,
         start_seconds=payload.start_seconds,
         end_seconds=payload.end_seconds,

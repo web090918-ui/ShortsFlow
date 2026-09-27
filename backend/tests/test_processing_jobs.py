@@ -1,5 +1,6 @@
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 import app.processing_jobs as jobs_module
@@ -9,9 +10,36 @@ from app.processing_jobs import (
     InMemoryProcessingJobRepository,
     ProcessingJobStatus,
 )
+from app.transcripts import TranscriptResult, TranscriptSegment
 
 
 client = TestClient(app)
+
+
+class StubTranscriptProcessor:
+    def process(self, source_url, *, start_seconds, end_seconds) -> TranscriptResult:
+        return TranscriptResult(
+            provider="tunelio",
+            language="ko",
+            is_generated=True,
+            source_start_seconds=start_seconds,
+            source_end_seconds=end_seconds,
+            segments=[
+                TranscriptSegment(
+                    start_seconds=start_seconds,
+                    end_seconds=min(start_seconds + 2, end_seconds),
+                    text="테스트 자막",
+                )
+            ],
+            full_text="테스트 자막",
+        )
+
+
+@pytest.fixture(autouse=True)
+def stub_transcript_processor(monkeypatch):
+    monkeypatch.setattr(
+        jobs_module, "transcript_processor", StubTranscriptProcessor()
+    )
 
 
 class StubDispatcher:
@@ -45,7 +73,7 @@ def test_creates_and_reads_queued_processing_job(monkeypatch) -> None:
     assert response.status_code == 202
     created = response.json()
     assert created["status"] == "QUEUED"
-    assert created["step"] == "PIPELINE_BOOTSTRAP"
+    assert created["step"] == "TRANSCRIPT"
     assert created["duration_seconds"] == 120
 
     read_response = client.get(f"/processing-jobs/{created['id']}")
@@ -75,7 +103,8 @@ def test_worker_is_idempotent_for_duplicate_delivery(monkeypatch) -> None:
 
     assert first.status_code == 200
     assert first.json()["status"] == "COMPLETED"
-    assert first.json()["result"] == {"next_step": "TRANSCRIPT"}
+    assert first.json()["result"]["next_step"] == "CANDIDATE"
+    assert first.json()["result"]["transcript"]["provider"] == "tunelio"
     assert first.json()["attempt_count"] == 1
     assert second.status_code == 200
     assert second.json()["attempt_count"] == 1

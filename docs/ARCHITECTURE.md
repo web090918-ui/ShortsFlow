@@ -139,6 +139,23 @@ The Task 04 implementation runs the public API and authenticated Worker route fr
 
 Local development defaults to an in-memory repository and FastAPI background dispatch. Production selects Firestore, Cloud Tasks, and Google OIDC through environment settings. Cloud Run Application Default Credentials are used; no service-account JSON key is stored in the repository or container.
 
+## Transcript processing
+
+Task 05 keeps transcript acquisition behind small caption, media acquisition, audio extraction, and STT boundaries. For a YouTube job, the Worker first requests Tunelio timestamped captions and filters them to the user-selected source range. This avoids downloading media and calling STT when usable captions already exist.
+
+Only when the video has no caption track, or the selected range contains no caption segments, does the Worker use the fallback path:
+
+```text
+Tunelio 480p selected-range URL
+-> temporary MP4 on Cloud Run
+-> FFmpeg 16 kHz mono 32 kbps MP3
+-> OpenAI whisper-1 verbose JSON with segment timestamps
+-> absolute source-video timestamps
+-> Firestore ProcessingJob.result.transcript
+```
+
+The fallback uses `whisper-1` because Task 05 requires segment timestamps. Temporary media and audio live only inside a per-job temporary directory and are deleted when processing ends. No media object storage, candidate generation, ranking, or rendering is introduced in this task. Provider authentication and credit errors remain visible job failures; only transcript absence triggers the fallback.
+
 ## Ranking boundary
 
 Ranking accepts generic candidate content and returns scores and explanations sufficient to select the Top 3. MVP1 ranking is channel-independent and evaluates general qualities such as hook strength, completeness, density, curiosity, duration suitability, and standalone understandability.

@@ -22,12 +22,13 @@ See the product, architecture, and delivery details in:
 - [Architecture](docs/ARCHITECTURE.md)
 - [MVP backlog](docs/MVP_BACKLOG.md)
 - [Competitor research](docs/COMPETITOR_RESEARCH.md)
+- [Task 05 transcript](docs/TASK_05_TRANSCRIPT.md)
 
 ## Current status
 
-Tasks 01 through 03C are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
+Tasks 01 through 04 are complete, and Task 05 transcript processing is implemented pending production provider validation. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
 
-When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata and selected-range acquisition use Tunelio and return its signed download URL without routing video bytes through the backend. Without that key, the local prototype uses yt-dlp, FastAPI `BackgroundTasks`, and FFmpeg with temporary local storage. Cloud Tasks, persistent job state, object storage, transcript, ranking, rendering, and affiliate processing are not implemented.
+When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata, selected-range acquisition, and the first transcript attempt use Tunelio. Transcript processing filters timestamped captions to the selected source range. If that range has no captions and `SHORTSFLOW_OPENAI_API_KEY` is configured, the Worker downloads only the 480p analysis range, extracts a 16 kHz mono MP3 with FFmpeg, and sends it to OpenAI `whisper-1` for segment timestamps. Cloud Tasks and Firestore persist the job and normalized transcript. Object storage, candidate generation, ranking, rendering, and affiliate processing are not implemented.
 
 Tunelio cost controls reuse ready metadata for six hours and reuse one unexpired `/create` URL for multiple start/end selections. Changing a range or template in the same browser session therefore does not intentionally spend another 10 credits. The caches are best-effort per browser session and warm backend instance; durable cross-instance caching remains deferred until persistence is introduced by its scheduled task.
 
@@ -91,7 +92,7 @@ Source endpoints:
 - `POST /sources/{source_id}/downloads` — enqueue acquisition of one selected range (maximum 60 minutes)
 - `GET /downloads/{download_id}` — poll the selected-range job
 - `GET /downloads/{download_id}/file` — download the prepared MP4
-- `POST /processing-jobs` — create and enqueue a Task 04 processing job
+- `POST /processing-jobs` — create and enqueue a transcript processing job
 - `GET /processing-jobs/{job_id}` — read durable processing state
 - `POST /worker/process` — authenticated Cloud Tasks Worker target
 
@@ -103,6 +104,8 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_FRONTEND_ORIGIN`
 - `SHORTSFLOW_TUNELIO_API_KEY` — optional server-side secret; enables Tunelio acquisition
 - `SHORTSFLOW_TUNELIO_BASE_URL` — defaults to `https://tunelio.dev`
+- `SHORTSFLOW_OPENAI_API_KEY` — optional server-side secret; enables Whisper fallback when captions are unavailable
+- `SHORTSFLOW_OPENAI_STT_MODEL` — defaults to `whisper-1` for segment timestamps
 
 Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are documented in [Task 04 deployment](docs/TASK_04_DEPLOYMENT.md). Local defaults do not require Google Cloud credentials.
 

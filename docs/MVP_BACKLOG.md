@@ -120,6 +120,8 @@ Implementation status:
 
 ## Task 05 — Transcript
 
+Status: In progress — code complete, production provider validation pending
+
 Goal: create a timestamped transcript from a processable video Source.
 
 - Extract audio with FFmpeg.
@@ -127,6 +129,16 @@ Goal: create a timestamped transcript from a processable video Source.
 - Normalize the result into a timestamped transcript.
 - Persist transcript status and actionable errors.
 - Keep FFmpeg execution and the STT provider behind small boundaries needed for testing.
+
+Implementation status:
+
+- Tunelio timestamped captions are requested first and filtered to the selected range.
+- Caption results are cached per warm backend instance to avoid duplicate paid calls.
+- A missing caption track or an empty selected-caption range falls back to the 480p analysis proxy.
+- FFmpeg extracts a 16 kHz mono 32 kbps MP3, which stays below the OpenAI 25 MB upload limit for the maximum 60-minute source range.
+- OpenAI `whisper-1` returns segment timestamps, which are normalized to absolute source-video time.
+- The normalized transcript is persisted in the Firestore processing job result and advances `next_step` to `CANDIDATE`.
+- Task 05 is not complete until both the caption-first path and Whisper fallback are validated on Cloud Run.
 
 ## Task 06 — Candidate Generation
 
