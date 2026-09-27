@@ -23,7 +23,7 @@ The Cloud Run service may accept unauthenticated traffic for the public API duri
 Use `asia-northeast3` for all regional resources:
 
 - Cloud Run service: `shortsflow-worker`
-- Firestore Native database: `(default)`
+- Firestore Native database: `(default)` or the configured database ID
 - Cloud Tasks queue: `shortsflow-processing`
 - Runtime/task identity: `shortsflow-runtime@PROJECT_ID.iam.gserviceaccount.com`
 
@@ -59,7 +59,7 @@ Enable these APIs:
 - Cloud Tasks API
 - Firestore API
 
-Create Firestore in Native mode in `asia-northeast3`. Its location cannot be changed after creation.
+Create Firestore in Native mode in `asia-northeast3`. Its location cannot be changed after creation. If the database ID is not `(default)`, set `SHORTSFLOW_FIRESTORE_DATABASE` to the exact ID.
 
 Create the `shortsflow-processing` Cloud Tasks queue in `asia-northeast3` with a maximum of three attempts for initial validation.
 
@@ -78,6 +78,7 @@ SHORTSFLOW_TASK_DISPATCHER_BACKEND=cloud_tasks
 SHORTSFLOW_WORKER_AUTH_MODE=google_oidc
 SHORTSFLOW_GCP_PROJECT_ID=<project-id>
 SHORTSFLOW_GCP_LOCATION=asia-northeast3
+SHORTSFLOW_FIRESTORE_DATABASE=shortflow
 SHORTSFLOW_CLOUD_TASKS_QUEUE=shortsflow-processing
 SHORTSFLOW_WORKER_URL=https://<cloud-run-service>.run.app
 SHORTSFLOW_WORKER_OIDC_AUDIENCE=https://<cloud-run-service>.run.app

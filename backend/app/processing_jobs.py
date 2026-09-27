@@ -314,7 +314,9 @@ def _repository_from_settings(settings: Settings) -> ProcessingJobRepository:
     from google.cloud import firestore
 
     project_id = _require_settings(settings, "gcp_project_id")[0]
-    return FirestoreProcessingJobRepository(firestore.Client(project=project_id))
+    return FirestoreProcessingJobRepository(
+        firestore.Client(project=project_id, database=settings.firestore_database)
+    )
 
 
 def _dispatcher_from_settings(settings: Settings) -> TaskDispatcher:

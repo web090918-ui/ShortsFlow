@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     worker_auth_mode: Literal["disabled", "google_oidc"] = "disabled"
     gcp_project_id: str | None = None
     gcp_location: str = "asia-northeast3"
+    firestore_database: str = "(default)"
     cloud_tasks_queue: str = "shortsflow-processing"
     worker_url: str | None = None
     worker_oidc_audience: str | None = None
