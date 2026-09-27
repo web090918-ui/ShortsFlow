@@ -12,6 +12,8 @@ The production order is:
 4. Send the MP3 to OpenAI `whisper-1` with segment timestamps.
 5. Normalize timestamps to the original source-video timeline and persist the result in Firestore.
 
+`POST /processing-jobs` accepts `transcript_language` as an ISO-style language code. The Korean MVP defaults to `ko`; callers should send another code when the source language is known. The same hint is passed to both Tunelio and Whisper so a provider default does not silently select an unrelated translated caption track.
+
 Tunelio documents `/transcript` as a six-credit request and says repeated unique-video requests may be cached by the provider. ShortsFlow also caches successful caption responses for six hours in each warm process. Failed requests are not cached. Current provider behavior and pricing can change; see <https://tunelio.dev/docs/>.
 
 OpenAI accepts transcription files up to 25 MB and requires `whisper-1` for segment or word timestamp granularities. The fallback MP3 uses mono 16 kHz audio at 32 kbps so the maximum 60-minute selection remains below that upload limit. See <https://developers.openai.com/api/docs/guides/speech-to-text>.

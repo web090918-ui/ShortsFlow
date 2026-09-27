@@ -36,7 +36,9 @@ class TunelioClient:
         self._timeout_seconds = timeout_seconds
         self._info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._create_cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
-        self._transcript_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._transcript_cache: dict[
+            tuple[str, str | None], tuple[float, dict[str, Any]]
+        ] = {}
         self._info_lock = threading.Lock()
         self._create_lock = threading.Lock()
         self._transcript_lock = threading.Lock()
@@ -113,19 +115,18 @@ class TunelioClient:
             )
         return payload
 
-    def transcript(self, url: str) -> dict[str, Any]:
-        cache_key = self._source_cache_key(url)
+    def transcript(self, url: str, *, language: str | None = None) -> dict[str, Any]:
+        cache_key = (self._source_cache_key(url), language)
         with self._transcript_lock:
             cached = self._transcript_cache.get(cache_key)
             now = time.time()
             if cached is not None and cached[0] > now:
                 return cached[1]
+            params = {"url": url, "type": "any", "format": "json"}
+            if language is not None:
+                params["lang"] = language
             payload = self._get(
-                "/transcript",
-                transcript_not_found=True,
-                url=url,
-                type="any",
-                format="json",
+                "/transcript", transcript_not_found=True, **params
             )
             self._transcript_cache[cache_key] = (now + 6 * 60 * 60, payload)
             return payload

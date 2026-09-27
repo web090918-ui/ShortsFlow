@@ -50,6 +50,10 @@ class CreateProcessingJobRequest(BaseModel):
     end_seconds: float = Field(gt=0)
     rights_confirmed: bool = False
     template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    transcript_language: str = Field(
+        default="ko",
+        pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",
+    )
 
 
 class ProcessingJobResponse(BaseModel):
@@ -62,6 +66,7 @@ class ProcessingJobResponse(BaseModel):
     end_seconds: float
     duration_seconds: float
     template_id: RenderTemplate
+    transcript_language: str = "ko"
     attempt_count: int = Field(ge=0)
     error_message: str | None
     result: dict[str, Any] | None
@@ -428,6 +433,7 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
             job.source_url,
             start_seconds=job.start_seconds,
             end_seconds=job.end_seconds,
+            language=job.transcript_language,
         )
         completed = job.model_copy(
             update={
@@ -500,6 +506,7 @@ def create_processing_job(
         end_seconds=payload.end_seconds,
         duration_seconds=duration,
         template_id=payload.template_id,
+        transcript_language=payload.transcript_language,
         attempt_count=0,
         error_message=None,
         result=None,

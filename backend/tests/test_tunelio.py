@@ -115,8 +115,10 @@ def test_transcript_is_cached_by_video(monkeypatch) -> None:
     monkeypatch.setattr(tunelio_module, "urlopen", fake_urlopen)
     client = TunelioClient("server-secret")
 
-    first = client.transcript("https://www.youtube.com/watch?v=source123")
-    second = client.transcript("https://youtu.be/source123")
+    first = client.transcript(
+        "https://www.youtube.com/watch?v=source123", language="ko"
+    )
+    second = client.transcript("https://youtu.be/source123", language="ko")
 
     assert first == second
     assert calls == 1

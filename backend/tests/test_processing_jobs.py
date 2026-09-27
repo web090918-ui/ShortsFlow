@@ -17,7 +17,10 @@ client = TestClient(app)
 
 
 class StubTranscriptProcessor:
-    def process(self, source_url, *, start_seconds, end_seconds) -> TranscriptResult:
+    def process(
+        self, source_url, *, start_seconds, end_seconds, language=None
+    ) -> TranscriptResult:
+        assert language == "ko"
         return TranscriptResult(
             provider="tunelio",
             language="ko",
@@ -74,6 +77,7 @@ def test_creates_and_reads_queued_processing_job(monkeypatch) -> None:
     created = response.json()
     assert created["status"] == "QUEUED"
     assert created["step"] == "TRANSCRIPT"
+    assert created["transcript_language"] == "ko"
     assert created["duration_seconds"] == 120
 
     read_response = client.get(f"/processing-jobs/{created['id']}")

@@ -43,7 +43,7 @@ class CaptionStub:
         self.error = error
         self.calls = 0
 
-    def fetch(self, source_url: str) -> TranscriptResult:
+    def fetch(self, source_url: str, *, language=None) -> TranscriptResult:
         self.calls += 1
         if self.error is not None:
             raise self.error
@@ -80,7 +80,7 @@ class SttStub:
     def __init__(self) -> None:
         self.calls = 0
 
-    def transcribe(self, audio_path: Path) -> TranscriptResult:
+    def transcribe(self, audio_path: Path, *, language=None) -> TranscriptResult:
         self.calls += 1
         assert audio_path.read_bytes() == b"audio"
         return _transcript("openai_whisper", start=0, end=4, text="fallback")
@@ -239,7 +239,7 @@ def test_openai_whisper_requests_segment_timestamps(tmp_path) -> None:
     audio_path.write_bytes(b"audio")
     client = FakeOpenAI()
 
-    result = OpenAIWhisperProvider(client).transcribe(audio_path)
+    result = OpenAIWhisperProvider(client).transcribe(audio_path, language="ko-KR")
 
     assert result.provider == "openai_whisper"
     assert result.segments[0].start_seconds == 0.25
@@ -248,3 +248,4 @@ def test_openai_whisper_requests_segment_timestamps(tmp_path) -> None:
     assert client.audio.transcriptions.kwargs["timestamp_granularities"] == [
         "segment"
     ]
+    assert client.audio.transcriptions.kwargs["language"] == "ko"

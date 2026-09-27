@@ -133,6 +133,7 @@ Goal: create a timestamped transcript from a processable video Source.
 Implementation status:
 
 - Tunelio timestamped captions are requested first and filtered to the selected range.
+- Transcript language defaults to `ko` for the Korean MVP and is carried explicitly to both caption and STT providers.
 - Caption results are cached per warm backend instance to avoid duplicate paid calls.
 - A missing caption track or an empty selected-caption range falls back to the 480p analysis proxy.
 - FFmpeg extracts a 16 kHz mono 32 kbps MP3, which stays below the OpenAI 25 MB upload limit for the maximum 60-minute source range.

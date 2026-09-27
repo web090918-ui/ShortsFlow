@@ -40,7 +40,9 @@ class TranscriptResult(BaseModel):
 
 
 class CaptionProvider(Protocol):
-    def fetch(self, source_url: str) -> TranscriptResult: ...
+    def fetch(
+        self, source_url: str, *, language: str | None = None
+    ) -> TranscriptResult: ...
 
 
 class AudioAcquirer(Protocol):
@@ -59,7 +61,9 @@ class AudioExtractor(Protocol):
 
 
 class SpeechToTextProvider(Protocol):
-    def transcribe(self, audio_path: Path) -> TranscriptResult: ...
+    def transcribe(
+        self, audio_path: Path, *, language: str | None = None
+    ) -> TranscriptResult: ...
 
 
 def _clean_text(value: Any) -> str:
@@ -70,8 +74,10 @@ class TunelioCaptionProvider:
     def __init__(self, client: TunelioClient) -> None:
         self._client = client
 
-    def fetch(self, source_url: str) -> TranscriptResult:
-        payload = self._client.transcript(source_url)
+    def fetch(
+        self, source_url: str, *, language: str | None = None
+    ) -> TranscriptResult:
+        payload = self._client.transcript(source_url, language=language)
         raw_segments = payload.get("segments")
         if not isinstance(raw_segments, list):
             raise TranscriptProcessingError(
@@ -204,14 +210,21 @@ class OpenAIWhisperProvider:
         self._client = client
         self._model = model
 
-    def transcribe(self, audio_path: Path) -> TranscriptResult:
+    def transcribe(
+        self, audio_path: Path, *, language: str | None = None
+    ) -> TranscriptResult:
         try:
             with audio_path.open("rb") as audio:
+                request: dict[str, Any] = {
+                    "file": audio,
+                    "model": self._model,
+                    "response_format": "verbose_json",
+                    "timestamp_granularities": ["segment"],
+                }
+                if language is not None:
+                    request["language"] = language.split("-", 1)[0]
                 response = self._client.audio.transcriptions.create(
-                    file=audio,
-                    model=self._model,
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"],
+                    **request
                 )
         except Exception as exc:
             raise TranscriptProcessingError(
@@ -316,9 +329,10 @@ class TranscriptProcessor:
         *,
         start_seconds: float,
         end_seconds: float,
+        language: str | None = None,
     ) -> TranscriptResult:
         try:
-            captions = self._caption_provider.fetch(source_url)
+            captions = self._caption_provider.fetch(source_url, language=language)
             return self._select_range(
                 captions,
                 start_seconds=start_seconds,
@@ -345,7 +359,9 @@ class TranscriptProcessor:
                     destination=media_path,
                 )
                 self._audio_extractor.extract(media_path, audio_path)
-                transcript = self._stt_provider.transcribe(audio_path)
+                transcript = self._stt_provider.transcribe(
+                    audio_path, language=language
+                )
             return self._select_range(
                 transcript,
                 start_seconds=start_seconds,
