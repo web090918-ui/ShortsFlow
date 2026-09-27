@@ -37,7 +37,7 @@ cd backend
 .\.venv\Scripts\python.exe -m app.acquisition_probe "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-The local environment passed three consecutive probes on 2026-09-27. A dedicated host has not yet been connected, so Task 04 remains gated on that external environment check. See [Task 03A validation](docs/TASK_03A_VALIDATION.md).
+The local environment passed three consecutive probes on 2026-09-27. An AWS Lightsail worker in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. Task 04 remains gated on selecting a viable media acquisition method. See [Task 03A validation](docs/TASK_03A_VALIDATION.md).
 
 ## Structure
 

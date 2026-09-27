@@ -38,11 +38,21 @@ The probe reads up to 64 KiB for an HLS manifest and at most 1 KiB of media payl
 | --- | --- | --- |
 | Local development machine | Passed, 2026-09-27 | Three consecutive runs resolved `qdck91pAwB4`; video format `614` reached an HLS media segment with HTTP 200 and audio format `140-drc` returned HTTP 206. Runs completed in 2.096-2.188 seconds. |
 | Vercel Python Function | Failed | YouTube returned a bot challenge for the shared cloud egress IP even with the JavaScript challenge runtime available. |
-| Dedicated worker host | Not run | No VM/container host credentials are connected to this workspace. |
+| AWS Lightsail dedicated worker | Failed, 2026-09-27 | A 2 GB Ubuntu instance in Seoul (`ap-northeast-2`) returned YouTube's `Sign in to confirm you’re not a bot` challenge for `qdck91pAwB4`. Moving the existing provider from Vercel to a dedicated cloud VM did not solve acquisition. |
 
 ## Decision rule
 
-- Proceed to Task 04 only after a dedicated host passes the probe three consecutive times.
+- Do not proceed to Task 04 until a different acquisition method passes the probe three consecutive times.
 - Keep Vercel for the frontend and lightweight API, not media acquisition.
 - Do not add account cookies, residential proxies, IP rotation, or a separate token service during this validation without an explicit product and security decision.
 - If the dedicated host receives the same bot challenge, stop and select a licensed acquisition provider or revise the input contract; moving Cloud Tasks alone will not solve acquisition.
+
+## Conclusion
+
+Task 03A completed with a negative infrastructure result. The provider works from the local development network, but both Vercel shared egress and an AWS Lightsail public cloud IP are rejected by YouTube. A generic cloud VM is therefore not an acceptable production acquisition strategy by itself.
+
+The next decision is a product/acquisition decision, not an async orchestration task:
+
+1. Select and validate a licensed media acquisition provider, or
+2. Revise the contract so the user supplies an authorized source file while the YouTube URL supplies metadata, or
+3. Explicitly approve a separately reviewed token/authentication approach, including its security, policy, and maintenance risks.

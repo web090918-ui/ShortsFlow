@@ -48,7 +48,7 @@ Goal: turn a validated YouTube Source into video metadata and a source that down
 
 ## Task 03A — Dedicated YouTube Acquisition Worker Validation
 
-Status: In Progress
+Status: Complete — dedicated cloud VM candidate rejected
 
 Goal: validate the Task 03 provider on a non-Vercel worker host before adding async orchestration.
 
@@ -60,7 +60,7 @@ Goal: validate the Task 03 provider on a non-Vercel worker host before adding as
 
 ## Task 04 — Async Job
 
-Status: Blocked by Task 03A dedicated-host validation
+Status: Blocked pending a viable YouTube media acquisition method
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 
