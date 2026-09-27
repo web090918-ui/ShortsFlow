@@ -46,9 +46,21 @@ Goal: turn a validated YouTube Source into video metadata and a source that down
 - Isolate YouTube-specific parsing and API behavior from shared Source logic.
 - Do not generate transcripts or candidates yet.
 
+## Task 03A — Dedicated YouTube Acquisition Worker Validation
+
+Status: In Progress
+
+Goal: validate the Task 03 provider on a non-Vercel worker host before adding async orchestration.
+
+- Verify metadata plus readable video/audio stream bytes with an authorized public test video.
+- Require three consecutive passes on the candidate worker environment.
+- Keep the validation runner independent of Cloud Tasks and transcript processing.
+- Do not add cookies, proxy rotation, or a PO-token service without an explicit decision.
+- See [Task 03A validation](TASK_03A_VALIDATION.md) for the executable acceptance criteria.
+
 ## Task 04 — Async Job
 
-Status: Next
+Status: Blocked by Task 03A dedicated-host validation
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 

@@ -26,13 +26,14 @@ Do not attempt to complete the YouTube and Product flows simultaneously. Deliver
 
 1. Task 02 — Source Input Framework
 2. Task 03 — YouTube Source processing
-3. Task 04 — Async Job with Cloud Tasks and a Worker
-4. Task 05 — Transcript with FFmpeg audio extraction and STT
-5. Task 06 — Generate 10-15 Clip Candidates
-6. Task 07 — Generic AI Ranking and Top 3
-7. Task 08 — Preview and 9:16 Short Render
-8. Task 09 — Download UX
-9. Task 10 — Product/Affiliate Flow
+3. Task 03A — Validate YouTube acquisition on a dedicated worker host
+4. Task 04 — Async Job with Cloud Tasks and a Worker
+5. Task 05 — Transcript with FFmpeg audio extraction and STT
+6. Task 06 — Generate 10-15 Clip Candidates
+7. Task 07 — Generic AI Ranking and Top 3
+8. Task 08 — Preview and 9:16 Short Render
+9. Task 09 — Download UX
+10. Task 10 — Product/Affiliate Flow
 
 Complete the YouTube URL to downloadable Short flow end-to-end before implementing the Product/Affiliate flow.
 

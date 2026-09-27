@@ -40,6 +40,8 @@ Task 02 provides a `SourceRepository` boundary with an in-memory adapter. It exi
 
 Task 03 adds `CREATED -> PREPARING -> READY | FAILED` for YouTube acquisition. During this task, `POST /sources?prepare=true` can create and prepare a YouTube Source in one request. This keeps the deployed serverless demo functional while storage remains process-local; Task 04 will replace the synchronous execution path with an async job rather than extending it further.
 
+Task 03A validates acquisition separately from orchestration. Vercel remains suitable for the frontend and lightweight API, but it is not the media-acquisition runtime because the tested shared egress IP receives a YouTube bot challenge. A candidate dedicated worker must pass the repository acquisition probe three consecutive times, including readable video and audio media bytes, before Task 04 begins.
+
 ## Provider boundaries
 
 Site-specific acquisition logic must not be scattered through application business logic. Introduce small boundaries when the corresponding source is implemented, for example:

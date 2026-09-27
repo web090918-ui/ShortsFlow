@@ -24,11 +24,20 @@ See the product, architecture, and delivery details in:
 
 ## Current status
 
-Tasks 01 through 03 are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. YouTube Sources can now acquire video metadata and usable audio/video format references. The next task is Task 04: Async Job with Cloud Tasks and a Worker.
+Tasks 01 through 03 are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. YouTube Sources can acquire video metadata and usable audio/video format references. Task 03A is validating the same provider on a dedicated acquisition host before Task 04 begins.
 
 Source storage remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current deployed demo. No transcript, async job, ranking, rendering, or affiliate processing is implemented.
 
 YouTube can reject media extraction requests from shared cloud IP ranges with a bot challenge. The provider reports this as an actionable Source failure; the project does not embed account cookies, proxies, or a separate token service as a workaround.
+
+The Task 03A probe validates actual media bytes, not metadata alone:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.acquisition_probe "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+The local environment passed three consecutive probes on 2026-09-27. A dedicated host has not yet been connected, so Task 04 remains gated on that external environment check. See [Task 03A validation](docs/TASK_03A_VALIDATION.md).
 
 ## Structure
 
