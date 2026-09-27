@@ -42,6 +42,24 @@ Task 03 adds `CREATED -> PREPARING -> READY | FAILED` for YouTube acquisition. D
 
 Task 03A validates acquisition separately from orchestration. Vercel remains suitable for the frontend and lightweight API, but it is not the media-acquisition runtime because the tested shared egress IP receives a YouTube bot challenge. A dedicated AWS Lightsail VM received the same challenge, so moving yt-dlp to a generic cloud VM is not sufficient. Task 04 remains gated until a different acquisition method passes the repository probe three consecutive times, including readable video and audio media bytes.
 
+### Selected-range acquisition prototype
+
+The current prototype lets a user choose a start and end time after a YouTube Source reaches `READY`. The frontend follows a job-shaped network flow similar to the behavior observed during competitor research:
+
+```text
+POST /sources/{source_id}/downloads -> 202
+GET  /downloads/{download_id}       -> poll QUEUED | DOWNLOADING | READY | FAILED
+GET  /downloads/{download_id}/file  -> selected MP4
+```
+
+The provider passes the requested time range to yt-dlp and FFmpeg instead of intentionally downloading the complete source first. It caps this analysis artifact at 480p to reduce transfer, storage, and decoding cost. Exact upstream byte usage still depends on the YouTube delivery format and CDN seek behavior, so this is not a guarantee that only the final MP4 bytes are transferred.
+
+The 480p artifact is an analysis proxy, not the final render source. When rendering is implemented, ShortsFlow should reacquire only the selected 30-60 second candidate at the output-quality resolution. This avoids downloading a long source at high resolution while preventing an aggressively cropped 9:16 result from being upscaled from 480p.
+
+The prototype also carries one of three stable template identifiers with the job: `CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`. This is a render preference only; Task 03B does not render captions. Task 08 will interpret the identifier, so acquisition code must not contain template-specific rendering behavior.
+
+This implementation deliberately uses FastAPI `BackgroundTasks`, an in-memory job repository, and local temporary files. It validates the product interaction and provider boundary only. It is not the durable Task 04 design, is not suitable for Vercel Functions, and does not remove the cloud-IP bot challenge. Production requires an approved acquisition runtime or external provider plus persistent jobs and object storage. Both the frontend and API require an affirmative source-rights declaration before starting acquisition; this is not automated rights verification or a substitute for platform compliance.
+
 ## Provider boundaries
 
 Site-specific acquisition logic must not be scattered through application business logic. Introduce small boundaries when the corresponding source is implemented, for example:

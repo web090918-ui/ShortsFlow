@@ -1,8 +1,9 @@
 import logging
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 import deno
 import yt_dlp
@@ -31,6 +32,18 @@ class PreparedVideoSource:
 
 class VideoSourceProvider(Protocol):
     def prepare(self, url: str) -> PreparedVideoSource: ...
+
+
+class VideoRangeDownloader(Protocol):
+    def download(
+        self,
+        url: str,
+        *,
+        start_seconds: float,
+        end_seconds: float,
+        output_directory: Path,
+        progress: Callable[[int], None] | None = None,
+    ) -> Path: ...
 
 
 class _YtDlpLogger:
@@ -199,3 +212,91 @@ class YouTubeSourceProvider:
             metadata=metadata,
             processing_reference=processing_reference,
         )
+
+
+class YouTubeRangeDownloader:
+    """Download one authorized YouTube time range as a low-resolution analysis proxy."""
+
+    def download(
+        self,
+        url: str,
+        *,
+        start_seconds: float,
+        end_seconds: float,
+        output_directory: Path,
+        progress: Callable[[int], None] | None = None,
+    ) -> Path:
+        if shutil.which("ffmpeg") is None:
+            raise VideoSourceProviderError(
+                "선택 구간을 처리하려면 서버에 FFmpeg가 필요합니다."
+            )
+
+        output_directory.mkdir(parents=True, exist_ok=True)
+
+        def report_progress(update: dict[str, Any]) -> None:
+            if progress is None:
+                return
+            if update.get("status") == "finished":
+                progress(90)
+                return
+            downloaded = _number(update.get("downloaded_bytes"))
+            total = _number(update.get("total_bytes")) or _number(
+                update.get("total_bytes_estimate")
+            )
+            if downloaded > 0 and total > 0:
+                progress(min(85, max(5, round(downloaded / total * 80))))
+
+        options = {
+            "cachedir": False,
+            "download_ranges": lambda _info, _ydl: [
+                {"start_time": start_seconds, "end_time": end_seconds}
+            ],
+            "extractor_retries": 2,
+            "force_keyframes_at_cuts": True,
+            "format": (
+                "bv*[height<=480][ext=mp4]+ba[ext=m4a]/"
+                "b[height<=480][ext=mp4]/bv*[height<=480]+ba/b[height<=480]"
+            ),
+            "js_runtimes": {"deno": {"path": _deno_runtime_path()}},
+            "logger": _YtDlpLogger(),
+            "merge_output_format": "mp4",
+            "noplaylist": True,
+            "outtmpl": str(output_directory / "selected-range.%(ext)s"),
+            "progress_hooks": [report_progress],
+            "quiet": True,
+            "retries": 2,
+            "socket_timeout": 30,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(options) as downloader:
+                downloader.extract_info(url, download=True)
+        except DownloadError as exc:
+            logger.warning("YouTube range download failed", exc_info=exc)
+            if "Sign in to confirm you’re not a bot" in str(exc):
+                raise VideoSourceProviderError(
+                    "YouTube가 현재 서버의 영상 요청을 제한했습니다. 다른 처리 환경이 필요합니다."
+                ) from exc
+            raise VideoSourceProviderError(
+                "선택한 YouTube 영상 구간을 다운로드하지 못했습니다."
+            ) from exc
+        except Exception as exc:
+            logger.exception("Unexpected YouTube range download failure")
+            raise VideoSourceProviderError(
+                "선택 구간 처리 중 오류가 발생했습니다."
+            ) from exc
+
+        artifacts = [
+            path
+            for path in output_directory.glob("selected-range.*")
+            if path.is_file() and path.suffix not in {".part", ".ytdl"}
+        ]
+        if not artifacts:
+            raise VideoSourceProviderError("다운로드된 선택 구간 파일을 찾지 못했습니다.")
+
+        mp4_artifact = next((path for path in artifacts if path.suffix == ".mp4"), None)
+        if mp4_artifact is None:
+            raise VideoSourceProviderError("선택 구간을 MP4로 변환하지 못했습니다.")
+        if progress is not None:
+            progress(100)
+        return mp4_artifact

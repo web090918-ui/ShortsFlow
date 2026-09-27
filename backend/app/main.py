@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.downloads import router as downloads_router
 from app.logging_config import configure_logging
 from app.sources import router as sources_router
 
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(sources_router)
+app.include_router(downloads_router)
 
 
 @app.get("/health")

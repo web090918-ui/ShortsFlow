@@ -21,14 +21,17 @@ See the product, architecture, and delivery details in:
 - [Product](docs/PRODUCT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [MVP backlog](docs/MVP_BACKLOG.md)
+- [Competitor research](docs/COMPETITOR_RESEARCH.md)
 
 ## Current status
 
-Tasks 01 through 03 are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. YouTube Sources can acquire video metadata and usable audio/video format references. Task 03A is validating the same provider on a dedicated acquisition host before Task 04 begins.
+Tasks 01 through 03 and the Task 03A environment validation are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` now exposes a start/end range selector and can prepare that selected range as an MP4 through a job-shaped API.
 
-Source storage remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current deployed demo. No transcript, async job, ranking, rendering, or affiliate processing is implemented.
+The selected-range path is an acquisition prototype, not Task 04: it acquires a bandwidth-saving 480p analysis proxy, runs with FastAPI `BackgroundTasks`, keeps job state in memory, and stores the MP4 in local temporary storage. It therefore requires a long-running backend with FFmpeg and is not durable across restarts or suitable for Vercel Functions. Cloud Tasks, persistent job state, object storage, transcript, ranking, rendering, and affiliate processing are not implemented.
 
-YouTube can reject media extraction requests from shared cloud IP ranges with a bot challenge. The provider reports this as an actionable Source failure; the project does not embed account cookies, proxies, or a separate token service as a workaround.
+Source storage also remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current demo.
+
+YouTube can reject metadata or selected-range extraction requests from shared cloud IP ranges with a bot challenge. The provider reports this as an actionable Source failure; the project does not embed account cookies, proxies, or a separate token service as a workaround. Before a range job can be created, both the UI and API require the user to confirm that they own the source video or have the permissions needed to edit and use it. This declaration is not automated rights verification or a substitute for platform compliance.
 
 The Task 03A probe validates actual media bytes, not metadata alone:
 
@@ -37,7 +40,7 @@ cd backend
 .\.venv\Scripts\python.exe -m app.acquisition_probe "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-The local environment passed three consecutive probes on 2026-09-27. An AWS Lightsail worker in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. Task 04 remains gated on selecting a viable media acquisition method. See [Task 03A validation](docs/TASK_03A_VALIDATION.md).
+The local environment passed three consecutive probes on 2026-09-27. An AWS Lightsail worker in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. Task 04 remains gated on selecting a viable media acquisition method. See [Task 03A validation](docs/TASK_03A_VALIDATION.md) and the sanitized [competitor research](docs/COMPETITOR_RESEARCH.md).
 
 ## Structure
 
@@ -63,7 +66,7 @@ The application is available at `http://localhost:3000`. Set `NEXT_PUBLIC_API_UR
 
 ## Backend
 
-Requirements: Python 3.13 or newer.
+Requirements: Python 3.13 or newer. FFmpeg is also required for selected-range acquisition and is installed by the backend Dockerfile.
 
 ```powershell
 cd backend
@@ -83,6 +86,9 @@ Source endpoints:
 - `POST /sources/upload` — validate a video file and create an Upload Source from its metadata
 - `GET /sources/{source_id}` — read the current Source status
 - `POST /sources/{source_id}/prepare` — prepare an existing YouTube Source
+- `POST /sources/{source_id}/downloads` — enqueue acquisition of one selected range (maximum 60 minutes)
+- `GET /downloads/{download_id}` — poll the selected-range job
+- `GET /downloads/{download_id}/file` — download the prepared MP4
 
 Environment variables use the `SHORTSFLOW_` prefix:
 

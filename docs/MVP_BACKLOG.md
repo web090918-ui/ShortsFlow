@@ -58,6 +58,19 @@ Goal: validate the Task 03 provider on a non-Vercel worker host before adding as
 - Do not add cookies, proxy rotation, or a PO-token service without an explicit decision.
 - See [Task 03A validation](TASK_03A_VALIDATION.md) for the executable acceptance criteria.
 
+## Task 03B — Selected-range Acquisition Prototype
+
+Status: Complete locally — production acquisition remains unresolved
+
+Goal: validate the URL, start/end selection, asynchronous-looking status, and MP4 download interaction without implementing Task 04 infrastructure.
+
+- Let a user select up to 60 minutes from a `READY` YouTube Source.
+- Request only the selected time range as a 480p analysis proxy through the yt-dlp/FFmpeg provider path.
+- Return `202`, expose polling state, and provide an MP4 download endpoint.
+- Keep jobs and files process-local for this prototype; do not add Cloud Tasks, Redis, Kafka, or object storage here.
+- Treat cloud-IP bot challenges and durable execution as unresolved production gates.
+- Process only user-owned or otherwise authorized videos.
+
 ## Task 04 — Async Job
 
 Status: Blocked pending a viable YouTube media acquisition method
@@ -98,6 +111,7 @@ Goal: create a timestamped transcript from a processable video Source.
 ## Task 08 — Preview and Render
 
 - Let the user inspect the Top 3 and select one candidate.
+- Apply the previously selected MVP caption template (`CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`).
 - Render the selected candidate as a basic 9:16 Short.
 - Provide a preview of the completed render.
 - Track render state and failure details.
