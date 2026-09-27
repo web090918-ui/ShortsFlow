@@ -39,6 +39,7 @@ The probe reads up to 64 KiB for an HLS manifest and at most 1 KiB of media payl
 | Local development machine | Passed, 2026-09-27 | Three consecutive runs resolved `qdck91pAwB4`; video format `614` reached an HLS media segment with HTTP 200 and audio format `140-drc` returned HTTP 206. Runs completed in 2.096-2.188 seconds. |
 | Vercel Python Function | Failed | YouTube returned a bot challenge for the shared cloud egress IP even with the JavaScript challenge runtime available. |
 | AWS Lightsail dedicated worker | Failed, 2026-09-27 | A 2 GB Ubuntu instance in Seoul (`ap-northeast-2`) returned YouTube's `Sign in to confirm you’re not a bot` challenge for `qdck91pAwB4`. Moving the existing provider from Vercel to a dedicated cloud VM did not solve acquisition. |
+| AWS Lightsail with PO Token Provider | Failed, 2026-09-27 | A fresh 2 GB Seoul instance loaded `bgutil:http-2.0.0` successfully. With the `mweb` client, yt-dlp detected video-bound GVS PO Token enforcement, but the YouTube Player API returned `LOGIN_REQUIRED` before media formats were available. The provider therefore could not overcome the data-center IP entry-stage bot challenge. No account cookies or proxy were used. |
 
 ## Decision rule
 
@@ -50,6 +51,8 @@ The probe reads up to 64 KiB for an HLS manifest and at most 1 KiB of media payl
 ## Conclusion
 
 Task 03A completed with a negative infrastructure result. The provider works from the local development network, but both Vercel shared egress and an AWS Lightsail public cloud IP are rejected by YouTube. A generic cloud VM is therefore not an acceptable production acquisition strategy by itself.
+
+A later bounded revalidation with the official yt-dlp PO Token Provider pattern also failed on a fresh Lightsail IP. The HTTP provider was installed and discovered correctly, and `mweb` detected video-bound GVS token enforcement, but extraction stopped at the Player API `LOGIN_REQUIRED` response. Repeating the same approach on additional generic Lightsail instances is not justified.
 
 The next decision is a product/acquisition decision, not an async orchestration task:
 

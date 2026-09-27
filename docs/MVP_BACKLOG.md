@@ -71,6 +71,18 @@ Goal: validate the URL, start/end selection, asynchronous-looking status, and MP
 - Treat cloud-IP bot challenges and durable execution as unresolved production gates.
 - Process only user-owned or otherwise authorized videos.
 
+## Task 03C — PO Token Provider Revalidation
+
+Status: Complete — rejected for the tested Lightsail environment
+
+Goal: determine whether an automatically managed PO Token Provider changes the negative Lightsail acquisition result without adding account cookies or a proxy.
+
+- A fresh Seoul Lightsail instance loaded `bgutil:http-2.0.0` successfully.
+- The forced `mweb` client detected video-bound GVS PO Token enforcement.
+- YouTube returned `LOGIN_REQUIRED` from the Player API before usable formats were exposed.
+- No account cookies, residential proxy, or manually copied token was used.
+- Do not repeat this configuration on additional generic Lightsail instances; validate an external acquisition contract next.
+
 ## Task 04 — Async Job
 
 Status: Blocked pending a viable YouTube media acquisition method

@@ -28,13 +28,14 @@ Do not attempt to complete the YouTube and Product flows simultaneously. Deliver
 2. Task 03 — YouTube Source processing
 3. Task 03A — Validate YouTube acquisition on a dedicated worker host
 4. Task 03B — Validate selected-range acquisition as a 480p analysis proxy
-5. Task 04 — Async Job with Cloud Tasks and a Worker
-6. Task 05 — Transcript with FFmpeg audio extraction and STT
-7. Task 06 — Generate 10-15 Clip Candidates
-8. Task 07 — Generic AI Ranking and Top 3
-9. Task 08 — Preview and 9:16 Short Render
-10. Task 09 — Download UX
-11. Task 10 — Product/Affiliate Flow
+5. Task 03C — Revalidate Lightsail with an automatic PO Token Provider
+6. Task 04 — Async Job with Cloud Tasks and a Worker
+7. Task 05 — Transcript with FFmpeg audio extraction and STT
+8. Task 06 — Generate 10-15 Clip Candidates
+9. Task 07 — Generic AI Ranking and Top 3
+10. Task 08 — Preview and 9:16 Short Render
+11. Task 09 — Download UX
+12. Task 10 — Product/Affiliate Flow
 
 Complete the YouTube URL to downloadable Short flow end-to-end before implementing the Product/Affiliate flow.
 

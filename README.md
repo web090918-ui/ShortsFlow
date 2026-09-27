@@ -40,7 +40,7 @@ cd backend
 .\.venv\Scripts\python.exe -m app.acquisition_probe "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-The local environment passed three consecutive probes on 2026-09-27. An AWS Lightsail worker in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. Task 04 remains gated on selecting a viable media acquisition method. See [Task 03A validation](docs/TASK_03A_VALIDATION.md) and the sanitized [competitor research](docs/COMPETITOR_RESEARCH.md).
+The local environment passed three consecutive probes on 2026-09-27. AWS Lightsail workers in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. A fresh instance was also tested with the automatically managed `bgutil:http-2.0.0` PO Token Provider and forced `mweb`; the Player API still returned `LOGIN_REQUIRED` before formats were available. Task 04 remains gated on selecting and validating an external media acquisition contract. See [Task 03A validation](docs/TASK_03A_VALIDATION.md) and the sanitized [competitor research](docs/COMPETITOR_RESEARCH.md).
 
 ## Structure
 
