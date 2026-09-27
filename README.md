@@ -24,9 +24,9 @@ See the product, architecture, and delivery details in:
 
 ## Current status
 
-Tasks 01 and 02 are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. The next task is Task 03: YouTube Source Processing.
+Tasks 01 through 03 are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. YouTube Sources can now acquire video metadata and usable audio/video format references. The next task is Task 04: Async Job with Cloud Tasks and a Worker.
 
-Task 02 intentionally uses process-local in-memory Source storage. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. No remote source extraction, transcript, async job, ranking, rendering, or affiliate processing is implemented.
+Source storage remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current deployed demo. No transcript, async job, ranking, rendering, or affiliate processing is implemented.
 
 ## Structure
 
@@ -65,11 +65,13 @@ fastapi dev app/main.py
 
 The API is available at `http://localhost:8000`; health status is exposed at `GET /health`.
 
-Task 02 Source endpoints:
+Source endpoints:
 
 - `POST /sources` — classify and create a YouTube or Product URL Source
+- `POST /sources?prepare=true` — create and synchronously prepare a YouTube Source for Task 03
 - `POST /sources/upload` — validate a video file and create an Upload Source from its metadata
 - `GET /sources/{source_id}` — read the current Source status
+- `POST /sources/{source_id}/prepare` — prepare an existing YouTube Source
 
 Environment variables use the `SHORTSFLOW_` prefix:
 

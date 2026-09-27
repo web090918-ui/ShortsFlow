@@ -18,9 +18,16 @@ describe("SourceInput", () => {
         JSON.stringify({
           id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
           type: "YOUTUBE",
-          status: "CREATED",
+          status: "READY",
+          metadata: {
+            youtube: {
+              title: "Test video",
+              channel_title: "ShortsFlow",
+              duration_seconds: 125,
+            },
+          },
         }),
-        { status: 201, headers: { "Content-Type": "application/json" } },
+        { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
 
@@ -33,14 +40,17 @@ describe("SourceInput", () => {
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
 
     expect(await screen.findByText("YOUTUBE")).toBeTruthy();
-    expect(screen.getByText("CREATED")).toBeTruthy();
+    expect(screen.getByText("READY")).toBeTruthy();
+    expect(screen.getByText("Test video")).toBeTruthy();
+    expect(screen.getByText("ShortsFlow · 2:05")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/sources",
+      "http://localhost:8000/sources?prepare=true",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ url: "https://youtube.com/watch?v=source123" }),
       }),
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("requires a file in upload mode", async () => {

@@ -35,7 +35,7 @@ Acceptance criteria:
 
 ## Task 03 — YouTube Source Processing
 
-Status: Next
+Status: Complete
 
 Goal: turn a validated YouTube Source into video metadata and a source that downstream processing can actually consume.
 
@@ -47,6 +47,8 @@ Goal: turn a validated YouTube Source into video metadata and a source that down
 - Do not generate transcripts or candidates yet.
 
 ## Task 04 — Async Job
+
+Status: Next
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 

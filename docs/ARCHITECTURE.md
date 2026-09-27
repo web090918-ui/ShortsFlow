@@ -38,6 +38,8 @@ Source
 
 Task 02 provides a `SourceRepository` boundary with an in-memory adapter. It exists to validate the Source contract, not as production persistence: data is cleared when the backend process restarts. Upload Source creation records validated file metadata but does not retain file content. Persistent records and media storage must be selected by the task that first requires processable media.
 
+Task 03 adds `CREATED -> PREPARING -> READY | FAILED` for YouTube acquisition. During this task, `POST /sources?prepare=true` can create and prepare a YouTube Source in one request. This keeps the deployed serverless demo functional while storage remains process-local; Task 04 will replace the synchronous execution path with an async job rather than extending it further.
+
 ## Provider boundaries
 
 Site-specific acquisition logic must not be scattered through application business logic. Introduce small boundaries when the corresponding source is implemented, for example:
@@ -54,6 +56,8 @@ ProductSourceProvider
 ```
 
 These are conceptual responsibilities, not a requirement for a deep class hierarchy. MVP1 should have only the provider interface and implementations needed by the active task.
+
+The Task 03 YouTube provider resolves public video metadata and selects usable video and audio formats. Public API metadata contains format identifiers and codecs, while direct stream URLs and request headers remain in an internal processing reference. Since provider stream URLs can expire, the reference also retains the canonical video ID and page URL so a later worker can resolve fresh streams. It is a regenerable processing reference, not a permanent media artifact.
 
 ## Processing pipelines
 

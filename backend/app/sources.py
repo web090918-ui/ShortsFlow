@@ -8,6 +8,8 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.youtube import VideoSourceProvider, VideoSourceProviderError, YouTubeSourceProvider
+
 
 class SourceType(str, Enum):
     YOUTUBE = "YOUTUBE"
@@ -17,6 +19,9 @@ class SourceType(str, Enum):
 
 class SourceStatus(str, Enum):
     CREATED = "CREATED"
+    PREPARING = "PREPARING"
+    READY = "READY"
+    FAILED = "FAILED"
 
 
 class SourceUrlRequest(BaseModel):
@@ -34,23 +39,27 @@ class SourceResponse(BaseModel):
     updated_at: datetime
 
 
-class SourceRepository(Protocol):
-    def add(self, source: SourceResponse) -> SourceResponse: ...
+class SourceRecord(SourceResponse):
+    processing_reference: dict[str, Any] | None = None
 
-    def get(self, source_id: UUID) -> SourceResponse | None: ...
+
+class SourceRepository(Protocol):
+    def save(self, source: SourceRecord) -> SourceRecord: ...
+
+    def get(self, source_id: UUID) -> SourceRecord | None: ...
 
 
 class InMemorySourceRepository:
     """Task 02 storage adapter. Replace it when persistent storage is selected."""
 
     def __init__(self) -> None:
-        self._sources: dict[UUID, SourceResponse] = {}
+        self._sources: dict[UUID, SourceRecord] = {}
 
-    def add(self, source: SourceResponse) -> SourceResponse:
+    def save(self, source: SourceRecord) -> SourceRecord:
         self._sources[source.id] = source
         return source
 
-    def get(self, source_id: UUID) -> SourceResponse | None:
+    def get(self, source_id: UUID) -> SourceRecord | None:
         return self._sources.get(source_id)
 
 
@@ -98,9 +107,9 @@ def _new_source(
     *,
     url: str | None,
     metadata: dict[str, Any],
-) -> SourceResponse:
+) -> SourceRecord:
     now = datetime.now(timezone.utc)
-    return SourceResponse(
+    return SourceRecord(
         id=uuid4(),
         user_id=None,
         type=source_type,
@@ -113,18 +122,22 @@ def _new_source(
 
 
 repository: SourceRepository = InMemorySourceRepository()
+youtube_provider: VideoSourceProvider = YouTubeSourceProvider()
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
 @router.post("", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
-def create_url_source(payload: SourceUrlRequest) -> SourceResponse:
+def create_url_source(payload: SourceUrlRequest, prepare: bool = False) -> SourceResponse:
     source_type = classify_source_url(payload.url)
     source = _new_source(
         source_type,
         url=str(payload.url),
         metadata={"hostname": _hostname(payload.url)},
     )
-    return repository.add(source)
+    repository.save(source)
+    if prepare and source.type == SourceType.YOUTUBE:
+        return prepare_source(source.id)
+    return source
 
 
 @router.post(
@@ -160,7 +173,7 @@ async def create_upload_source(file: UploadFile = File(...)) -> SourceResponse:
         },
     )
     await file.close()
-    return repository.add(source)
+    return repository.save(source)
 
 
 @router.get("/{source_id}", response_model=SourceResponse)
@@ -169,3 +182,55 @@ def get_source(source_id: UUID) -> SourceResponse:
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
     return source
+
+
+@router.post("/{source_id}/prepare", response_model=SourceResponse)
+def prepare_source(source_id: UUID) -> SourceRecord:
+    source = repository.get(source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+    if source.type != SourceType.YOUTUBE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only YouTube Sources can be prepared in Task 03.",
+        )
+    if source.status == SourceStatus.READY:
+        return source
+    if source.status == SourceStatus.PREPARING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Source preparation is already in progress.",
+        )
+
+    preparing = source.model_copy(
+        update={"status": SourceStatus.PREPARING, "updated_at": datetime.now(timezone.utc)}
+    )
+    repository.save(preparing)
+
+    try:
+        prepared = youtube_provider.prepare(preparing.url or "")
+    except VideoSourceProviderError as exc:
+        failed_metadata = dict(preparing.metadata)
+        failed_metadata["processing_error"] = str(exc)
+        failed = preparing.model_copy(
+            update={
+                "status": SourceStatus.FAILED,
+                "metadata": failed_metadata,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+        repository.save(failed)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    ready_metadata = dict(preparing.metadata)
+    ready_metadata.pop("processing_error", None)
+    ready_metadata.update(prepared.metadata)
+    ready = preparing.model_copy(
+        update={
+            "status": SourceStatus.READY,
+            "metadata": ready_metadata,
+            "processing_reference": prepared.processing_reference,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    return repository.save(ready)

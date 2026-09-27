@@ -10,8 +10,32 @@ type InputMode = "url" | "upload";
 type Source = {
   id: string;
   type: "YOUTUBE" | "PRODUCT" | "UPLOAD";
-  status: "CREATED";
+  status: "CREATED" | "PREPARING" | "READY" | "FAILED";
+  metadata?: {
+    youtube?: {
+      title?: string | null;
+      channel_title?: string | null;
+      duration_seconds?: number | null;
+      thumbnail_url?: string | null;
+    };
+  };
 };
+
+async function readSourceResponse(response: Response): Promise<Source> {
+  const payload = await response.json();
+  if (!response.ok) {
+    const detail = typeof payload.detail === "string" ? payload.detail : null;
+    throw new Error(detail ?? "Source를 처리하지 못했습니다.");
+  }
+  return payload as Source;
+}
+
+function formatDuration(seconds?: number | null) {
+  if (typeof seconds !== "number") return null;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
 
 export function SourceInput() {
   const [mode, setMode] = useState<InputMode>("url");
@@ -36,7 +60,7 @@ export function SourceInput() {
     try {
       let response: Response;
       if (mode === "url") {
-        response = await fetch(`${API_URL}/sources`, {
+        response = await fetch(`${API_URL}/sources?prepare=true`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
@@ -50,13 +74,7 @@ export function SourceInput() {
         });
       }
 
-      const payload = await response.json();
-      if (!response.ok) {
-        const detail = typeof payload.detail === "string" ? payload.detail : null;
-        throw new Error(detail ?? "Source를 생성하지 못했습니다.");
-      }
-
-      setSource(payload as Source);
+      setSource(await readSourceResponse(response));
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
@@ -117,7 +135,7 @@ export function SourceInput() {
         )}
 
         <button className="submit-button" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Source 생성 중..." : "Source 생성"}
+          {isSubmitting ? "YouTube Source 처리 중..." : "Source 생성"}
         </button>
       </form>
 
@@ -129,8 +147,33 @@ export function SourceInput() {
 
       {source ? (
         <div className="source-result" aria-live="polite">
-          <span>{source.type}</span>
-          <strong>{source.status}</strong>
+          <div className="source-result-header">
+            <span>{source.type}</span>
+            <strong>{source.status}</strong>
+          </div>
+          {source.metadata?.youtube ? (
+            <div className="source-metadata">
+              {source.metadata.youtube.thumbnail_url ? (
+                // The remote host varies by video, so this stays a plain image.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={source.metadata.youtube.thumbnail_url}
+                  alt=""
+                />
+              ) : null}
+              <div>
+                <h3>{source.metadata.youtube.title ?? "제목 없음"}</h3>
+                <p>
+                  {[
+                    source.metadata.youtube.channel_title,
+                    formatDuration(source.metadata.youtube.duration_seconds),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+            </div>
+          ) : null}
           <code>{source.id}</code>
         </div>
       ) : null}
