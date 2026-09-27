@@ -91,6 +91,9 @@ Source endpoints:
 - `POST /sources/{source_id}/downloads` — enqueue acquisition of one selected range (maximum 60 minutes)
 - `GET /downloads/{download_id}` — poll the selected-range job
 - `GET /downloads/{download_id}/file` — download the prepared MP4
+- `POST /processing-jobs` — create and enqueue a Task 04 processing job
+- `GET /processing-jobs/{job_id}` — read durable processing state
+- `POST /worker/process` — authenticated Cloud Tasks Worker target
 
 Environment variables use the `SHORTSFLOW_` prefix:
 
@@ -100,6 +103,8 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_FRONTEND_ORIGIN`
 - `SHORTSFLOW_TUNELIO_API_KEY` — optional server-side secret; enables Tunelio acquisition
 - `SHORTSFLOW_TUNELIO_BASE_URL` — defaults to `https://tunelio.dev`
+
+Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are documented in [Task 04 deployment](docs/TASK_04_DEPLOYMENT.md). Local defaults do not require Google Cloud credentials.
 
 ## Validation
 

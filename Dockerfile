@@ -9,10 +9,10 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt requirements-cloud.txt ./
+COPY backend/requirements.txt backend/requirements-cloud.txt ./
 RUN pip install --no-cache-dir --upgrade -r requirements-cloud.txt
 
-COPY app ./app
+COPY backend/app ./app
 
 EXPOSE 8080
 

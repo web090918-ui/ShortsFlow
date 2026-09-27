@@ -7,3 +7,4 @@ ShortsFlow product and delivery decisions are maintained here:
 - [MVP backlog](MVP_BACKLOG.md) defines the ordered delivery plan and the next task.
 - [Competitor research](COMPETITOR_RESEARCH.md) records confirmed URL-to-Shorts behavior, evidence boundaries, and acquisition implications.
 - [Task 03A validation](TASK_03A_VALIDATION.md) records the executable acquisition checks and environment results.
+- [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) records the async-job infrastructure and validation steps.

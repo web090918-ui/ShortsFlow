@@ -135,6 +135,10 @@ The Worker should be implemented from the same backend codebase and expose only 
 
 Cloud Tasks is an execution adapter. Business pipeline steps must not contain Cloud Tasks API calls directly. MVP1 does not add Redis, Kafka, Kubernetes, or a broader microservice split.
 
+The Task 04 implementation runs the public API and authenticated Worker route from the same FastAPI image on Cloud Run. Firestore supplies durable `ProcessingJob` state. Cloud Tasks sends a Google-signed OIDC token, and the application verifies its audience and service-account email before accepting `/worker/process`. A ten-minute processing lease plus terminal-state checks make duplicate delivery idempotent. The initial `PIPELINE_BOOTSTRAP` step only validates dispatch and records `next_step=TRANSCRIPT`; it does not implement Task 05 early.
+
+Local development defaults to an in-memory repository and FastAPI background dispatch. Production selects Firestore, Cloud Tasks, and Google OIDC through environment settings. Cloud Run Application Default Credentials are used; no service-account JSON key is stored in the repository or container.
+
 ## Ranking boundary
 
 Ranking accepts generic candidate content and returns scores and explanations sufficient to select the Top 3. MVP1 ranking is channel-independent and evaluates general qualities such as hook strength, completeness, density, curiosity, duration suitability, and standalone understandability.

@@ -92,7 +92,7 @@ Goal: determine whether an automatically managed PO Token Provider changes the n
 
 ## Task 04 — Async Job
 
-Status: Ready to begin after the Tunelio web-path validation is deployed and accepted
+Status: In progress — code complete, Cloud Run validation pending
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 
@@ -102,6 +102,16 @@ Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 - Make task handling idempotent so duplicate delivery does not duplicate results.
 - Keep Cloud Tasks concerns outside the business pipeline steps.
 - Do not add Redis, Kafka, Kubernetes, or a microservice split.
+
+Implementation status:
+
+- `ProcessingJob` exposes `QUEUED -> PROCESSING -> COMPLETED | FAILED`.
+- Firestore and in-memory repository adapters share one job contract.
+- Cloud Tasks uses deterministic task names and an OIDC token.
+- The Worker validates the token audience and service-account email.
+- A processing lease and terminal-state check make duplicate delivery idempotent.
+- The current Worker completes only `PIPELINE_BOOTSTRAP`; transcript work remains Task 05.
+- See [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) for the remaining environment validation.
 
 ## Task 05 — Transcript
 
