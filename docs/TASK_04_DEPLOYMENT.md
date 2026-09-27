@@ -22,8 +22,8 @@ The Cloud Run service may accept unauthenticated traffic for the public API duri
 
 Use `asia-northeast3` for all regional resources:
 
-- Cloud Run service: `shortsflow-worker`
-- Firestore Native database: `(default)` or the configured database ID
+- Cloud Run service: `shortflow`
+- Firestore Native database: `shortflow`
 - Cloud Tasks queue: `shortsflow-processing`
 - Runtime/task identity: `shortsflow-runtime@PROJECT_ID.iam.gserviceaccount.com`
 
@@ -38,7 +38,7 @@ In Cloud Run, create a service from the GitHub repository:
 - Continuous deployment: Cloud Build
 - Build type: Dockerfile
 - Dockerfile source location: `/Dockerfile`
-- Service name: `shortsflow-worker`
+- Service name: `shortflow`
 - Region: `asia-northeast3`
 - Authentication: allow unauthenticated invocations for the current public MVP API
 - Container port: `8080`
@@ -99,3 +99,18 @@ Store `SHORTSFLOW_TUNELIO_API_KEY` as a Cloud Run secret rather than committing 
 7. A request to `/worker/process` without the OIDC token is rejected.
 
 Do not start Task 05 until this deployment path passes the validation above.
+
+## Validation result
+
+Task 04 passed deployment validation on 2026-09-27 using:
+
+- Cloud Run: `https://shortflow-268642207702.asia-northeast3.run.app`
+- Firestore database: `shortflow`
+- Cloud Tasks queue: `shortsflow-processing`
+- Runtime and task identity: `shortsflow-runtime@aza-ceo.iam.gserviceaccount.com`
+
+The test job moved from `QUEUED` to `COMPLETED`, reported progress `100`, ran
+once, and recorded `result.next_step=TRANSCRIPT`. Calling `/worker/process`
+without an OIDC bearer token returned `401`. Duplicate terminal delivery is
+covered by the backend test suite. Task 04 is complete; transcript processing
+remains explicitly deferred to Task 05.

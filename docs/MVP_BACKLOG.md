@@ -92,7 +92,7 @@ Goal: determine whether an automatically managed PO Token Provider changes the n
 
 ## Task 04 — Async Job
 
-Status: In progress — code complete, Cloud Run validation pending
+Status: Complete — code and Cloud Run validation complete
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 
@@ -111,7 +111,12 @@ Implementation status:
 - The Worker validates the token audience and service-account email.
 - A processing lease and terminal-state check make duplicate delivery idempotent.
 - The current Worker completes only `PIPELINE_BOOTSTRAP`; transcript work remains Task 05.
-- See [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) for the remaining environment validation.
+- The deployed Seoul-region path was validated with Firestore database `shortflow`,
+  Cloud Tasks queue `shortsflow-processing`, and the `shortsflow-runtime` identity.
+- Production validation reached `COMPLETED`, progress `100`, and
+  `result.next_step=TRANSCRIPT` after one Worker attempt. An unauthenticated direct
+  Worker request returned `401`.
+- See [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) for the deployed configuration.
 
 ## Task 05 — Transcript
 
