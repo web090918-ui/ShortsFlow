@@ -190,3 +190,4 @@ def test_tunelio_returns_ready_signed_range_without_local_file(monkeypatch) -> N
     assert job["download_url"] == (
         "https://tunelio.dev/tunnel?sig=test&start=60&end=120"
     )
+    assert job["download_expires_at"] == 123

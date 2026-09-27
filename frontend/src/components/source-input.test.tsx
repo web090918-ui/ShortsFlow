@@ -8,6 +8,7 @@ import { SourceInput } from "./source-input";
 describe("SourceInput", () => {
   afterEach(() => {
     cleanup();
+    window.sessionStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -63,6 +64,40 @@ describe("SourceInput", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "업로드할 영상 파일을 선택해 주세요.",
     );
+  });
+
+  it("reuses ready metadata from the browser session", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+          type: "YOUTUBE",
+          status: "READY",
+          metadata: { youtube: { title: "Cached video", duration_seconds: 120 } },
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const firstRender = render(<SourceInput />);
+    await user.type(
+      screen.getByLabelText("YouTube 또는 상품 URL"),
+      "https://youtube.com/watch?v=source123",
+    );
+    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    expect(await screen.findByText("Cached video")).toBeTruthy();
+    firstRender.unmount();
+
+    render(<SourceInput />);
+    await user.type(
+      screen.getByLabelText("YouTube 또는 상품 URL"),
+      "https://youtube.com/watch?v=source123",
+    );
+    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+
+    expect(await screen.findByText("Cached video")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("creates a selected-range download job and shows the MP4 link", async () => {
@@ -170,6 +205,7 @@ describe("SourceInput", () => {
             template_id: "CLEAN_CAPTION",
             error_message: null,
             download_url: "https://tunelio.dev/tunnel?sig=test&start=0&end=120",
+            download_expires_at: Math.floor(Date.now() / 1000) + 3600,
           }),
           { status: 202, headers: { "Content-Type": "application/json" } },
         ),
@@ -190,5 +226,19 @@ describe("SourceInput", () => {
     expect(link.getAttribute("href")).toBe(
       "https://tunelio.dev/tunnel?sig=test&start=0&end=120",
     );
+
+    const startInput = screen.getByLabelText("시작 시간(초)");
+    await user.clear(startInput);
+    await user.type(startInput, "10");
+    await user.click(
+      screen.getByRole("button", { name: "480p 분석 구간 준비" }),
+    );
+
+    expect(
+      (await screen.findByRole("link", { name: "분석용 MP4 다운로드" })).getAttribute(
+        "href",
+      ),
+    ).toContain("start=10&end=120");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -33,10 +33,18 @@ type DownloadJob = {
   template_id: TemplateId;
   error_message: string | null;
   download_url: string | null;
+  download_expires_at?: number | null;
+};
+
+type SignedRangeCache = {
+  sourceUrl: string;
+  job: DownloadJob;
 };
 
 const DEFAULT_RANGE_SECONDS = 4 * 60;
 const MAX_RANGE_SECONDS = 60 * 60;
+const SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SOURCE_CACHE_PREFIX = "shortsflow:source:";
 const TEMPLATES: Array<{
   id: TemplateId;
   name: string;
@@ -84,6 +92,79 @@ function resolveDownloadUrl(downloadUrl: string) {
   return `${API_URL}${downloadUrl}`;
 }
 
+function sourceCacheKey(url: string) {
+  const trimmed = url.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const hostname = parsed.hostname.replace(/^(www\.|m\.)/, "");
+    if (hostname === "youtu.be") {
+      const videoId = parsed.pathname.split("/").filter(Boolean)[0];
+      if (videoId) return `${SOURCE_CACHE_PREFIX}${videoId}`;
+    }
+    if (hostname === "youtube.com" || hostname.endsWith(".youtube.com")) {
+      const videoId = parsed.searchParams.get("v");
+      if (videoId) return `${SOURCE_CACHE_PREFIX}${videoId}`;
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2 && ["embed", "live", "shorts"].includes(parts[0])) {
+        return `${SOURCE_CACHE_PREFIX}${parts[1]}`;
+      }
+    }
+  } catch {
+    // Invalid URLs are handled by the form and API validation.
+  }
+  return `${SOURCE_CACHE_PREFIX}${trimmed}`;
+}
+
+function readCachedSource(url: string): Source | null {
+  try {
+    const serialized = window.sessionStorage.getItem(sourceCacheKey(url));
+    if (!serialized) return null;
+    const cached = JSON.parse(serialized) as { cachedAt: number; source: Source };
+    if (Date.now() - cached.cachedAt > SOURCE_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(sourceCacheKey(url));
+      return null;
+    }
+    return cached.source.status === "READY" ? cached.source : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheSource(url: string, source: Source) {
+  if (source.status !== "READY") return;
+  try {
+    window.sessionStorage.setItem(
+      sourceCacheKey(url),
+      JSON.stringify({ cachedAt: Date.now(), source }),
+    );
+  } catch {
+    // Source caching is an optimization; storage denial must not block creation.
+  }
+}
+
+function reuseSignedRangeUrl(
+  cache: SignedRangeCache,
+  startSeconds: number,
+  endSeconds: number,
+) {
+  const expiresAt = cache.job.download_expires_at;
+  if (!expiresAt || expiresAt - 5 * 60 <= Date.now() / 1000) return null;
+  try {
+    const result = new URL(cache.job.download_url ?? "");
+    if (
+      result.protocol !== "https:" ||
+      !(result.hostname === "tunelio.dev" || result.hostname.endsWith(".tunelio.dev"))
+    ) {
+      return null;
+    }
+    result.searchParams.set("start", String(startSeconds));
+    result.searchParams.set("end", String(endSeconds));
+    return result.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function SourceInput() {
   const [mode, setMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
@@ -97,6 +178,8 @@ export function SourceInput() {
   const [isStartingDownload, setIsStartingDownload] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [templateId, setTemplateId] = useState<TemplateId>("CLEAN_CAPTION");
+  const [signedRangeCache, setSignedRangeCache] =
+    useState<SignedRangeCache | null>(null);
 
   const sourceDuration = source?.metadata?.youtube?.duration_seconds ?? null;
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
@@ -148,6 +231,26 @@ export function SourceInput() {
       return;
     }
 
+    const requestedUrl = url.trim();
+    if (mode === "url") {
+      const cachedSource = readCachedSource(requestedUrl);
+      if (cachedSource) {
+        const duration = cachedSource.metadata?.youtube?.duration_seconds;
+        setSource(cachedSource);
+        setRangeStart(0);
+        setRangeEnd(
+          typeof duration === "number" && duration > 0
+            ? Math.min(duration, DEFAULT_RANGE_SECONDS)
+            : 0,
+        );
+        setDownloadJob(null);
+        setSignedRangeCache(null);
+        setRightsConfirmed(false);
+        setTemplateId("CLEAN_CAPTION");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -156,7 +259,7 @@ export function SourceInput() {
         response = await fetch(`${API_URL}/sources?prepare=true`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url: requestedUrl }),
         });
       } else {
         const formData = new FormData();
@@ -171,6 +274,7 @@ export function SourceInput() {
       const duration = createdSource.metadata?.youtube?.duration_seconds;
 
       setSource(createdSource);
+      if (mode === "url") cacheSource(requestedUrl, createdSource);
       setRangeStart(0);
       setRangeEnd(
         typeof duration === "number" && duration > 0
@@ -178,6 +282,7 @@ export function SourceInput() {
           : 0,
       );
       setDownloadJob(null);
+      setSignedRangeCache(null);
       setRightsConfirmed(false);
       setTemplateId("CLEAN_CAPTION");
     } catch (submissionError) {
@@ -195,6 +300,27 @@ export function SourceInput() {
     if (!source || rangeDuration <= 0 || rangeTooLong || !rightsConfirmed) return;
     setError(null);
     setDownloadJob(null);
+
+    if (signedRangeCache?.sourceUrl === url.trim()) {
+      const reusedUrl = reuseSignedRangeUrl(
+        signedRangeCache,
+        rangeStart,
+        rangeEnd,
+      );
+      if (reusedUrl) {
+        setDownloadJob({
+          ...signedRangeCache.job,
+          start_seconds: rangeStart,
+          end_seconds: rangeEnd,
+          duration_seconds: rangeDuration,
+          template_id: templateId,
+          download_url: reusedUrl,
+        });
+        return;
+      }
+      setSignedRangeCache(null);
+    }
+
     setIsStartingDownload(true);
     try {
       const response = await fetch(`${API_URL}/sources/${source.id}/downloads`, {
@@ -205,10 +331,18 @@ export function SourceInput() {
           end_seconds: rangeEnd,
           rights_confirmed: true,
           template_id: templateId,
-          source_url: url,
+          source_url: url.trim(),
         }),
       });
-      setDownloadJob(await readJsonResponse<DownloadJob>(response));
+      const createdJob = await readJsonResponse<DownloadJob>(response);
+      setDownloadJob(createdJob);
+      if (
+        createdJob.status === "READY" &&
+        createdJob.download_url?.startsWith("https://") &&
+        createdJob.download_expires_at
+      ) {
+        setSignedRangeCache({ sourceUrl: url.trim(), job: createdJob });
+      }
     } catch (downloadError) {
       setError(
         downloadError instanceof Error

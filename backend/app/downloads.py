@@ -57,6 +57,7 @@ class RangeDownloadResponse(BaseModel):
     template_id: RenderTemplate
     error_message: str | None
     download_url: str | None
+    download_expires_at: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -279,6 +280,7 @@ def create_range_download(
                     "status": DownloadStatus.READY,
                     "progress": 100,
                     "download_url": reference.url,
+                    "download_expires_at": reference.expires_at,
                     "updated_at": _now(),
                 }
             )

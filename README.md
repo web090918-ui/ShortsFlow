@@ -29,6 +29,8 @@ Tasks 01 through 03C are complete. The application can classify a YouTube video 
 
 When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata and selected-range acquisition use Tunelio and return its signed download URL without routing video bytes through the backend. Without that key, the local prototype uses yt-dlp, FastAPI `BackgroundTasks`, and FFmpeg with temporary local storage. Cloud Tasks, persistent job state, object storage, transcript, ranking, rendering, and affiliate processing are not implemented.
 
+Tunelio cost controls reuse ready metadata for six hours and reuse one unexpired `/create` URL for multiple start/end selections. Changing a range or template in the same browser session therefore does not intentionally spend another 10 credits. The caches are best-effort per browser session and warm backend instance; durable cross-instance caching remains deferred until persistence is introduced by its scheduled task.
+
 Source storage also remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current demo.
 
 YouTube can reject metadata or selected-range extraction requests from shared cloud IP ranges with a bot challenge. The provider reports this as an actionable Source failure; the project does not embed account cookies, proxies, or a separate token service as a workaround. Before a range job can be created, both the UI and API require the user to confirm that they own the source video or have the permissions needed to edit and use it. This declaration is not automated rights verification or a substitute for platform compliance.

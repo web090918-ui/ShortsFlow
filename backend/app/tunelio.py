@@ -1,8 +1,10 @@
 import json
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from app.youtube import PreparedVideoSource, VideoSourceProviderError
@@ -28,6 +30,25 @@ class TunelioClient:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
+        self._info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._create_cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+        self._info_lock = threading.Lock()
+        self._create_lock = threading.Lock()
+
+    @staticmethod
+    def _source_cache_key(url: str) -> str:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        if hostname == "youtu.be":
+            return parsed.path.strip("/").split("/", 1)[0] or url
+        if hostname == "youtube.com" or hostname.endswith(".youtube.com"):
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
+            if video_id:
+                return video_id
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) >= 2 and parts[0] in {"embed", "live", "shorts"}:
+                return parts[1]
+        return url
 
     def _get(self, path: str, **params: str) -> dict[str, Any]:
         request_url = f"{self._base_url}{path}?{urlencode(params)}"
@@ -77,7 +98,15 @@ class TunelioClient:
         return payload
 
     def prepare(self, url: str) -> PreparedVideoSource:
-        payload = self._get("/info", url=url)
+        cache_key = self._source_cache_key(url)
+        with self._info_lock:
+            cached = self._info_cache.get(cache_key)
+            now = time.time()
+            if cached is not None and cached[0] > now:
+                payload = cached[1]
+            else:
+                payload = self._get("/info", url=url)
+                self._info_cache[cache_key] = (now + 6 * 60 * 60, payload)
         duration = payload.get("duration_seconds")
         if not isinstance(duration, (int, float)) or duration <= 0:
             raise VideoSourceProviderError("YouTube 영상 길이를 확인하지 못했습니다.")
@@ -110,7 +139,22 @@ class TunelioClient:
         end_seconds: float,
         quality: str = "480p",
     ) -> TunelioRangeReference:
-        payload = self._get("/create", url=url, quality=quality)
+        cache_key = (self._source_cache_key(url), quality)
+        with self._create_lock:
+            cached = self._create_cache.get(cache_key)
+            now = time.time()
+            if cached is not None and cached[0] > now:
+                payload = cached[1]
+            else:
+                payload = self._get("/create", url=url, quality=quality)
+                expires = payload.get("expires")
+                valid_until = (
+                    float(expires) - 5 * 60
+                    if isinstance(expires, int)
+                    else now + 5 * 60
+                )
+                if valid_until > now:
+                    self._create_cache[cache_key] = (valid_until, payload)
         tunnel_url = payload.get("url")
         if not isinstance(tunnel_url, str):
             raise VideoSourceProviderError("선택 구간 다운로드 URL을 받지 못했습니다.")

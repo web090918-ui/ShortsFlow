@@ -44,6 +44,8 @@ Task 03A validates acquisition separately from orchestration. Vercel remains sui
 
 Task 03B supports Tunelio as the selected-range acquisition adapter when `SHORTSFLOW_TUNELIO_API_KEY` is configured. The API key remains server-side. Source preparation calls `/info`, and range preparation calls `/create` for 480p then adds the selected `start` and `end` parameters to the returned signed tunnel URL. Media bytes flow from the provider to the browser rather than through Vercel. Without the key, local development retains the existing yt-dlp/FFmpeg prototype.
 
+To control provider cost without adding MVP-excluded infrastructure, ready Source metadata is cached for six hours in the browser session and in each warm backend process. The base `/create` signed URL is cached by video and quality until five minutes before expiry; different ranges are derived from that URL without another paid call. The browser also reuses the active signed URL when the user changes the range or template. Failed responses are never cached. These are best-effort caches, not durable persistence, and intentionally do not introduce Redis or another service.
+
 ### Selected-range acquisition prototype
 
 The current prototype lets a user choose a start and end time after a YouTube Source reaches `READY`. The frontend follows a job-shaped network flow similar to the behavior observed during competitor research:
