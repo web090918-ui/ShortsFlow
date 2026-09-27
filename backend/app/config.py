@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_name: str = "ShortsFlow API"
     app_env: Literal["development", "test", "production"] = "development"
     log_level: str = "INFO"
+    frontend_origin: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -19,4 +20,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

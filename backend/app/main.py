@@ -1,16 +1,26 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.logging_config import configure_logging
+from app.sources import router as sources_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(sources_router)
 
 
 @app.get("/health")
@@ -27,4 +37,3 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         exc_info=exc,
     )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-

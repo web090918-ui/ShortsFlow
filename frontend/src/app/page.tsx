@@ -1,31 +1,31 @@
-import { API_URL } from "@/config";
+import { SourceInput } from "@/components/source-input";
 
-const steps = ["URL 또는 영상 업로드", "Shorts Candidate", "Top 3", "Render"];
+const steps = ["Source Input", "Shorts Candidate", "Top 3", "Render"];
 
 export default function Home() {
   return (
     <main>
-      <section className="hero">
-        <p className="eyebrow">SHORTSFLOW</p>
-        <h1>만들기 전에, 무엇을 만들지 결정하세요.</h1>
-        <p className="intro">
-          영상에서 Shorts 후보를 찾고 순위를 매겨 가장 가능성 높은 세 가지를 선택하는
-          워크플로입니다.
-        </p>
+      <div className="page-shell">
+        <section className="hero">
+          <p className="eyebrow">SHORTSFLOW</p>
+          <h1>하나의 Source에서 Shorts를 시작하세요.</h1>
+          <p className="intro">
+            YouTube 영상, 상품 URL 또는 영상 파일을 입력하면 공통 Source로 등록합니다.
+            아직 영상 분석이나 AI 처리는 시작하지 않습니다.
+          </p>
 
-        <ol className="flow" aria-label="ShortsFlow 기본 흐름">
-          {steps.map((step, index) => (
-            <li key={step}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              {step}
-            </li>
-          ))}
-        </ol>
+          <ol className="flow" aria-label="ShortsFlow 기본 흐름">
+            {steps.map((step, index) => (
+              <li key={step}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </section>
 
-        <p className="status">
-          API <code>{API_URL}</code>
-        </p>
-      </section>
+        <SourceInput />
+      </div>
     </main>
   );
 }

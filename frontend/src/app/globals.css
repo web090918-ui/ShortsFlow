@@ -1,11 +1,13 @@
 :root {
   color-scheme: dark;
-  --background: #0a0a0a;
-  --surface: #151515;
-  --line: #303030;
-  --text: #f4f4f0;
-  --muted: #a3a39b;
+  --background: #090a08;
+  --surface: #141510;
+  --surface-raised: #1b1d16;
+  --line: #303228;
+  --text: #f4f4ec;
+  --muted: #a3a49a;
   --accent: #d7ff4f;
+  --danger: #ff8f7d;
 }
 
 * {
@@ -19,43 +21,59 @@ body {
 
 body {
   margin: 0;
-  background: var(--background);
+  background:
+    radial-gradient(circle at 80% 10%, rgb(215 255 79 / 8%), transparent 28rem),
+    var(--background);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
 }
 
+button,
+input {
+  font: inherit;
+}
+
 main {
-  display: grid;
   min-height: 100vh;
-  place-items: center;
-  padding: 48px 24px;
+  padding: 64px 24px;
+}
+
+.page-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+  gap: clamp(48px, 8vw, 120px);
+  align-items: center;
+  width: min(1180px, 100%);
+  min-height: calc(100vh - 128px);
+  margin: 0 auto;
 }
 
 .hero {
-  width: min(760px, 100%);
+  min-width: 0;
 }
 
-.eyebrow {
+.eyebrow,
+.section-label {
   margin: 0 0 24px;
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.18em;
 }
 
 h1 {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0;
-  font-size: clamp(2.6rem, 8vw, 5.6rem);
-  letter-spacing: -0.06em;
+  font-size: clamp(2.8rem, 7vw, 5.8rem);
+  letter-spacing: -0.065em;
   line-height: 0.96;
 }
 
 .intro {
-  max-width: 600px;
+  max-width: 620px;
   margin: 32px 0 48px;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   line-height: 1.7;
 }
 
@@ -71,9 +89,8 @@ h1 {
   display: flex;
   gap: 24px;
   align-items: center;
-  padding: 18px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 1rem;
 }
 
 .flow span {
@@ -82,13 +99,162 @@ h1 {
   font-size: 0.8rem;
 }
 
-.status {
-  margin: 24px 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
+.source-panel {
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgb(20 21 16 / 88%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 32%);
 }
 
-code {
+.source-heading {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.source-heading .section-label {
+  margin-bottom: 10px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.04em;
+}
+
+.mode-switch {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.mode-switch button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  background: var(--accent);
+  color: #11130b;
+}
+
+.source-panel form {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.field input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  background: var(--surface-raised);
   color: var(--text);
+}
+
+.file-field input {
+  padding: 14px 16px;
+}
+
+.field input:focus {
+  border-color: var(--accent);
+}
+
+.submit-button {
+  min-height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #11130b;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.message {
+  margin: 16px 0 0;
+  font-size: 0.86rem;
+}
+
+.error-message {
+  color: var(--danger);
+}
+
+.source-result {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.source-result span {
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.source-result strong {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.source-result code {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 860px) {
+  main {
+    padding: 40px 20px;
+  }
+
+  .page-shell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .source-panel {
+    padding: 22px;
+    border-radius: 18px;
+  }
+
+  .source-heading {
+    display: grid;
+  }
+
+  .mode-switch {
+    justify-self: start;
+  }
 }
 
