@@ -26,7 +26,7 @@ See the product, architecture, and delivery details in:
 
 ## Current status
 
-Tasks 01 through 04 are complete, and Task 05 transcript processing is implemented pending production provider validation. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
+Tasks 01 through 04 are complete, and Task 05 transcript processing is implemented pending the final production fallback validation. The caption-first Tunelio path has passed on Cloud Run. The exact Secret Manager-backed OpenAI key has also passed a direct `whisper-1` transcription request with HTTP `200`; the integrated fallback is still blocked before OpenAI because Tunelio credits are exhausted. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
 
 When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata, selected-range acquisition, and the first transcript attempt use Tunelio. Transcript processing filters timestamped captions to the selected source range. If that range has no captions and `SHORTSFLOW_OPENAI_API_KEY` is configured, the Worker downloads only the 480p analysis range, extracts a 16 kHz mono MP3 with FFmpeg, and sends it to OpenAI `whisper-1` for segment timestamps. Cloud Tasks and Firestore persist the job and normalized transcript. Object storage, candidate generation, ranking, rendering, and affiliate processing are not implemented.
 
@@ -108,6 +108,8 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_OPENAI_STT_MODEL` — defaults to `whisper-1` for segment timestamps
 
 Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are documented in [Task 04 deployment](docs/TASK_04_DEPLOYMENT.md). Local defaults do not require Google Cloud credentials.
+
+Current deployed entry points are `https://www.cutpick.com` for the frontend and `https://shortflow-268642207702.asia-northeast3.run.app` for the Cloud Run backend. Secret values are stored outside the repository.
 
 ## Validation
 

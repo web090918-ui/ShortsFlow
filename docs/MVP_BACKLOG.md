@@ -140,7 +140,8 @@ Implementation status:
 - OpenAI `whisper-1` returns segment timestamps, which are normalized to absolute source-video time.
 - The normalized transcript is persisted in the Firestore processing job result and advances `next_step` to `CANDIDATE`.
 - Cloud Run caption-first validation completed with `provider=tunelio`, requested and returned language `ko`, 37 timestamped segments within source range 60-120 seconds, and one Worker attempt.
-- Task 05 is not complete until the Whisper fallback is validated on Cloud Run after OpenAI billing and its secret are available.
+- OpenAI billing and its Secret Manager-backed key are configured. A direct Google Cloud Shell request using the exact latest secret completed against `whisper-1` with HTTP `200`, validating the key, billing, project access, and model access.
+- A subsequent Cloud Run fallback job did not reach OpenAI because Tunelio credits were exhausted before selected-range media acquisition. Task 05 is not complete until credits are available and a production job completes with `provider=openai_whisper`.
 
 ## Task 06 — Candidate Generation
 

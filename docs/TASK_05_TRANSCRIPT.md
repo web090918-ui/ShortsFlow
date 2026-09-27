@@ -64,4 +64,8 @@ Do not start Task 06 until these production checks pass.
 
 The caption-first path passed Cloud Run validation on 2026-09-27. An authorized Korean source range from 60 to 120 seconds completed in one Worker attempt with `provider=tunelio`, requested and returned language `ko`, 37 non-empty segments, progress `100`, and `next_step=CANDIDATE`.
 
-OpenAI billing and `SHORTSFLOW_OPENAI_API_KEY` are not configured yet, so the Whisper fallback remains unvalidated. Task 05 therefore remains in progress and Task 06 must not begin.
+OpenAI billing and the Secret Manager-backed `SHORTSFLOW_OPENAI_API_KEY` are now configured. On 2026-09-28, the exact latest secret was loaded from Secret Manager in Google Cloud Shell and sent directly to the OpenAI audio transcription endpoint with a generated two-second WAV. `whisper-1` returned HTTP `200`, the transcript `Beep.`, and two seconds of usage. This validates the configured key, billing, project access, and model access without exposing the secret.
+
+The production fallback remains unvalidated end to end. A new Cloud Run processing job attempted the captionless 965-968 second range three times but stopped before OpenAI because Tunelio reported insufficient credits while acquiring the caption or selected-range media. The earlier Cloud Run OpenAI `403` therefore cannot be retested through the complete pipeline until Tunelio credits are available and the Cloud Run revision is confirmed to reference the latest OpenAI secret version.
+
+Task 05 remains in progress and Task 06 must not begin until a Cloud Run job completes with `provider=openai_whisper`.
