@@ -59,3 +59,9 @@ Task 05 is complete when Cloud Run demonstrates both paths with authorized test 
 6. Temporary media is removed after each fallback attempt.
 
 Do not start Task 06 until these production checks pass.
+
+## Validation result
+
+The caption-first path passed Cloud Run validation on 2026-09-27. An authorized Korean source range from 60 to 120 seconds completed in one Worker attempt with `provider=tunelio`, requested and returned language `ko`, 37 non-empty segments, progress `100`, and `next_step=CANDIDATE`.
+
+OpenAI billing and `SHORTSFLOW_OPENAI_API_KEY` are not configured yet, so the Whisper fallback remains unvalidated. Task 05 therefore remains in progress and Task 06 must not begin.

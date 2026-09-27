@@ -139,7 +139,8 @@ Implementation status:
 - FFmpeg extracts a 16 kHz mono 32 kbps MP3, which stays below the OpenAI 25 MB upload limit for the maximum 60-minute source range.
 - OpenAI `whisper-1` returns segment timestamps, which are normalized to absolute source-video time.
 - The normalized transcript is persisted in the Firestore processing job result and advances `next_step` to `CANDIDATE`.
-- Task 05 is not complete until both the caption-first path and Whisper fallback are validated on Cloud Run.
+- Cloud Run caption-first validation completed with `provider=tunelio`, requested and returned language `ko`, 37 timestamped segments within source range 60-120 seconds, and one Worker attempt.
+- Task 05 is not complete until the Whisper fallback is validated on Cloud Run after OpenAI billing and its secret are available.
 
 ## Task 06 — Candidate Generation
 
