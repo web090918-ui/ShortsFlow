@@ -53,7 +53,7 @@ class FakeYoutubeDL:
 
 def test_provider_separates_public_metadata_from_private_stream_urls(monkeypatch) -> None:
     monkeypatch.setattr(youtube_module.yt_dlp, "YoutubeDL", FakeYoutubeDL)
-    monkeypatch.setattr(youtube_module.deno, "find_deno_bin", lambda: "/runtime/deno")
+    monkeypatch.setattr(youtube_module, "_deno_runtime_path", lambda: "/runtime/deno")
 
     prepared = YouTubeSourceProvider().prepare("https://youtube.com/watch?v=video123")
 

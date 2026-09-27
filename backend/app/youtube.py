@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Protocol
 
 import deno
@@ -9,6 +10,13 @@ from yt_dlp.utils import DownloadError
 
 
 logger = logging.getLogger(__name__)
+
+
+def _deno_runtime_path() -> str:
+    bundled_runtime = Path(__file__).parent / ".runtime" / "deno"
+    if bundled_runtime.is_file():
+        return str(bundled_runtime)
+    return deno.find_deno_bin()
 
 
 class VideoSourceProviderError(Exception):
@@ -116,7 +124,7 @@ class YouTubeSourceProvider:
         options = {
             "cachedir": False,
             "extractor_retries": 2,
-            "js_runtimes": {"deno": {"path": deno.find_deno_bin()}},
+            "js_runtimes": {"deno": {"path": _deno_runtime_path()}},
             "logger": _YtDlpLogger(),
             "noplaylist": True,
             "quiet": True,

@@ -24,4 +24,5 @@ backend/__pycache__/
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
+backend/app/.runtime/
 *.py[cod]
