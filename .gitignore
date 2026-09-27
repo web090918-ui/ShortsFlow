@@ -1,0 +1,27 @@
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment files (examples stay committed)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/npm-debug.log*
+.vercel/
+frontend/.vercel/
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+*.py[cod]
