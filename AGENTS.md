@@ -27,13 +27,14 @@ Do not attempt to complete the YouTube and Product flows simultaneously. Deliver
 1. Task 02 — Source Input Framework
 2. Task 03 — YouTube Source processing
 3. Task 03A — Validate YouTube acquisition on a dedicated worker host
-4. Task 04 — Async Job with Cloud Tasks and a Worker
-5. Task 05 — Transcript with FFmpeg audio extraction and STT
-6. Task 06 — Generate 10-15 Clip Candidates
-7. Task 07 — Generic AI Ranking and Top 3
-8. Task 08 — Preview and 9:16 Short Render
-9. Task 09 — Download UX
-10. Task 10 — Product/Affiliate Flow
+4. Task 03B — Validate selected-range acquisition as a 480p analysis proxy
+5. Task 04 — Async Job with Cloud Tasks and a Worker
+6. Task 05 — Transcript with FFmpeg audio extraction and STT
+7. Task 06 — Generate 10-15 Clip Candidates
+8. Task 07 — Generic AI Ranking and Top 3
+9. Task 08 — Preview and 9:16 Short Render
+10. Task 09 — Download UX
+11. Task 10 — Product/Affiliate Flow
 
 Complete the YouTube URL to downloadable Short flow end-to-end before implementing the Product/Affiliate flow.
 
@@ -43,6 +44,9 @@ Complete the YouTube URL to downloadable Short flow end-to-end before implementi
 - Keep provider-specific extraction details behind small provider boundaries when they are needed.
 - Use Generic AI Ranking in MVP1. Do not call it Personal Virality Score.
 - Use `AI Score` or `Recommended Score` in user-facing copy.
+- Require an affirmative source-rights declaration in both the UI and API before YouTube media acquisition. Treat it as a user declaration, not automated rights verification or a substitute for platform compliance.
+- Use the selected range as a 480p analysis proxy. Reacquire only the final selected candidate at output quality when rendering is implemented.
+- Carry one of the three MVP render preferences (`CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`) without implementing template-specific rendering before Task 08.
 - Prefer direct, readable code over speculative abstractions.
 - Preserve a path to later phases without implementing them early.
 

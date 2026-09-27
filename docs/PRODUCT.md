@@ -22,15 +22,34 @@ The first delivery target is the complete YouTube flow. The Product/Affiliate fl
 YouTube URL
 -> Source creation
 -> Video information
+-> Source range selection
+-> Source-rights confirmation
+-> 480p analysis proxy
 -> Transcript
 -> 10-15 clip candidates
 -> Generic AI Ranking
 -> Top 3 Recommendation
 -> Candidate selection
+-> Template selection
+-> Output-quality candidate acquisition
 -> 9:16 Short Render
 -> Preview
 -> Download
 ```
+
+## YouTube creation controls
+
+The user selects the source range to analyze, up to 60 minutes. ShortsFlow acquires this range as a 480p analysis proxy to reduce transfer, storage, and decoding cost. The proxy is not the final render source: after the user selects a candidate, only that candidate range should be reacquired at output quality during Task 08.
+
+Before acquisition begins, the user must affirm that they own the source video or have the permissions required to edit and use it. The frontend and API both enforce this declaration. It is not automated rights verification and does not replace compliance with the source platform's terms.
+
+MVP1 exposes three stable render preferences:
+
+- `CLEAN_CAPTION`: readable default captions
+- `BOLD_HIGHLIGHT`: stronger keyword emphasis
+- `MINIMAL`: captions that cover less of the source
+
+Template selection is captured before processing, but visual caption composition is implemented only with Task 08 rendering. ShortsFlow does not copy competitor templates or add an advanced template editor in MVP1.
 
 ## Product/Affiliate flow
 
@@ -112,4 +131,3 @@ Publish
 ## Delivery principle
 
 The product must validate one complete flow before broadening its feature set. Development therefore completes YouTube URL to preview and download before Product/Affiliate implementation. Future expansion should remain possible, but no later-phase behavior is implemented speculatively.
-
