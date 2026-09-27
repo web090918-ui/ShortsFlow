@@ -123,6 +123,9 @@ class YouTubeSourceProvider:
     def prepare(self, url: str) -> PreparedVideoSource:
         options = {
             "cachedir": False,
+            "extractor_args": {
+                "youtube": {"player_client": ["web_embedded", "android_vr"]}
+            },
             "extractor_retries": 2,
             "js_runtimes": {"deno": {"path": _deno_runtime_path()}},
             "logger": _YtDlpLogger(),
