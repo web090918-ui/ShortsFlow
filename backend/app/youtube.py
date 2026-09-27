@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+import deno
 import yt_dlp
 from yt_dlp.utils import DownloadError
 
@@ -83,8 +84,8 @@ def _select_video_format(formats: list[dict[str, Any]]) -> dict[str, Any] | None
         candidates,
         key=lambda item: (
             item.get("ext") == "mp4",
-            item.get("acodec") not in (None, "none"),
             _number(item.get("height")),
+            item.get("acodec") not in (None, "none"),
             _number(item.get("tbr")),
         ),
     )
@@ -115,7 +116,7 @@ class YouTubeSourceProvider:
         options = {
             "cachedir": False,
             "extractor_retries": 2,
-            "js_runtimes": {"node": {}},
+            "js_runtimes": {"deno": {"path": deno.find_deno_bin()}},
             "logger": _YtDlpLogger(),
             "noplaylist": True,
             "quiet": True,
@@ -186,4 +187,3 @@ class YouTubeSourceProvider:
             metadata=metadata,
             processing_reference=processing_reference,
         )
-

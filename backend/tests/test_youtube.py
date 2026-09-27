@@ -39,17 +39,27 @@ class FakeYoutubeDL:
                     "vcodec": "avc1",
                     "height": 1080,
                 },
+                {
+                    "format_id": "combined",
+                    "url": "https://media.example/combined",
+                    "ext": "mp4",
+                    "acodec": "mp4a",
+                    "vcodec": "avc1",
+                    "height": 360,
+                },
             ],
         }
 
 
 def test_provider_separates_public_metadata_from_private_stream_urls(monkeypatch) -> None:
     monkeypatch.setattr(youtube_module.yt_dlp, "YoutubeDL", FakeYoutubeDL)
+    monkeypatch.setattr(youtube_module.deno, "find_deno_bin", lambda: "/runtime/deno")
 
     prepared = YouTubeSourceProvider().prepare("https://youtube.com/watch?v=video123")
 
     assert prepared.metadata["youtube"]["title"] == "A video"
     assert prepared.metadata["media"]["audio"]["format_id"] == "audio"
+    assert prepared.metadata["media"]["video"]["format_id"] == "video"
     assert "url" not in prepared.metadata["media"]["audio"]
     assert prepared.processing_reference["streams"]["audio"]["url"] == (
         "https://media.example/audio"
