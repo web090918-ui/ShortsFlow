@@ -1,5 +1,6 @@
 import app.youtube as youtube_module
-from app.youtube import YouTubeSourceProvider
+from app.youtube import VideoSourceProviderError, YouTubeSourceProvider
+from yt_dlp.utils import DownloadError
 
 
 class FakeYoutubeDL:
@@ -64,3 +65,22 @@ def test_provider_separates_public_metadata_from_private_stream_urls(monkeypatch
     assert prepared.processing_reference["streams"]["audio"]["url"] == (
         "https://media.example/audio"
     )
+
+
+class BotChallengeYoutubeDL(FakeYoutubeDL):
+    def extract_info(self, url, download):
+        raise DownloadError("Sign in to confirm you’re not a bot")
+
+
+def test_provider_reports_cloud_ip_bot_challenge(monkeypatch) -> None:
+    monkeypatch.setattr(youtube_module.yt_dlp, "YoutubeDL", BotChallengeYoutubeDL)
+    monkeypatch.setattr(youtube_module, "_deno_runtime_path", lambda: "/runtime/deno")
+
+    try:
+        YouTubeSourceProvider().prepare("https://youtube.com/watch?v=video123")
+    except VideoSourceProviderError as exc:
+        assert str(exc) == (
+            "YouTube가 현재 서버 요청을 제한했습니다. 잠시 후 다시 시도해 주세요."
+        )
+    else:
+        raise AssertionError("Expected the bot challenge to become a provider error")

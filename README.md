@@ -28,6 +28,8 @@ Tasks 01 through 03 are complete. The application can classify a YouTube video U
 
 Source storage remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current deployed demo. No transcript, async job, ranking, rendering, or affiliate processing is implemented.
 
+YouTube can reject media extraction requests from shared cloud IP ranges with a bot challenge. The provider reports this as an actionable Source failure; the project does not embed account cookies, proxies, or a separate token service as a workaround.
+
 ## Structure
 
 ```text

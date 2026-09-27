@@ -123,9 +123,6 @@ class YouTubeSourceProvider:
     def prepare(self, url: str) -> PreparedVideoSource:
         options = {
             "cachedir": False,
-            "extractor_args": {
-                "youtube": {"player_client": ["web_embedded", "android_vr"]}
-            },
             "extractor_retries": 2,
             "js_runtimes": {"deno": {"path": _deno_runtime_path()}},
             "logger": _YtDlpLogger(),
@@ -141,6 +138,10 @@ class YouTubeSourceProvider:
                 info = downloader.extract_info(url, download=False)
         except DownloadError as exc:
             logger.warning("YouTube extraction failed", exc_info=exc)
+            if "Sign in to confirm you’re not a bot" in str(exc):
+                raise VideoSourceProviderError(
+                    "YouTube가 현재 서버 요청을 제한했습니다. 잠시 후 다시 시도해 주세요."
+                ) from exc
             raise VideoSourceProviderError(
                 "YouTube 영상을 불러오지 못했습니다. 공개 영상인지 확인해 주세요."
             ) from exc
