@@ -137,8 +137,58 @@ describe("SourceInput", () => {
           end_seconds: 240,
           rights_confirmed: true,
           template_id: "BOLD_HIGHLIGHT",
+          source_url: "https://youtube.com/watch?v=source123",
         }),
       }),
+    );
+  });
+
+  it("uses a Tunelio signed URL without prefixing the API URL", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+            type: "YOUTUBE",
+            status: "READY",
+            metadata: { youtube: { title: "Video", duration_seconds: 120 } },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "download-job-2",
+            source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+            status: "READY",
+            progress: 100,
+            start_seconds: 0,
+            end_seconds: 120,
+            duration_seconds: 120,
+            template_id: "CLEAN_CAPTION",
+            error_message: null,
+            download_url: "https://tunelio.dev/tunnel?sig=test&start=0&end=120",
+          }),
+          { status: 202, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    render(<SourceInput />);
+    await user.type(
+      screen.getByLabelText("YouTube 또는 상품 URL"),
+      "https://youtube.com/watch?v=source123",
+    );
+    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
+    await user.click(
+      screen.getByRole("button", { name: "480p 분석 구간 준비" }),
+    );
+
+    const link = await screen.findByRole("link", { name: "분석용 MP4 다운로드" });
+    expect(link.getAttribute("href")).toBe(
+      "https://tunelio.dev/tunnel?sig=test&start=0&end=120",
     );
   });
 });

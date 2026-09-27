@@ -9,9 +9,11 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 from app.sources import SourceStatus, SourceType, repository as source_repository
+from app.config import get_settings
+from app.tunelio import TunelioClient
 from app.youtube import (
     VideoRangeDownloader,
     VideoSourceProviderError,
@@ -41,6 +43,7 @@ class RangeDownloadRequest(BaseModel):
     end_seconds: float = Field(gt=0)
     rights_confirmed: bool = False
     template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    source_url: HttpUrl | None = None
 
 
 class RangeDownloadResponse(BaseModel):
@@ -80,6 +83,19 @@ class InMemoryDownloadRepository:
 
 repository = InMemoryDownloadRepository()
 range_downloader: VideoRangeDownloader = YouTubeRangeDownloader()
+
+
+def _tunelio_client_from_settings() -> TunelioClient | None:
+    settings = get_settings()
+    if settings.tunelio_api_key is None:
+        return None
+    return TunelioClient(
+        settings.tunelio_api_key.get_secret_value(),
+        base_url=settings.tunelio_base_url,
+    )
+
+
+tunelio_client = _tunelio_client_from_settings()
 router = APIRouter(tags=["downloads"])
 
 
@@ -174,12 +190,30 @@ def create_range_download(
 ) -> RangeDownloadRecord:
     source = source_repository.get(source_id)
     if source is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
-    if source.type != SourceType.YOUTUBE or source.status != SourceStatus.READY:
+        if tunelio_client is None or payload.source_url is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Source not found."
+            )
+        source_url = str(payload.source_url)
+        hostname = (payload.source_url.host or "").lower()
+        if not (
+            hostname == "youtu.be"
+            or hostname == "youtube.com"
+            or hostname.endswith(".youtube.com")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="YouTube 영상 URL을 입력해 주세요.",
+            )
+        source_duration = None
+    elif source.type != SourceType.YOUTUBE or source.status != SourceStatus.READY:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="준비가 완료된 YouTube Source만 구간 다운로드할 수 있습니다.",
         )
+    else:
+        source_url = source.url or ""
+        source_duration = source.metadata.get("youtube", {}).get("duration_seconds")
     if not payload.rights_confirmed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -198,7 +232,6 @@ def create_range_download(
             detail="한 번에 최대 60분까지 선택할 수 있습니다.",
         )
 
-    source_duration = source.metadata.get("youtube", {}).get("duration_seconds")
     if isinstance(source_duration, (int, float)) and payload.end_seconds > source_duration:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -208,8 +241,8 @@ def create_range_download(
     now = _now()
     job = RangeDownloadRecord(
         id=uuid4(),
-        source_id=source.id,
-        source_url=source.url or "",
+        source_id=source_id,
+        source_url=source_url,
         status=DownloadStatus.QUEUED,
         progress=0,
         start_seconds=payload.start_seconds,
@@ -222,6 +255,35 @@ def create_range_download(
         updated_at=now,
     )
     repository.save(job)
+    if tunelio_client is not None:
+        try:
+            reference = tunelio_client.create_range(
+                job.source_url,
+                start_seconds=job.start_seconds,
+                end_seconds=job.end_seconds,
+                quality="480p",
+            )
+        except VideoSourceProviderError as exc:
+            return repository.save(
+                job.model_copy(
+                    update={
+                        "status": DownloadStatus.FAILED,
+                        "error_message": str(exc),
+                        "updated_at": _now(),
+                    }
+                )
+            )
+        return repository.save(
+            job.model_copy(
+                update={
+                    "status": DownloadStatus.READY,
+                    "progress": 100,
+                    "download_url": reference.url,
+                    "updated_at": _now(),
+                }
+            )
+        )
+
     background_tasks.add_task(_run_download, job.id)
     return job
 

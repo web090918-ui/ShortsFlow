@@ -6,6 +6,7 @@ import app.downloads as downloads_module
 import app.sources as sources_module
 from app.main import app
 from app.youtube import PreparedVideoSource
+from app.tunelio import TunelioRangeReference
 
 
 client = TestClient(app)
@@ -146,3 +147,46 @@ def test_rejects_unknown_template(monkeypatch) -> None:
     )
 
     assert response.status_code == 422
+
+
+class StubTunelioClient:
+    def create_range(
+        self,
+        url: str,
+        *,
+        start_seconds: float,
+        end_seconds: float,
+        quality: str,
+    ) -> TunelioRangeReference:
+        assert url == "https://www.youtube.com/watch?v=range123"
+        assert start_seconds == 60
+        assert end_seconds == 120
+        assert quality == "480p"
+        return TunelioRangeReference(
+            url="https://tunelio.dev/tunnel?sig=test&start=60&end=120",
+            expires_at=123,
+            filename="range.mp4",
+        )
+
+
+def test_tunelio_returns_ready_signed_range_without_local_file(monkeypatch) -> None:
+    monkeypatch.setattr(downloads_module, "tunelio_client", StubTunelioClient())
+
+    response = client.post(
+        "/sources/00000000-0000-0000-0000-000000000001/downloads",
+        json={
+            "source_url": "https://www.youtube.com/watch?v=range123",
+            "start_seconds": 60,
+            "end_seconds": 120,
+            "rights_confirmed": True,
+            "template_id": "CLEAN_CAPTION",
+        },
+    )
+
+    assert response.status_code == 202
+    job = response.json()
+    assert job["status"] == "READY"
+    assert job["progress"] == 100
+    assert job["download_url"] == (
+        "https://tunelio.dev/tunnel?sig=test&start=60&end=120"
+    )

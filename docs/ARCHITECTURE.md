@@ -40,7 +40,9 @@ Task 02 provides a `SourceRepository` boundary with an in-memory adapter. It exi
 
 Task 03 adds `CREATED -> PREPARING -> READY | FAILED` for YouTube acquisition. During this task, `POST /sources?prepare=true` can create and prepare a YouTube Source in one request. This keeps the deployed serverless demo functional while storage remains process-local; Task 04 will replace the synchronous execution path with an async job rather than extending it further.
 
-Task 03A validates acquisition separately from orchestration. Vercel remains suitable for the frontend and lightweight API, but it is not the media-acquisition runtime because the tested shared egress IP receives a YouTube bot challenge. A dedicated AWS Lightsail VM received the same challenge, so moving yt-dlp to a generic cloud VM is not sufficient. Task 04 remains gated until a different acquisition method passes the repository probe three consecutive times, including readable video and audio media bytes.
+Task 03A validates acquisition separately from orchestration. Vercel remains suitable for the frontend and lightweight API, but it is not the direct yt-dlp media-acquisition runtime because the tested shared egress IP receives a YouTube bot challenge. A dedicated AWS Lightsail VM received the same challenge, so moving yt-dlp to a generic cloud VM is not sufficient.
+
+Task 03B supports Tunelio as the selected-range acquisition adapter when `SHORTSFLOW_TUNELIO_API_KEY` is configured. The API key remains server-side. Source preparation calls `/info`, and range preparation calls `/create` for 480p then adds the selected `start` and `end` parameters to the returned signed tunnel URL. Media bytes flow from the provider to the browser rather than through Vercel. Without the key, local development retains the existing yt-dlp/FFmpeg prototype.
 
 ### Selected-range acquisition prototype
 
@@ -58,7 +60,7 @@ The 480p artifact is an analysis proxy, not the final render source. When render
 
 The prototype also carries one of three stable template identifiers with the job: `CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`. This is a render preference only; Task 03B does not render captions. Task 08 will interpret the identifier, so acquisition code must not contain template-specific rendering behavior.
 
-This implementation deliberately uses FastAPI `BackgroundTasks`, an in-memory job repository, and local temporary files. It validates the product interaction and provider boundary only. It is not the durable Task 04 design, is not suitable for Vercel Functions, and does not remove the cloud-IP bot challenge. Production requires an approved acquisition runtime or external provider plus persistent jobs and object storage. Both the frontend and API require an affirmative source-rights declaration before starting acquisition; this is not automated rights verification or a substitute for platform compliance.
+The local yt-dlp implementation deliberately uses FastAPI `BackgroundTasks`, an in-memory job repository, and local temporary files. The Tunelio path instead returns a ready signed URL in the initiating request because that provider has no job queue. The frontend still understands the job-shaped response so Task 04 can replace in-memory processing state without changing the interaction. A stateless URL fallback permits the second request to succeed if a Vercel invocation no longer has the in-memory Source. Both the frontend and API require an affirmative source-rights declaration before starting acquisition; this is not automated rights verification or a substitute for platform compliance.
 
 ## Provider boundaries
 

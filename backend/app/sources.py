@@ -9,6 +9,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.youtube import VideoSourceProvider, VideoSourceProviderError, YouTubeSourceProvider
+from app.config import get_settings
+from app.tunelio import TunelioClient
 
 
 class SourceType(str, Enum):
@@ -122,7 +124,19 @@ def _new_source(
 
 
 repository: SourceRepository = InMemorySourceRepository()
-youtube_provider: VideoSourceProvider = YouTubeSourceProvider()
+
+
+def _youtube_provider_from_settings() -> VideoSourceProvider:
+    settings = get_settings()
+    if settings.tunelio_api_key is not None:
+        return TunelioClient(
+            settings.tunelio_api_key.get_secret_value(),
+            base_url=settings.tunelio_base_url,
+        )
+    return YouTubeSourceProvider()
+
+
+youtube_provider: VideoSourceProvider = _youtube_provider_from_settings()
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 

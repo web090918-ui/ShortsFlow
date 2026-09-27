@@ -25,9 +25,9 @@ See the product, architecture, and delivery details in:
 
 ## Current status
 
-Tasks 01 through 03 and the Task 03A environment validation are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` now exposes a start/end range selector and can prepare that selected range as an MP4 through a job-shaped API.
+Tasks 01 through 03C are complete. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
 
-The selected-range path is an acquisition prototype, not Task 04: it acquires a bandwidth-saving 480p analysis proxy, runs with FastAPI `BackgroundTasks`, keeps job state in memory, and stores the MP4 in local temporary storage. It therefore requires a long-running backend with FFmpeg and is not durable across restarts or suitable for Vercel Functions. Cloud Tasks, persistent job state, object storage, transcript, ranking, rendering, and affiliate processing are not implemented.
+When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata and selected-range acquisition use Tunelio and return its signed download URL without routing video bytes through the backend. Without that key, the local prototype uses yt-dlp, FastAPI `BackgroundTasks`, and FFmpeg with temporary local storage. Cloud Tasks, persistent job state, object storage, transcript, ranking, rendering, and affiliate processing are not implemented.
 
 Source storage also remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current demo.
 
@@ -40,7 +40,7 @@ cd backend
 .\.venv\Scripts\python.exe -m app.acquisition_probe "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-The local environment passed three consecutive probes on 2026-09-27. AWS Lightsail workers in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. A fresh instance was also tested with the automatically managed `bgutil:http-2.0.0` PO Token Provider and forced `mweb`; the Player API still returned `LOGIN_REQUIRED` before formats were available. Task 04 remains gated on selecting and validating an external media acquisition contract. See [Task 03A validation](docs/TASK_03A_VALIDATION.md) and the sanitized [competitor research](docs/COMPETITOR_RESEARCH.md).
+The local environment passed three consecutive probes on 2026-09-27. AWS Lightsail workers in Seoul failed with the same YouTube bot challenge as Vercel, proving that moving the provider to a generic cloud VM is not sufficient. A fresh instance was also tested with the automatically managed `bgutil:http-2.0.0` PO Token Provider and forced `mweb`; the Player API still returned `LOGIN_REQUIRED` before formats were available. The external selected-range contract has now passed one manual end-to-end test. Repeated multi-video web validation remains required before production acceptance. See [Task 03A validation](docs/TASK_03A_VALIDATION.md) and the sanitized [competitor research](docs/COMPETITOR_RESEARCH.md).
 
 ## Structure
 
@@ -96,6 +96,8 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_APP_ENV`
 - `SHORTSFLOW_LOG_LEVEL`
 - `SHORTSFLOW_FRONTEND_ORIGIN`
+- `SHORTSFLOW_TUNELIO_API_KEY` — optional server-side secret; enables Tunelio acquisition
+- `SHORTSFLOW_TUNELIO_BASE_URL` — defaults to `https://tunelio.dev`
 
 ## Validation
 

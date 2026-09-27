@@ -79,6 +79,11 @@ function formatDuration(seconds?: number | null) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
+function resolveDownloadUrl(downloadUrl: string) {
+  if (/^https:\/\//i.test(downloadUrl)) return downloadUrl;
+  return `${API_URL}${downloadUrl}`;
+}
+
 export function SourceInput() {
   const [mode, setMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
@@ -200,6 +205,7 @@ export function SourceInput() {
           end_seconds: rangeEnd,
           rights_confirmed: true,
           template_id: templateId,
+          source_url: url,
         }),
       });
       setDownloadJob(await readJsonResponse<DownloadJob>(response));
@@ -463,7 +469,7 @@ export function SourceInput() {
                   {downloadJob.status === "READY" && downloadJob.download_url ? (
                     <a
                       className="download-button"
-                      href={`${API_URL}${downloadJob.download_url}`}
+                      href={resolveDownloadUrl(downloadJob.download_url)}
                     >
                       분석용 MP4 다운로드
                     </a>

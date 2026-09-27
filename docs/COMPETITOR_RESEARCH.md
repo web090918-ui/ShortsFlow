@@ -284,7 +284,14 @@ References:
 
 ## Acquisition decision
 
-This research does not unblock the existing yt-dlp provider. Task 03A remains a negative production validation: the current approach worked from a local residential network but failed from Vercel and AWS Lightsail.
+Task 03A remains a negative production validation for the existing yt-dlp provider: the current approach worked from a local residential network but failed from Vercel and AWS Lightsail. A separate external acquisition experiment on 2026-09-27 successfully returned metadata and a playable selected 480p range through Tunelio.
+
+The validated Tunelio request consumed 16 credits: 6 for `/info` and 10 for `/create`; downloading the signed tunnel URL consumed no additional credits. The current published Pro plan provides 100,000 monthly credits for USD 9, which is 6,250 complete info-and-create operations before retries or duplicate calls. These prices are provider claims and can change, so ShortsFlow must cache Source metadata, prevent duplicate creation calls, track failures, and retain a replaceable provider boundary. Tunelio is an independent provider and the current public terms do not provide a production SLA.
+
+References:
+
+- <https://tunelio.dev/docs/>
+- <https://tunelio.dev/terms/>
 
 Before Task 04, choose and validate one acquisition contract:
 
@@ -292,4 +299,4 @@ Before Task 04, choose and validate one acquisition contract:
 2. a user-supplied source file or authorized cloud object, with the YouTube URL used for metadata;
 3. a separately approved authentication/token approach following policy, security, and operational review.
 
-Any candidate must pass the existing Task 03A probe three consecutive times with readable video and audio bytes. A black-box competitor success is evidence that the product experience is possible, not evidence that its undisclosed implementation can or should be copied.
+Before production launch, the selected external contract still needs repeated multi-video reliability checks, expiry/error handling, cost monitoring, and legal review. A black-box competitor success is evidence that the product experience is possible, not evidence that its undisclosed implementation can or should be copied.

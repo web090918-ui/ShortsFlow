@@ -60,7 +60,7 @@ Goal: validate the Task 03 provider on a non-Vercel worker host before adding as
 
 ## Task 03B — Selected-range Acquisition Prototype
 
-Status: Complete locally — production acquisition remains unresolved
+Status: Complete — external selected-range acquisition validated
 
 Goal: validate the URL, start/end selection, asynchronous-looking status, and MP4 download interaction without implementing Task 04 infrastructure.
 
@@ -70,6 +70,13 @@ Goal: validate the URL, start/end selection, asynchronous-looking status, and MP
 - Keep jobs and files process-local for this prototype; do not add Cloud Tasks, Redis, Kafka, or object storage here.
 - Treat cloud-IP bot challenges and durable execution as unresolved production gates.
 - Process only user-owned or otherwise authorized videos.
+
+Validation result:
+
+- Tunelio `/info` returned usable metadata for the authorized test source.
+- Tunelio `/create` plus `start` and `end` returned a playable 480p selected-range MP4.
+- The observed 60-second request produced a 59-second artifact because provider clipping is keyframe-aligned; exact final boundaries remain a Task 08 FFmpeg responsibility.
+- The API key is server-only and is never included in frontend code or repository files.
 
 ## Task 03C — PO Token Provider Revalidation
 
@@ -85,7 +92,7 @@ Goal: determine whether an automatically managed PO Token Provider changes the n
 
 ## Task 04 — Async Job
 
-Status: Blocked pending a viable YouTube media acquisition method
+Status: Ready to begin after the Tunelio web-path validation is deployed and accepted
 
 Goal: execute long-running pipeline steps through Cloud Tasks and a Worker.
 
