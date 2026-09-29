@@ -20,6 +20,8 @@ from app.shorts_pipeline import (
 )
 from app.acquisition import titan_provider_from_settings
 from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
+from app.ranking import CandidateRanker, HeuristicRanker, OpenAIRanker
+from app.sources import SourceStatus, repository as source_repository
 from app.transcripts import (
     FfmpegAudioExtractor,
     OpenAIWhisperProvider,
@@ -48,6 +50,7 @@ class ProcessingStep(str, Enum):
     PIPELINE_BOOTSTRAP = "PIPELINE_BOOTSTRAP"
     TRANSCRIPT = "TRANSCRIPT"
     CANDIDATE = "CANDIDATE"
+    RANKING = "RANKING"
     SHORT_RENDER = "SHORT_RENDER"
 
 
@@ -416,6 +419,30 @@ candidate_generator: CandidateGenerator = HeuristicCandidateGenerator(
     target_count_min=settings.candidate_count_min,
     target_count_max=settings.candidate_count_max,
 )
+
+
+def _candidate_ranker_from_settings(settings: Settings) -> CandidateRanker:
+    if settings.openai_api_key is None:
+        # Development only: keeps the pipeline runnable without an OpenAI key.
+        return HeuristicRanker(
+            reason_language=settings.ranking_reason_language,
+            top_count=settings.ranking_top_count,
+        )
+    from openai import OpenAI
+
+    return OpenAIRanker(
+        OpenAI(
+            api_key=settings.openai_api_key.get_secret_value(),
+            timeout=180,
+            max_retries=1,
+        ),
+        model=settings.openai_ranking_model,
+        reason_language=settings.ranking_reason_language,
+        top_count=settings.ranking_top_count,
+    )
+
+
+candidate_ranker: CandidateRanker = _candidate_ranker_from_settings(settings)
 router = APIRouter(tags=["processing-jobs"])
 
 
@@ -520,11 +547,24 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
     # and candidate generation is deterministic and cheap.
     _save_step_progress(job, step=ProcessingStep.CANDIDATE, progress=70)
     candidates = candidate_generator.generate(transcript)
+    # Task 07: generic AI ranking of those candidates, still in the same attempt.
+    _save_step_progress(job, step=ProcessingStep.RANKING, progress=85)
+    ranking = candidate_ranker.rank(candidates, video_title=_source_title(job))
     return {
-        "next_step": "RANKING",
+        "next_step": "RENDER",
         "transcript": transcript.model_dump(mode="json"),
         "candidates": candidates.model_dump(mode="json"),
+        "ranking": ranking.model_dump(mode="json"),
     }
+
+
+def _source_title(job: ProcessingJobRecord) -> str | None:
+    """Best-effort video title for ranking context; Sources are process-local."""
+    source = source_repository.get(job.source_id)
+    if source is None or source.status != SourceStatus.READY:
+        return None
+    title = source.metadata.get("youtube", {}).get("title")
+    return title if isinstance(title, str) and title else None
 
 
 def _save_step_progress(

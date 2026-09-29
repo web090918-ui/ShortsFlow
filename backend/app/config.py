@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     openai_api_key: SecretStr | None = None
     openai_stt_model: str = "whisper-1"
+    # Task 07 Generic AI Ranking (channel-agnostic AI Score and Top 3)
+    openai_ranking_model: str = "gpt-4.1-mini"
+    ranking_reason_language: str = "ko"
+    ranking_top_count: int = 3
     job_repository_backend: Literal["memory", "firestore"] = "memory"
     task_dispatcher_backend: Literal["local", "cloud_tasks"] = "local"
     worker_auth_mode: Literal["disabled", "google_oidc"] = "disabled"

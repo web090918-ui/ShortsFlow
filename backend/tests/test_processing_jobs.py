@@ -10,6 +10,7 @@ from app.processing_jobs import (
     InMemoryProcessingJobRepository,
     ProcessingJobStatus,
 )
+from app.ranking import HeuristicRanker
 from app.transcripts import TranscriptResult, TranscriptSegment
 
 
@@ -43,6 +44,7 @@ def stub_transcript_processor(monkeypatch):
     monkeypatch.setattr(
         jobs_module, "transcript_processor", StubTranscriptProcessor()
     )
+    monkeypatch.setattr(jobs_module, "candidate_ranker", HeuristicRanker())
 
 
 class StubDispatcher:
@@ -107,12 +109,18 @@ def test_worker_is_idempotent_for_duplicate_delivery(monkeypatch) -> None:
 
     assert first.status_code == 200
     assert first.json()["status"] == "COMPLETED"
-    assert first.json()["result"]["next_step"] == "RANKING"
-    assert first.json()["step"] == "CANDIDATE"
+    assert first.json()["result"]["next_step"] == "RENDER"
+    assert first.json()["step"] == "RANKING"
     candidates = first.json()["result"]["candidates"]
     assert candidates["generator"] == "heuristic_v1"
     assert len(candidates["items"]) >= 1
     assert candidates["items"][0]["start_seconds"] >= 60
+    ranking = first.json()["result"]["ranking"]
+    assert ranking["criteria_version"] == "generic_v1"
+    assert len(ranking["items"]) == len(candidates["items"])
+    assert 1 <= len(ranking["top_3"]) <= 3
+    assert ranking["top_3"][0]["candidate_id"] == ranking["items"][0]["candidate_id"]
+    assert 0 <= ranking["top_3"][0]["ai_score"] <= 100
     assert first.json()["result"]["transcript"]["provider"] == "apify_titan"
     assert first.json()["attempt_count"] == 1
     assert second.status_code == 200

@@ -185,10 +185,20 @@ Implementation status:
 
 ## Task 07 — Generic AI Ranking and Top 3
 
+Status: Implemented — Cloud Run validation pending
+
 - Score candidates using generic ranking criteria.
 - Return the Top 3 with concise recommendation reasons.
 - Use `AI Score` or `Recommended Score` in the UI.
 - Do not implement Personal Virality Score.
+
+Implementation status:
+
+- `OpenAIRanker` scores every candidate 0-100 on hook, self-containment, complete thought, payoff, and pacing, with a Korean reason plus strengths and concerns, through Chat Completions JSON output on the existing OpenAI key.
+- Ranking runs in the same Worker attempt after candidates; the job moves to `step=RANKING` and completes with `result.ranking` and `next_step=RENDER`.
+- Top 3 are the best-scored candidates that do not overlap each other by more than half.
+- Incomplete model output is a retryable failure; without an OpenAI key a structural development ranker keeps local runs working.
+- No channel data is read. See [Task 07](TASK_07_RANKING.md).
 
 ## Task 08 — Preview and Render
 

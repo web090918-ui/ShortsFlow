@@ -7,8 +7,9 @@ Task 06 turns the Task 05 transcript into 10-15 timestamped clip candidates that
 Candidate generation runs inside the same Worker attempt as the transcript. After `TranscriptProcessor` returns, the job's `step` moves to `CANDIDATE`, `HeuristicCandidateGenerator` runs on the in-memory transcript, and the job completes with both results:
 
 ```text
-result.next_step = RANKING
+result.next_step = RENDER   (RANKING on jobs completed before Task 07)
 result.transcript = { ... Task 05 ... }
+result.ranking    = { ... Task 07 ... }
 result.candidates.generator = heuristic_v1
 result.candidates.min_seconds / max_seconds
 result.candidates.items[] = {
