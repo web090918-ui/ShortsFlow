@@ -65,4 +65,15 @@ Task 07 is complete when:
 
 ## Validation result
 
-Implemented on 2026-09-29 with 8 unit tests. Production checks are recorded below once run.
+Implemented on 2026-09-29 with 9 unit tests.
+
+Cloud Run status on 2026-09-29: the ranking revision is live and the Worker reaches `step=RANKING` after transcript and candidates (job `57ab293b`, authorized Korean source `ZY-kQtE0WFE`, range 0-900 seconds, 15 candidates). The OpenAI call is rejected:
+
+```text
+HTTP 403 PermissionDeniedError:
+Project `proj_U2Y72hXucvHowySPskoQnLzG` does not have access to model `gpt-4.1-mini`
+```
+
+The key and billing are valid (the same key completed `whisper-1` jobs the same day); the OpenAI project restricts which models it may use. Ranking failures are classified retryable, so the job used all three Cloud Tasks attempts before ending `FAILED` with the message above. The first two production attempts showed only the generic "AI 랭킹 요청에 실패했습니다" text; the ranker now includes the HTTP status, exception class, and the provider's message (never the key) so the cause is visible on the job.
+
+Unblock by either allowing `gpt-4.1-mini` for that project in the OpenAI dashboard (Settings → Limits → Model usage) or pointing `SHORTSFLOW_OPENAI_RANKING_MODEL` at a model the project already allows. Neither requires a code change. Production checks 2 and 3 remain pending until then.

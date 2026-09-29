@@ -185,7 +185,7 @@ Implementation status:
 
 ## Task 07 — Generic AI Ranking and Top 3
 
-Status: Implemented — Cloud Run validation pending
+Status: Implemented — Cloud Run validation blocked: the OpenAI project has no access to `gpt-4.1-mini` (HTTP 403). Allow the model or change `SHORTSFLOW_OPENAI_RANKING_MODEL`, then rerun the production check.
 
 - Score candidates using generic ranking criteria.
 - Return the Top 3 with concise recommendation reasons.
