@@ -143,6 +143,27 @@ Implementation status:
 - OpenAI billing and its Secret Manager-backed key are configured. A direct Google Cloud Shell request using the exact latest secret completed against `whisper-1` with HTTP `200`, validating the key, billing, project access, and model access.
 - A subsequent Cloud Run fallback job did not reach OpenAI because Tunelio credits were exhausted before selected-range media acquisition. Task 05 is not complete until credits are available and a production job completes with `provider=openai_whisper`.
 
+## Task 05B — Manual-range Short
+
+Status: Implemented — Cloud Run validation pending
+
+Goal: deliver the MVP1 promise without AI: the user enters a YouTube URL, a start time, and an end time, and downloads that range as a 1080x1920 MP4.
+
+- Accept `youtube_url`, `start_seconds`, `end_seconds`, and the rights declaration through `POST /shorts`.
+- Validate `start >= 0`, `end > start`, a 180-second maximum clip length, and the known source duration.
+- Acquire the full source through `VideoAcquisitionProvider` (Apify Titan in production, yt-dlp locally). Acquisition never edits video.
+- Trim and convert to 9:16 through `VideoProcessor` (FFmpeg scale + center crop, H.264/AAC).
+- Store the result through `ArtifactStorage` (local disk or Cloud Storage signed URL) and expose `GET /shorts/{id}` plus a download.
+- Run everything as a `SHORT_RENDER` step on the Task 04 processing job, Cloud Tasks queue, and Worker.
+- Expose `queued`, `downloading`, `processing`, `uploading`, `completed`, and `failed`; store internal error codes and return friendly messages.
+- Remove temporary media after every attempt.
+- Do not add AI highlight detection, face tracking, automatic scene cuts, B-roll, or template-specific rendering.
+
+Implementation status:
+
+- Backend, frontend form with `HH:MM:SS` input, and tests are complete.
+- Production validation requires the Apify token, a Cloud Storage bucket, and the IAM grants in [Task 05B](TASK_05B_MANUAL_SHORT.md).
+
 ## Task 06 — Candidate Generation
 
 - Generate 10-15 timestamped candidates from the transcript and video context.

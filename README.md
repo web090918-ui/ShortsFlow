@@ -23,8 +23,11 @@ See the product, architecture, and delivery details in:
 - [MVP backlog](docs/MVP_BACKLOG.md)
 - [Competitor research](docs/COMPETITOR_RESEARCH.md)
 - [Task 05 transcript](docs/TASK_05_TRANSCRIPT.md)
+- [Task 05B manual-range Short](docs/TASK_05B_MANUAL_SHORT.md)
 
 ## Current status
+
+The manual-range Short path (Task 05B) is implemented: a user enters a YouTube URL plus a start and end time, `POST /shorts` queues a `SHORT_RENDER` job on the Task 04 infrastructure, the Worker acquires the source through the configured `VideoAcquisitionProvider` (Apify Titan in production, yt-dlp locally), FFmpeg trims the range and converts it to a 1080x1920 center-cropped MP4, and the artifact is stored locally or in Cloud Storage behind a signed URL. Clips are limited to 180 seconds. Cloud Run validation of this path is still pending the Apify token, bucket, and IAM setup described in the Task 05B document.
 
 Tasks 01 through 04 are complete, and Task 05 transcript processing is implemented pending the final production fallback validation. The caption-first Tunelio path has passed on Cloud Run. The exact Secret Manager-backed OpenAI key has also passed a direct `whisper-1` transcription request with HTTP `200`; the integrated fallback is still blocked before OpenAI because Tunelio credits are exhausted. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
 
@@ -95,6 +98,9 @@ Source endpoints:
 - `POST /processing-jobs` — create and enqueue a transcript processing job
 - `GET /processing-jobs/{job_id}` — read durable processing state
 - `POST /worker/process` — authenticated Cloud Tasks Worker target
+- `POST /shorts` — queue a manual-range Short (YouTube URL + start/end, maximum 180 seconds)
+- `GET /shorts/{job_id}` — read `queued | downloading | processing | uploading | completed | failed`
+- `GET /shorts/{job_id}/file` — download the rendered 9:16 MP4 or redirect to its signed URL
 
 Environment variables use the `SHORTSFLOW_` prefix:
 
@@ -106,6 +112,12 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_TUNELIO_BASE_URL` — defaults to `https://tunelio.dev`
 - `SHORTSFLOW_OPENAI_API_KEY` — optional server-side secret; enables Whisper fallback when captions are unavailable
 - `SHORTSFLOW_OPENAI_STT_MODEL` — defaults to `whisper-1` for segment timestamps
+- `SHORTSFLOW_APIFY_API_TOKEN` — optional server-side secret; enables Apify Titan acquisition for `/shorts`
+- `SHORTSFLOW_SHORTS_ACQUISITION_PROVIDER` — `auto` (default), `apify_titan`, or `yt_dlp`
+- `SHORTSFLOW_SHORTS_STORAGE_BACKEND` — `local` (default) or `gcs` with `SHORTSFLOW_GCS_BUCKET`
+- `SHORTSFLOW_SHORTS_MAX_CLIP_SECONDS` — defaults to `180`
+
+The remaining Short settings are listed in [Task 05B](docs/TASK_05B_MANUAL_SHORT.md).
 
 Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are documented in [Task 04 deployment](docs/TASK_04_DEPLOYMENT.md). Local defaults do not require Google Cloud credentials.
 

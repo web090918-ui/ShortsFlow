@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.downloads import router as downloads_router
 from app.logging_config import configure_logging
 from app.processing_jobs import router as processing_jobs_router
+from app.shorts import router as shorts_router
 from app.sources import router as sources_router
 
 settings = get_settings()
@@ -25,6 +26,7 @@ app.add_middleware(
 app.include_router(sources_router)
 app.include_router(downloads_router)
 app.include_router(processing_jobs_router)
+app.include_router(shorts_router)
 
 
 @app.get("/health")

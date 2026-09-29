@@ -613,3 +613,72 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+.panel-stack {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.time-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.time-fields input {
+  font-family: monospace;
+  letter-spacing: 0.04em;
+}
+
+.shorts-panel .range-help {
+  margin: -4px 0 0;
+}
+
+.shorts-status-range {
+  color: var(--muted);
+  font-family: monospace;
+}
+
+.secondary-panel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgb(20 21 16 / 60%);
+}
+
+.secondary-panel > summary {
+  padding: 16px 20px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.secondary-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.secondary-panel > summary::before {
+  content: "+";
+  display: inline-block;
+  width: 18px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.secondary-panel[open] > summary::before {
+  content: "–";
+}
+
+.secondary-panel > .source-panel {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 18px 18px;
+  box-shadow: none;
+}
+
+@media (max-width: 520px) {
+  .time-fields {
+    grid-template-columns: 1fr;
+  }
+}

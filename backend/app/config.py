@@ -25,6 +25,19 @@ class Settings(BaseSettings):
     worker_oidc_audience: str | None = None
     worker_service_account_email: str | None = None
     processing_max_attempts: int = 3
+    # Manual-range Short pipeline (URL + start/end -> 9:16 MP4)
+    shorts_acquisition_provider: Literal["auto", "apify_titan", "yt_dlp"] = "auto"
+    apify_api_token: SecretStr | None = None
+    apify_base_url: str = "https://api.apify.com"
+    apify_titan_actor_id: str = "titan_network~titan-youtube-video-downloader"
+    apify_titan_quality: str = "1080"
+    apify_run_timeout_seconds: int = 480
+    shorts_storage_backend: Literal["local", "gcs"] = "local"
+    shorts_local_storage_dir: str | None = None
+    gcs_bucket: str | None = None
+    shorts_download_ttl_seconds: int = 24 * 60 * 60
+    shorts_max_clip_seconds: int = 180
+    shorts_max_source_bytes: int = 2 * 1024 * 1024 * 1024
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -13,6 +13,11 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.config import Settings, get_settings
 from app.downloads import MAX_RANGE_SECONDS, RenderTemplate
+from app.shorts_pipeline import (
+    ShortPipeline,
+    ShortStage,
+    short_pipeline_from_settings,
+)
 from app.transcripts import (
     FfmpegAudioExtractor,
     OpenAIWhisperProvider,
@@ -41,6 +46,7 @@ class ProcessingJobStatus(str, Enum):
 class ProcessingStep(str, Enum):
     PIPELINE_BOOTSTRAP = "PIPELINE_BOOTSTRAP"
     TRANSCRIPT = "TRANSCRIPT"
+    SHORT_RENDER = "SHORT_RENDER"
 
 
 class CreateProcessingJobRequest(BaseModel):
@@ -68,6 +74,8 @@ class ProcessingJobResponse(BaseModel):
     template_id: RenderTemplate
     transcript_language: str = "ko"
     attempt_count: int = Field(ge=0)
+    stage: str | None = None
+    error_code: str | None = None
     error_message: str | None
     result: dict[str, Any] | None
     created_at: datetime
@@ -402,6 +410,7 @@ repository: ProcessingJobRepository = _repository_from_settings(settings)
 dispatcher: TaskDispatcher = _dispatcher_from_settings(settings)
 worker_authenticator: WorkerAuthenticator = _authenticator_from_settings(settings)
 transcript_processor = _transcript_processor_from_settings(settings)
+short_pipeline: ShortPipeline = short_pipeline_from_settings(settings)
 router = APIRouter(tags=["processing-jobs"])
 
 
@@ -425,24 +434,14 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
 
     job = claim.job
     try:
-        if transcript_processor is None:
-            raise RuntimeError(
-                "Transcript 처리를 위해 SHORTSFLOW_TUNELIO_API_KEY를 설정해야 합니다."
-            )
-        transcript = transcript_processor.process(
-            job.source_url,
-            start_seconds=job.start_seconds,
-            end_seconds=job.end_seconds,
-            language=job.transcript_language,
-        )
+        result = _run_step(job)
         completed = job.model_copy(
             update={
                 "status": ProcessingJobStatus.COMPLETED,
                 "progress": 100,
-                "result": {
-                    "next_step": "CANDIDATE",
-                    "transcript": transcript.model_dump(mode="json"),
-                },
+                "stage": None,
+                "result": result,
+                "error_code": None,
                 "error_message": None,
                 "lease_expires_at": None,
                 "completed_at": _now(),
@@ -451,21 +450,95 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
         )
         return repository.save(completed)
     except Exception as exc:
-        terminal = retry_count + 1 >= settings.processing_max_attempts
-        failed = job.model_copy(
+        # Pipeline errors flag whether another Cloud Tasks attempt could help.
+        retryable = bool(getattr(exc, "retryable", True))
+        terminal = not retryable or retry_count + 1 >= settings.processing_max_attempts
+        code = getattr(exc, "code", None)
+        current = repository.get(job.id) or job
+        failed = current.model_copy(
             update={
                 "status": (
                     ProcessingJobStatus.FAILED
                     if terminal
                     else ProcessingJobStatus.QUEUED
                 ),
+                "stage": None,
+                "error_code": (
+                    code.value if isinstance(code, Enum) else str(code) if code else None
+                ),
                 "error_message": str(exc),
                 "lease_expires_at": None,
                 "updated_at": _now(),
             }
         )
-        repository.save(failed)
+        saved = repository.save(failed)
+        if not retryable:
+            return saved
         raise
+
+
+def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
+    if job.step == ProcessingStep.SHORT_RENDER:
+
+        def report(stage: ShortStage, progress: int) -> None:
+            current = repository.get(job.id) or job
+            repository.save(
+                current.model_copy(
+                    update={
+                        "stage": stage.value,
+                        "progress": min(99, max(current.progress, progress)),
+                        "updated_at": _now(),
+                    }
+                )
+            )
+
+        artifact = short_pipeline.run(
+            job_id=str(job.id),
+            source_url=job.source_url,
+            start_seconds=job.start_seconds,
+            end_seconds=job.end_seconds,
+            report=report,
+        )
+        return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
+
+    if transcript_processor is None:
+        raise RuntimeError(
+            "Transcript 처리를 위해 SHORTSFLOW_TUNELIO_API_KEY를 설정해야 합니다."
+        )
+    transcript = transcript_processor.process(
+        job.source_url,
+        start_seconds=job.start_seconds,
+        end_seconds=job.end_seconds,
+        language=job.transcript_language,
+    )
+    return {
+        "next_step": "CANDIDATE",
+        "transcript": transcript.model_dump(mode="json"),
+    }
+
+
+def enqueue_job(
+    job: ProcessingJobRecord, background_tasks: BackgroundTasks
+) -> ProcessingJobRecord:
+    """Persist a new job and hand it to the configured dispatcher."""
+    repository.save(job)
+    try:
+        task_name = dispatcher.enqueue(job.id, background_tasks)
+    except Exception as exc:
+        logger.exception("Failed to enqueue processing job", extra={"job_id": str(job.id)})
+        failed = job.model_copy(
+            update={
+                "status": ProcessingJobStatus.FAILED,
+                "error_message": "비동기 작업을 등록하지 못했습니다.",
+                "updated_at": _now(),
+            }
+        )
+        repository.save(failed)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="비동기 작업을 등록하지 못했습니다.",
+        ) from exc
+    return repository.save(job.model_copy(update={"task_name": task_name}))
 
 
 @router.post(
@@ -515,24 +588,7 @@ def create_processing_job(
         started_at=None,
         completed_at=None,
     )
-    repository.save(job)
-    try:
-        task_name = dispatcher.enqueue(job.id, background_tasks)
-    except Exception as exc:
-        logger.exception("Failed to enqueue processing job", extra={"job_id": str(job.id)})
-        failed = job.model_copy(
-            update={
-                "status": ProcessingJobStatus.FAILED,
-                "error_message": "비동기 작업을 등록하지 못했습니다.",
-                "updated_at": _now(),
-            }
-        )
-        repository.save(failed)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="비동기 작업을 등록하지 못했습니다.",
-        ) from exc
-    return repository.save(job.model_copy(update={"task_name": task_name}))
+    return enqueue_job(job, background_tasks)
 
 
 @router.get("/processing-jobs/{job_id}", response_model=ProcessingJobResponse)

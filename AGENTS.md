@@ -39,6 +39,8 @@ Do not attempt to complete the YouTube and Product flows simultaneously. Deliver
 
 Complete the YouTube URL to downloadable Short flow end-to-end before implementing the Product/Affiliate flow.
 
+Task 05B — Manual-range Short (user-entered start/end to 9:16 MP4) was added after Task 05 to reach the downloadable-Short promise without AI. It reuses the Task 04 job infrastructure and must keep acquisition (`VideoAcquisitionProvider`), editing (`VideoProcessor`), and storage (`ArtifactStorage`) behind their small boundaries so providers can be swapped.
+
 ## Product rules
 
 - Use a common `Source` entity for `YOUTUBE`, `PRODUCT`, and `UPLOAD` inputs.
@@ -47,6 +49,7 @@ Complete the YouTube URL to downloadable Short flow end-to-end before implementi
 - Use `AI Score` or `Recommended Score` in user-facing copy.
 - Require an affirmative source-rights declaration in both the UI and API before YouTube media acquisition. Treat it as a user declaration, not automated rights verification or a substitute for platform compliance.
 - Use the selected range as a 480p analysis proxy. Reacquire only the final selected candidate at output quality when rendering is implemented.
+- In the manual-range Short flow, the acquisition provider only obtains the source file; FFmpeg owns trimming and the 9:16 conversion. Never let a download provider edit video.
 - Carry one of the three MVP render preferences (`CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`) without implementing template-specific rendering before Task 08.
 - Prefer direct, readable code over speculative abstractions.
 - Preserve a path to later phases without implementing them early.

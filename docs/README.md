@@ -8,3 +8,5 @@ ShortsFlow product and delivery decisions are maintained here:
 - [Competitor research](COMPETITOR_RESEARCH.md) records confirmed URL-to-Shorts behavior, evidence boundaries, and acquisition implications.
 - [Task 03A validation](TASK_03A_VALIDATION.md) records the executable acquisition checks and environment results.
 - [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) records the async-job infrastructure and validation steps.
+- [Task 05 transcript](TASK_05_TRANSCRIPT.md) records the caption-first transcript pipeline and its validation state.
+- [Task 05B manual-range Short](TASK_05B_MANUAL_SHORT.md) records the URL + start/end to 9:16 MP4 pipeline, its provider boundaries, and deployment requirements.
