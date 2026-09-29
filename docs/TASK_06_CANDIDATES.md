@@ -62,4 +62,8 @@ Task 06 is complete when:
 
 ## Validation result
 
-Implemented on 2026-09-29 with 8 unit tests. Production checks 2 and 3 are recorded below once run.
+Implemented on 2026-09-29 with 8 unit tests.
+
+Cloud Run check 2 passed on 2026-09-29: transcript job `bc55b543` on the 19-second test video `jNQXAC9IVRw` (range 2-12 seconds, English captions via Titan) completed with `step=CANDIDATE`, `result.next_step=RANKING`, `generator=heuristic_v1`, and one candidate covering 2.0-12.0 seconds with 26 words and a sentence-boundary start. One candidate is the expected short-range fallback because the selection is under 15 seconds.
+
+Check 3 (10-15 candidates on a source of at least ten minutes) is pending an authorized long source.
