@@ -98,4 +98,16 @@ Local validation with `SHORTSFLOW_SHORTS_ACQUISITION_PROVIDER=yt_dlp` and `SHORT
 
 ## Validation result
 
-Implemented on 2026-09-29. Unit and API tests cover request validation, the status mapping, Worker idempotency, retry classification, the FFmpeg command shape, the Apify run/poll/download sequence, and temporary-file cleanup. The Cloud Run checks above have not been run yet; they require the Apify token, the Cloud Storage bucket, and the IAM grants listed in this document.
+Implemented on 2026-09-29. Unit and API tests cover request validation, the status mapping, Worker idempotency, retry classification, the FFmpeg command shape, the Apify run/poll/download sequence, and temporary-file cleanup.
+
+Cloud Run validation on 2026-09-29 with the authorized public test video `jNQXAC9IVRw`, range 2-12 seconds:
+
+- Before `SHORTSFLOW_APIFY_API_TOKEN` was attached, two jobs failed in about two seconds with `SOURCE_DOWNLOAD_FAILED` after one attempt; `auto` had selected yt-dlp and YouTube challenged the Cloud Run IP. This confirmed queueing, the Worker, and non-retryable failure handling.
+- After the secret was attached (and `roles/secretmanager.secretAccessor` granted to `shortsflow-runtime`), two jobs completed with `provider=apify_titan` in 48 to 66 seconds, passing through `downloading` and `processing`, with one Worker attempt each.
+- The downloaded MP4 measured 1080x1920, 10.00 seconds, one video and one audio track, 2.7 MB, served as `video/mp4` with filename `cutpick-short-2-12.mp4`.
+- With `SHORTSFLOW_SHORTS_STORAGE_BACKEND=local`, the file request for one job returned `410` because it reached a different Cloud Run instance than the one that rendered it. Local storage is therefore development-only; Cloud Run must use `gcs`.
+
+- After `SHORTSFLOW_SHORTS_STORAGE_BACKEND=gcs` and `SHORTSFLOW_GCS_BUCKET=shortsflow-shorts-aza-ceo` were applied (bucket in `asia-northeast3`, `roles/storage.objectAdmin` on the bucket and `roles/iam.serviceAccountTokenCreator` on itself for `shortsflow-runtime`, one-day lifecycle rule), job `cc2ddd7e` passed through `downloading`, `uploading`, and `completed` in about 65 seconds with `storage=gcs`, key `shorts/<job-id>.mp4`, and a `storage.googleapis.com` V4 signed URL expiring 24 hours later.
+- The signed URL returned `200` with `video/mp4` and the attachment filename; `GET /shorts/{id}/file` returned `307` to the same signed URL; both downloads were byte-identical, 1080x1920, 10.00 seconds, video plus audio.
+
+Task 05B production validation is complete. Only the caption/template rendering promised for Task 08 remains outside this path.

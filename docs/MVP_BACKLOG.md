@@ -145,7 +145,7 @@ Implementation status:
 
 ## Task 05B — Manual-range Short
 
-Status: Implemented — Cloud Run validation pending
+Status: Complete — Cloud Run validation passed on 2026-09-29
 
 Goal: deliver the MVP1 promise without AI: the user enters a YouTube URL, a start time, and an end time, and downloads that range as a 1080x1920 MP4.
 
@@ -162,7 +162,8 @@ Goal: deliver the MVP1 promise without AI: the user enters a YouTube URL, a star
 Implementation status:
 
 - Backend, frontend form with `HH:MM:SS` input, and tests are complete.
-- Production validation requires the Apify token, a Cloud Storage bucket, and the IAM grants in [Task 05B](TASK_05B_MANUAL_SHORT.md).
+- Cloud Run jobs completed with `provider=apify_titan` and `storage=gcs`; the signed-URL download measured 1080x1920 and 10.00 seconds for a 10-second request. See [Task 05B](TASK_05B_MANUAL_SHORT.md).
+- Local storage is development-only: on Cloud Run a file request can reach a different instance than the one that rendered it.
 
 ## Task 06 — Candidate Generation
 
