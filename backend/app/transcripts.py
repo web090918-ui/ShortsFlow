@@ -1,18 +1,22 @@
+import json
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Literal, Protocol
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field
 
-from app.tunelio import TunelioClient, TunelioTranscriptNotFoundError
+from app.acquisition import (
+    AcquisitionError,
+    ApifyTitanProvider,
+    SubtitlesUnavailableError,
+    VideoAcquisitionProvider,
+)
 
 
 OPENAI_FILE_LIMIT_BYTES = 25 * 1024 * 1024
-MAX_MEDIA_BYTES = 750 * 1024 * 1024
 
 
 class TranscriptProcessingError(RuntimeError):
@@ -23,6 +27,10 @@ class TranscriptUnavailableError(TranscriptProcessingError):
     pass
 
 
+class CaptionsUnavailableError(TranscriptProcessingError):
+    """The source has no caption track the caption provider can return."""
+
+
 class TranscriptSegment(BaseModel):
     start_seconds: float = Field(ge=0)
     end_seconds: float = Field(gt=0)
@@ -30,7 +38,7 @@ class TranscriptSegment(BaseModel):
 
 
 class TranscriptResult(BaseModel):
-    provider: Literal["tunelio", "openai_whisper"]
+    provider: Literal["apify_titan", "openai_whisper"]
     language: str | None
     is_generated: bool
     source_start_seconds: float
@@ -46,18 +54,18 @@ class CaptionProvider(Protocol):
 
 
 class AudioAcquirer(Protocol):
-    def acquire(
-        self,
-        source_url: str,
-        *,
-        start_seconds: float,
-        end_seconds: float,
-        destination: Path,
-    ) -> None: ...
+    def acquire(self, source_url: str, *, destination: Path) -> None: ...
 
 
 class AudioExtractor(Protocol):
-    def extract(self, media_path: Path, audio_path: Path) -> None: ...
+    def extract(
+        self,
+        media_path: Path,
+        audio_path: Path,
+        *,
+        start_seconds: float | None = None,
+        end_seconds: float | None = None,
+    ) -> None: ...
 
 
 class SpeechToTextProvider(Protocol):
@@ -70,51 +78,112 @@ def _clean_text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-class TunelioCaptionProvider:
-    def __init__(self, client: TunelioClient) -> None:
-        self._client = client
+_TIMESTAMP = re.compile(r"(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})")
+
+
+def _parse_timestamp(value: str) -> float | None:
+    match = _TIMESTAMP.search(value)
+    if match is None:
+        return None
+    hours, minutes, seconds, fraction = match.groups()
+    return (
+        int(hours or 0) * 3600
+        + int(minutes) * 60
+        + int(seconds)
+        + int(fraction.ljust(3, "0")) / 1000
+    )
+
+
+def _parse_json3(payload: dict[str, Any]) -> list[TranscriptSegment]:
+    segments: list[TranscriptSegment] = []
+    for event in payload.get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        start_ms = event.get("tStartMs")
+        duration_ms = event.get("dDurationMs")
+        text = "".join(
+            seg.get("utf8", "")
+            for seg in event.get("segs") or []
+            if isinstance(seg, dict) and isinstance(seg.get("utf8"), str)
+        )
+        text = " ".join(text.split())
+        if (
+            not isinstance(start_ms, (int, float))
+            or not isinstance(duration_ms, (int, float))
+            or duration_ms <= 0
+            or not text
+        ):
+            continue
+        segments.append(
+            TranscriptSegment(
+                start_seconds=start_ms / 1000,
+                end_seconds=(start_ms + duration_ms) / 1000,
+                text=text,
+            )
+        )
+    return segments
+
+
+def _parse_cue_text(text: str) -> list[TranscriptSegment]:
+    """Parse WebVTT or SRT cues; both share the ``start --> end`` line."""
+    segments: list[TranscriptSegment] = []
+    blocks = re.split(r"\n\s*\n", text.replace("\r\n", "\n").strip())
+    for block in blocks:
+        lines = [line for line in block.split("\n") if line.strip()]
+        timing_index = next(
+            (index for index, line in enumerate(lines) if "-->" in line), None
+        )
+        if timing_index is None:
+            continue
+        start_raw, _, end_raw = lines[timing_index].partition("-->")
+        start = _parse_timestamp(start_raw)
+        end = _parse_timestamp(end_raw)
+        cue_text = " ".join(
+            re.sub(r"<[^>]+>", "", line).strip() for line in lines[timing_index + 1 :]
+        ).strip()
+        if start is None or end is None or end <= start or not cue_text:
+            continue
+        segments.append(
+            TranscriptSegment(start_seconds=start, end_seconds=end, text=cue_text)
+        )
+    return segments
+
+
+def parse_caption_text(text: str) -> list[TranscriptSegment]:
+    """Turn json3, WebVTT, or SRT caption text into timestamped segments."""
+    stripped = text.lstrip("﻿").strip()
+    if stripped.startswith("{"):
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise TranscriptProcessingError(
+                "자막 파일을 해석하지 못했습니다."
+            ) from exc
+        return _parse_json3(payload) if isinstance(payload, dict) else []
+    return _parse_cue_text(stripped)
+
+
+class TitanCaptionProvider:
+    """Caption-first step backed by the Apify Titan subtitles mode."""
+
+    def __init__(self, provider: ApifyTitanProvider) -> None:
+        self._provider = provider
 
     def fetch(
         self, source_url: str, *, language: str | None = None
     ) -> TranscriptResult:
-        payload = self._client.transcript(source_url, language=language)
-        raw_segments = payload.get("segments")
-        if not isinstance(raw_segments, list):
-            raise TranscriptProcessingError(
-                "자막 서비스가 올바르지 않은 응답을 반환했습니다."
-            )
-        segments: list[TranscriptSegment] = []
-        for raw in raw_segments:
-            if not isinstance(raw, dict):
-                continue
-            start = raw.get("start")
-            duration = raw.get("duration")
-            text = _clean_text(raw.get("text"))
-            if (
-                not isinstance(start, (int, float))
-                or not isinstance(duration, (int, float))
-                or start < 0
-                or duration <= 0
-                or not text
-            ):
-                continue
-            segments.append(
-                TranscriptSegment(
-                    start_seconds=float(start),
-                    end_seconds=float(start + duration),
-                    text=text,
-                )
-            )
+        requested = (language or "ko").split("-", 1)[0]
+        try:
+            text = self._provider.fetch_subtitles(source_url, language=requested)
+        except SubtitlesUnavailableError as exc:
+            raise CaptionsUnavailableError(str(exc)) from exc
+        segments = parse_caption_text(text)
         if not segments:
-            raise TunelioTranscriptNotFoundError(
-                "YouTube 영상에 사용할 수 있는 자막이 없습니다."
-            )
+            raise CaptionsUnavailableError("YouTube 영상에 사용할 수 있는 자막이 없습니다.")
         return TranscriptResult(
-            provider="tunelio",
-            language=payload.get("language")
-            if isinstance(payload.get("language"), str)
-            else None,
-            is_generated=bool(payload.get("is_generated", False)),
+            provider="apify_titan",
+            language=requested,
+            is_generated=False,
             source_start_seconds=0,
             source_end_seconds=max(segment.end_seconds for segment in segments),
             segments=segments,
@@ -122,63 +191,38 @@ class TunelioCaptionProvider:
         )
 
 
-class TunelioAudioAcquirer:
-    def __init__(self, client: TunelioClient, *, timeout_seconds: float = 60) -> None:
-        self._client = client
-        self._timeout_seconds = timeout_seconds
+class ProviderAudioAcquirer:
+    """Fetch the full source through the shared acquisition provider."""
 
-    def acquire(
-        self,
-        source_url: str,
-        *,
-        start_seconds: float,
-        end_seconds: float,
-        destination: Path,
-    ) -> None:
-        reference = self._client.create_range(
-            source_url,
-            start_seconds=start_seconds,
-            end_seconds=end_seconds,
-            quality="480p",
-        )
-        request = Request(reference.url, headers={"User-Agent": "ShortsFlow/0.1"})
+    def __init__(self, provider: VideoAcquisitionProvider) -> None:
+        self._provider = provider
+
+    def acquire(self, source_url: str, *, destination: Path) -> None:
         try:
-            with urlopen(request, timeout=self._timeout_seconds) as response:
-                content_length = response.headers.get("Content-Length")
-                if content_length and int(content_length) > MAX_MEDIA_BYTES:
-                    raise TranscriptProcessingError(
-                        "선택 구간 영상이 처리 가능한 크기를 초과했습니다."
-                    )
-                written = 0
-                with destination.open("wb") as output:
-                    while chunk := response.read(1024 * 1024):
-                        written += len(chunk)
-                        if written > MAX_MEDIA_BYTES:
-                            raise TranscriptProcessingError(
-                                "선택 구간 영상이 처리 가능한 크기를 초과했습니다."
-                            )
-                        output.write(chunk)
-        except TranscriptProcessingError:
-            raise
-        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
-            raise TranscriptProcessingError(
-                "선택 구간 영상을 내려받지 못했습니다. 잠시 후 다시 시도해 주세요."
-            ) from exc
+            self._provider.acquire(source_url, destination=destination)
+        except AcquisitionError as exc:
+            raise TranscriptProcessingError(str(exc)) from exc
 
 
 class FfmpegAudioExtractor:
-    def extract(self, media_path: Path, audio_path: Path) -> None:
+    def extract(
+        self,
+        media_path: Path,
+        audio_path: Path,
+        *,
+        start_seconds: float | None = None,
+        end_seconds: float | None = None,
+    ) -> None:
         executable = shutil.which("ffmpeg")
         if executable is None:
             raise TranscriptProcessingError("FFmpeg 실행 파일을 찾을 수 없습니다.")
-        command = [
-            executable,
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            str(media_path),
+        command = [executable, "-nostdin", "-hide_banner", "-loglevel", "error"]
+        if start_seconds is not None:
+            command += ["-ss", f"{start_seconds:.3f}"]
+        command += ["-i", str(media_path)]
+        if start_seconds is not None and end_seconds is not None:
+            command += ["-t", f"{end_seconds - start_seconds:.3f}"]
+        command += [
             "-vn",
             "-ac",
             "1",
@@ -339,7 +383,7 @@ class TranscriptProcessor:
                 end_seconds=end_seconds,
                 relative=False,
             )
-        except (TunelioTranscriptNotFoundError, TranscriptUnavailableError):
+        except (CaptionsUnavailableError, TranscriptUnavailableError):
             if (
                 self._audio_acquirer is None
                 or self._audio_extractor is None
@@ -348,17 +392,21 @@ class TranscriptProcessor:
                 raise TranscriptProcessingError(
                     "YouTube 자막이 없으며 OpenAI STT가 설정되지 않았습니다."
                 )
-            with tempfile.TemporaryDirectory(prefix="shortsflow-transcript-") as temp:
+            # The acquirer delivers the whole source; FFmpeg trims the audio to the
+            # selected range so Whisper timestamps are relative to start_seconds.
+            with tempfile.TemporaryDirectory(
+                prefix="shortsflow-transcript-", ignore_cleanup_errors=True
+            ) as temp:
                 temp_path = Path(temp)
                 media_path = temp_path / "source.mp4"
                 audio_path = temp_path / "audio.mp3"
-                self._audio_acquirer.acquire(
-                    source_url,
+                self._audio_acquirer.acquire(source_url, destination=media_path)
+                self._audio_extractor.extract(
+                    media_path,
+                    audio_path,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
-                    destination=media_path,
                 )
-                self._audio_extractor.extract(media_path, audio_path)
                 transcript = self._stt_provider.transcribe(
                     audio_path, language=language
                 )

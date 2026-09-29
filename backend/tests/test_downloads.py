@@ -1,12 +1,14 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 import app.downloads as downloads_module
 import app.sources as sources_module
 from app.main import app
-from app.youtube import PreparedVideoSource
-from app.tunelio import TunelioRangeReference
+from app.acquisition import AcquiredVideo, AcquisitionError
+from app.downloads import ProviderRangeDownloader
+from app.youtube import PreparedVideoSource, VideoSourceProviderError
 
 
 client = TestClient(app)
@@ -149,29 +151,7 @@ def test_rejects_unknown_template(monkeypatch) -> None:
     assert response.status_code == 422
 
 
-class StubTunelioClient:
-    def create_range(
-        self,
-        url: str,
-        *,
-        start_seconds: float,
-        end_seconds: float,
-        quality: str,
-    ) -> TunelioRangeReference:
-        assert url == "https://www.youtube.com/watch?v=range123"
-        assert start_seconds == 60
-        assert end_seconds == 120
-        assert quality == "480p"
-        return TunelioRangeReference(
-            url="https://tunelio.dev/tunnel?sig=test&start=60&end=120",
-            expires_at=123,
-            filename="range.mp4",
-        )
-
-
-def test_tunelio_returns_ready_signed_range_without_local_file(monkeypatch) -> None:
-    monkeypatch.setattr(downloads_module, "tunelio_client", StubTunelioClient())
-
+def test_unknown_source_returns_404_even_with_source_url() -> None:
     response = client.post(
         "/sources/00000000-0000-0000-0000-000000000001/downloads",
         json={
@@ -179,15 +159,76 @@ def test_tunelio_returns_ready_signed_range_without_local_file(monkeypatch) -> N
             "start_seconds": 60,
             "end_seconds": 120,
             "rights_confirmed": True,
-            "template_id": "CLEAN_CAPTION",
         },
     )
 
-    assert response.status_code == 202
-    job = response.json()
-    assert job["status"] == "READY"
-    assert job["progress"] == 100
-    assert job["download_url"] == (
-        "https://tunelio.dev/tunnel?sig=test&start=60&end=120"
+    assert response.status_code == 404
+
+
+class StubProvider:
+    name = "stub"
+
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.error = error
+
+    def acquire(self, url, *, destination, progress=None):
+        if self.error is not None:
+            raise self.error
+        destination.write_bytes(b"full-video")
+        if progress is not None:
+            progress(100)
+        return AcquiredVideo(path=destination, provider=self.name)
+
+
+class StubProcessor:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def probe(self, media_path):
+        raise AssertionError("not used")
+
+    def trim(self, input_path, output_path, *, start_seconds, end_seconds, max_height=None):
+        self.calls.append((start_seconds, end_seconds, max_height))
+        assert input_path.read_bytes() == b"full-video"
+        output_path.write_bytes(b"proxy")
+
+    def convert_to_vertical(self, input_path, output_path):
+        raise AssertionError("not used")
+
+    def trim_to_vertical(self, input_path, output_path, *, start_seconds, end_seconds):
+        raise AssertionError("not used")
+
+
+def test_provider_range_downloader_cuts_480p_proxy_and_removes_source(tmp_path: Path):
+    processor = StubProcessor()
+    downloader = ProviderRangeDownloader(StubProvider(), processor)
+    progress: list[int] = []
+
+    artifact = downloader.download(
+        "https://www.youtube.com/watch?v=range123",
+        start_seconds=60,
+        end_seconds=180,
+        output_directory=tmp_path / "job",
+        progress=progress.append,
     )
-    assert job["download_expires_at"] == 123
+
+    assert artifact == tmp_path / "job" / "selected-range.mp4"
+    assert artifact.read_bytes() == b"proxy"
+    assert processor.calls == [(60, 180, 480)]
+    assert not (tmp_path / "job" / "source.mp4").exists()
+    assert progress[-1] == 100
+    assert max(progress[:-1]) <= 80
+
+
+def test_provider_range_downloader_reports_acquisition_failure(tmp_path: Path):
+    downloader = ProviderRangeDownloader(
+        StubProvider(error=AcquisitionError("blocked")), StubProcessor()
+    )
+
+    with pytest.raises(VideoSourceProviderError, match="blocked"):
+        downloader.download(
+            "https://www.youtube.com/watch?v=range123",
+            start_seconds=0,
+            end_seconds=10,
+            output_directory=tmp_path / "job",
+        )

@@ -75,7 +75,7 @@ SHORTSFLOW_SHORTS_MAX_CLIP_SECONDS=180
 
 ## Cloud Run notes
 
-- Store `SHORTSFLOW_APIFY_API_TOKEN` in Secret Manager like the Tunelio and OpenAI keys.
+- Store `SHORTSFLOW_APIFY_API_TOKEN` in Secret Manager like the OpenAI key and grant `shortsflow-runtime` the Secret Manager Secret Accessor role on it.
 - Create a Cloud Storage bucket in `asia-northeast3`, grant `shortsflow-runtime` the Storage Object Admin role on that bucket only, and add a lifecycle rule that deletes objects after one day so expired artifacts do not accumulate.
 - Signed URLs on Cloud Run are produced through the IAM `signBlob` API, so `shortsflow-runtime` also needs `roles/iam.serviceAccountTokenCreator` on itself.
 - Cloud Run's file system is memory-backed. The full source video plus the rendered Short must fit in instance memory; start with 4 GiB and 2 vCPU, and keep `SHORTSFLOW_APIFY_TITAN_QUALITY=1080` unless memory allows more.

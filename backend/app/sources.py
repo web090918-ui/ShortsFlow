@@ -8,9 +8,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.acquisition import AcquisitionError, titan_provider_from_settings
 from app.youtube import VideoSourceProvider, VideoSourceProviderError, YouTubeSourceProvider
 from app.config import get_settings
-from app.tunelio import TunelioClient
 
 
 class SourceType(str, Enum):
@@ -127,13 +127,9 @@ repository: SourceRepository = InMemorySourceRepository()
 
 
 def _youtube_provider_from_settings() -> VideoSourceProvider:
-    settings = get_settings()
-    if settings.tunelio_api_key is not None:
-        return TunelioClient(
-            settings.tunelio_api_key.get_secret_value(),
-            base_url=settings.tunelio_base_url,
-        )
-    return YouTubeSourceProvider()
+    # Apify Titan is the production metadata provider; yt-dlp remains the local default.
+    titan = titan_provider_from_settings(get_settings())
+    return titan if titan is not None else YouTubeSourceProvider()
 
 
 youtube_provider: VideoSourceProvider = _youtube_provider_from_settings()
@@ -223,7 +219,7 @@ def prepare_source(source_id: UUID) -> SourceRecord:
 
     try:
         prepared = youtube_provider.prepare(preparing.url or "")
-    except VideoSourceProviderError as exc:
+    except (VideoSourceProviderError, AcquisitionError) as exc:
         failed_metadata = dict(preparing.metadata)
         failed_metadata["processing_error"] = str(exc)
         failed = preparing.model_copy(

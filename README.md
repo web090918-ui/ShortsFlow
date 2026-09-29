@@ -29,11 +29,9 @@ See the product, architecture, and delivery details in:
 
 The manual-range Short path (Task 05B) is implemented: a user enters a YouTube URL plus a start and end time, `POST /shorts` queues a `SHORT_RENDER` job on the Task 04 infrastructure, the Worker acquires the source through the configured `VideoAcquisitionProvider` (Apify Titan in production, yt-dlp locally), FFmpeg trims the range and converts it to a 1080x1920 center-cropped MP4, and the artifact is stored locally or in Cloud Storage behind a signed URL. Clips are limited to 180 seconds. This path passed Cloud Run validation on 2026-09-29 with Apify Titan acquisition, Cloud Storage bucket `shortsflow-shorts-aza-ceo`, and a 1080x1920 signed-URL download; the required secrets, bucket, and IAM grants are listed in the Task 05B document.
 
-Tasks 01 through 04 are complete, and Task 05 transcript processing is implemented pending the final production fallback validation. The caption-first Tunelio path has passed on Cloud Run. The exact Secret Manager-backed OpenAI key has also passed a direct `whisper-1` transcription request with HTTP `200`; the integrated fallback is still blocked before OpenAI because Tunelio credits are exhausted. The application can classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response. A YouTube Source that reaches `READY` exposes a start/end range selector and can prepare that selected range as a 480p MP4 through a job-shaped API.
+Apify Titan is the only external YouTube provider as of 2026-09-29. Tunelio was retired after its credits ran out and its selected-range clipping proved keyframe-aligned; the module was removed and remains in git history. Titan sits behind three small boundaries so it can be swapped later: `VideoSourceProvider.prepare` (metadata mode), `fetch_subtitles` (subtitles mode, consumed by `TitanCaptionProvider`), and `VideoAcquisitionProvider.acquire` (media mode). Without `SHORTSFLOW_APIFY_API_TOKEN`, local development falls back to yt-dlp, which only works from residential IPs.
 
-When `SHORTSFLOW_TUNELIO_API_KEY` is configured, metadata, selected-range acquisition, and the first transcript attempt use Tunelio. Transcript processing filters timestamped captions to the selected source range. If that range has no captions and `SHORTSFLOW_OPENAI_API_KEY` is configured, the Worker downloads only the 480p analysis range, extracts a 16 kHz mono MP3 with FFmpeg, and sends it to OpenAI `whisper-1` for segment timestamps. Cloud Tasks and Firestore persist the job and normalized transcript. Object storage, candidate generation, ranking, rendering, and affiliate processing are not implemented.
-
-Tunelio cost controls reuse ready metadata for six hours and reuse one unexpired `/create` URL for multiple start/end selections. Changing a range or template in the same browser session therefore does not intentionally spend another 10 credits. The caches are best-effort per browser session and warm backend instance; durable cross-instance caching remains deferred until persistence is introduced by its scheduled task.
+Tasks 01 through 04 are complete. Task 05 transcript processing is implemented on Titan: the Worker requests Titan captions for the requested language and filters them to the selected source range. If no caption track exists or the range has no captions, and `SHORTSFLOW_OPENAI_API_KEY` is configured, the Worker acquires the full source through Titan, trims the selected range to a 16 kHz mono MP3 with FFmpeg, and sends it to OpenAI `whisper-1` for segment timestamps. Cloud Tasks and Firestore persist the job and normalized transcript. The application can also classify a YouTube video URL or Product URL, register video upload metadata, and return a common Source response; a `READY` YouTube Source exposes a start/end range selector that prepares a 480p analysis MP4 by acquiring the source through Titan and trimming with FFmpeg. Candidate generation, ranking, caption rendering, and affiliate processing are not implemented.
 
 Source storage also remains process-local and in-memory. Restarting the backend clears registered Sources, and uploaded file content is not persisted yet. `POST /sources?prepare=true` keeps YouTube creation and preparation in one request for the current demo.
 
@@ -108,11 +106,9 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_APP_ENV`
 - `SHORTSFLOW_LOG_LEVEL`
 - `SHORTSFLOW_FRONTEND_ORIGIN`
-- `SHORTSFLOW_TUNELIO_API_KEY` — optional server-side secret; enables Tunelio acquisition
-- `SHORTSFLOW_TUNELIO_BASE_URL` — defaults to `https://tunelio.dev`
 - `SHORTSFLOW_OPENAI_API_KEY` — optional server-side secret; enables Whisper fallback when captions are unavailable
 - `SHORTSFLOW_OPENAI_STT_MODEL` — defaults to `whisper-1` for segment timestamps
-- `SHORTSFLOW_APIFY_API_TOKEN` — optional server-side secret; enables Apify Titan acquisition for `/shorts`
+- `SHORTSFLOW_APIFY_API_TOKEN` — server-side secret; enables Apify Titan for metadata, captions, and media (required in production)
 - `SHORTSFLOW_SHORTS_ACQUISITION_PROVIDER` — `auto` (default), `apify_titan`, or `yt_dlp`
 - `SHORTSFLOW_SHORTS_STORAGE_BACKEND` — `local` (default) or `gcs` with `SHORTSFLOW_GCS_BUCKET`
 - `SHORTSFLOW_SHORTS_MAX_CLIP_SECONDS` — defaults to `180`

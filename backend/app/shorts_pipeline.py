@@ -18,9 +18,9 @@ from pydantic import BaseModel
 
 from app.acquisition import (
     AcquisitionError,
-    ApifyTitanProvider,
     VideoAcquisitionProvider,
     YtDlpProvider,
+    titan_provider_from_settings,
 )
 from app.config import Settings
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
@@ -270,16 +270,10 @@ def _acquisition_provider_from_settings(settings: Settings) -> VideoAcquisitionP
     if selection == "auto":
         selection = "apify_titan" if settings.apify_api_token is not None else "yt_dlp"
     if selection == "apify_titan":
-        if settings.apify_api_token is None:
+        titan = titan_provider_from_settings(settings)
+        if titan is None:
             raise RuntimeError("SHORTSFLOW_APIFY_API_TOKEN must be configured.")
-        return ApifyTitanProvider(
-            settings.apify_api_token.get_secret_value(),
-            actor_id=settings.apify_titan_actor_id,
-            base_url=settings.apify_base_url,
-            quality=settings.apify_titan_quality,
-            run_timeout_seconds=settings.apify_run_timeout_seconds,
-            max_source_bytes=settings.shorts_max_source_bytes,
-        )
+        return titan
     return YtDlpProvider()
 
 

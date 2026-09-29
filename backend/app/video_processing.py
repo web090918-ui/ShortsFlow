@@ -38,6 +38,7 @@ class VideoProcessor(Protocol):
         *,
         start_seconds: float,
         end_seconds: float,
+        max_height: int | None = None,
     ) -> None: ...
 
     def convert_to_vertical(self, input_path: Path, output_path: Path) -> None: ...
@@ -172,12 +173,18 @@ class FfmpegVideoProcessor:
         *,
         start_seconds: float,
         end_seconds: float,
+        max_height: int | None = None,
     ) -> None:
+        # max_height produces a lower-resolution analysis proxy without changing aspect.
+        video_filter = (
+            f"scale=-2:'min(ih,{max_height})'" if max_height is not None else None
+        )
         self._encode(
             input_path,
             output_path,
             start_seconds=start_seconds,
             end_seconds=end_seconds,
+            video_filter=video_filter,
         )
 
     def convert_to_vertical(self, input_path: Path, output_path: Path) -> None:

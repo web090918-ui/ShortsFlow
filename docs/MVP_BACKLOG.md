@@ -132,7 +132,7 @@ Goal: create a timestamped transcript from a processable video Source.
 
 Implementation status:
 
-- Tunelio timestamped captions are requested first and filtered to the selected range.
+- Provider captions (Apify Titan since 2026-09-29; Tunelio before) are requested first and filtered to the selected range.
 - Transcript language defaults to `ko` for the Korean MVP and is carried explicitly to both caption and STT providers.
 - Caption results are cached per warm backend instance to avoid duplicate paid calls.
 - A missing caption track or an empty selected-caption range falls back to the 480p analysis proxy.
@@ -141,7 +141,8 @@ Implementation status:
 - The normalized transcript is persisted in the Firestore processing job result and advances `next_step` to `CANDIDATE`.
 - Cloud Run caption-first validation completed with `provider=tunelio`, requested and returned language `ko`, 37 timestamped segments within source range 60-120 seconds, and one Worker attempt.
 - OpenAI billing and its Secret Manager-backed key are configured. A direct Google Cloud Shell request using the exact latest secret completed against `whisper-1` with HTTP `200`, validating the key, billing, project access, and model access.
-- A subsequent Cloud Run fallback job did not reach OpenAI because Tunelio credits were exhausted before selected-range media acquisition. Task 05 is not complete until credits are available and a production job completes with `provider=openai_whisper`.
+- A subsequent Cloud Run fallback job did not reach OpenAI because Tunelio credits were exhausted before selected-range media acquisition.
+- Decision 2026-09-29: Tunelio retired; Apify Titan now provides captions and the full-source media for the Whisper fallback, with FFmpeg trimming the selected range. Task 05 is not complete until a production job completes with `provider=openai_whisper`.
 
 ## Task 05B — Manual-range Short
 

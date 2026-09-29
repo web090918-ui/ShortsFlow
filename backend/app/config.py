@@ -10,8 +10,6 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:3000"
-    tunelio_api_key: SecretStr | None = None
-    tunelio_base_url: str = "https://tunelio.dev"
     openai_api_key: SecretStr | None = None
     openai_stt_model: str = "whisper-1"
     job_repository_backend: Literal["memory", "firestore"] = "memory"

@@ -22,7 +22,7 @@ class StubTranscriptProcessor:
     ) -> TranscriptResult:
         assert language == "ko"
         return TranscriptResult(
-            provider="tunelio",
+            provider="apify_titan",
             language="ko",
             is_generated=True,
             source_start_seconds=start_seconds,
@@ -108,7 +108,7 @@ def test_worker_is_idempotent_for_duplicate_delivery(monkeypatch) -> None:
     assert first.status_code == 200
     assert first.json()["status"] == "COMPLETED"
     assert first.json()["result"]["next_step"] == "CANDIDATE"
-    assert first.json()["result"]["transcript"]["provider"] == "tunelio"
+    assert first.json()["result"]["transcript"]["provider"] == "apify_titan"
     assert first.json()["attempt_count"] == 1
     assert second.status_code == 200
     assert second.json()["attempt_count"] == 1

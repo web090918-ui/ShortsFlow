@@ -18,14 +18,14 @@ from app.shorts_pipeline import (
     ShortStage,
     short_pipeline_from_settings,
 )
+from app.acquisition import titan_provider_from_settings
 from app.transcripts import (
     FfmpegAudioExtractor,
     OpenAIWhisperProvider,
+    ProviderAudioAcquirer,
+    TitanCaptionProvider,
     TranscriptProcessor,
-    TunelioAudioAcquirer,
-    TunelioCaptionProvider,
 )
-from app.tunelio import TunelioClient
 
 
 logger = logging.getLogger(__name__)
@@ -379,12 +379,9 @@ def _authenticator_from_settings(settings: Settings) -> WorkerAuthenticator:
 def _transcript_processor_from_settings(
     settings: Settings,
 ) -> TranscriptProcessor | None:
-    if settings.tunelio_api_key is None:
+    titan = titan_provider_from_settings(settings)
+    if titan is None:
         return None
-    tunelio = TunelioClient(
-        settings.tunelio_api_key.get_secret_value(),
-        base_url=settings.tunelio_base_url,
-    )
     stt_provider = None
     if settings.openai_api_key is not None:
         from openai import OpenAI
@@ -398,8 +395,8 @@ def _transcript_processor_from_settings(
             model=settings.openai_stt_model,
         )
     return TranscriptProcessor(
-        TunelioCaptionProvider(tunelio),
-        audio_acquirer=TunelioAudioAcquirer(tunelio),
+        TitanCaptionProvider(titan),
+        audio_acquirer=ProviderAudioAcquirer(titan),
         audio_extractor=FfmpegAudioExtractor(),
         stt_provider=stt_provider,
     )
@@ -503,7 +500,7 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
 
     if transcript_processor is None:
         raise RuntimeError(
-            "Transcript 처리를 위해 SHORTSFLOW_TUNELIO_API_KEY를 설정해야 합니다."
+            "Transcript 처리를 위해 SHORTSFLOW_APIFY_API_TOKEN을 설정해야 합니다."
         )
     transcript = transcript_processor.process(
         job.source_url,

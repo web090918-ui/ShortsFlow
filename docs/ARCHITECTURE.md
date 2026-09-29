@@ -42,9 +42,19 @@ Task 03 adds `CREATED -> PREPARING -> READY | FAILED` for YouTube acquisition. D
 
 Task 03A validates acquisition separately from orchestration. Vercel remains suitable for the frontend and lightweight API, but it is not the direct yt-dlp media-acquisition runtime because the tested shared egress IP receives a YouTube bot challenge. A dedicated AWS Lightsail VM received the same challenge, so moving yt-dlp to a generic cloud VM is not sufficient.
 
-Task 03B supports Tunelio as the selected-range acquisition adapter when `SHORTSFLOW_TUNELIO_API_KEY` is configured. The API key remains server-side. Source preparation calls `/info`, and range preparation calls `/create` for 480p then adds the selected `start` and `end` parameters to the returned signed tunnel URL. Media bytes flow from the provider to the browser rather than through Vercel. Without the key, local development retains the existing yt-dlp/FFmpeg prototype.
+Task 03B originally used Tunelio as the selected-range acquisition adapter. On 2026-09-29 Tunelio was retired (credits exhausted, keyframe-aligned clipping) and Apify Titan became the only external provider; see "Provider decision" below. Range preparation now acquires the full source through the provider and trims the 480p analysis proxy with FFmpeg. Ready Source metadata is still cached for six hours in the browser session. Without an Apify token, local development retains the yt-dlp/FFmpeg prototype.
 
-To control provider cost without adding MVP-excluded infrastructure, ready Source metadata is cached for six hours in the browser session and in each warm backend process. The base `/create` signed URL is cached by video and quality until five minutes before expiry; different ranges are derived from that URL without another paid call. The browser also reuses the active signed URL when the user changes the range or template. Failed responses are never cached. These are best-effort caches, not durable persistence, and intentionally do not introduce Redis or another service.
+### Provider decision (2026-09-29)
+
+Apify Titan (`titan_network~titan-youtube-video-downloader`) is the sole production provider for three jobs, each behind its own small boundary in `app/acquisition.py`:
+
+| Need | Boundary | Titan mode |
+| --- | --- | --- |
+| Source metadata | `VideoSourceProvider.prepare(url)` | `outputType=metadata` (`.info.json`) |
+| Captions | `ApifyTitanProvider.fetch_subtitles(url, language)` via `TitanCaptionProvider` | `outputType=subtitles`, `json3` |
+| Full source file | `VideoAcquisitionProvider.acquire(url, destination)` | `outputType=media`, MP4 |
+
+Providers never edit video. FFmpeg (`app/video_processing.py`) owns trimming, the 480p proxy, audio extraction, and the 9:16 conversion. A replacement provider (Tunelio again, SocialKit, yt-dlp on a residential host) only needs to implement the boundary it covers; business logic, the Worker, and the API do not change. Titan delivers whole files, so a short range still downloads the complete source; if that cost matters later, add a range-capable provider behind `acquire` rather than special-casing callers.
 
 ### Selected-range acquisition prototype
 
@@ -62,7 +72,7 @@ The 480p artifact is an analysis proxy, not the final render source. When render
 
 The prototype also carries one of three stable template identifiers with the job: `CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`. This is a render preference only; Task 03B does not render captions. Task 08 will interpret the identifier, so acquisition code must not contain template-specific rendering behavior.
 
-The local yt-dlp implementation deliberately uses FastAPI `BackgroundTasks`, an in-memory job repository, and local temporary files. The Tunelio path instead returns a ready signed URL in the initiating request because that provider has no job queue. The frontend still understands the job-shaped response so Task 04 can replace in-memory processing state without changing the interaction. A stateless URL fallback permits the second request to succeed if a Vercel invocation no longer has the in-memory Source. Both the frontend and API require an affirmative source-rights declaration before starting acquisition; this is not automated rights verification or a substitute for platform compliance.
+The selected-range implementation deliberately uses FastAPI `BackgroundTasks`, an in-memory job repository, and local temporary files, whichever provider acquires the source. The frontend understands the job-shaped response so a later task can replace in-memory processing state without changing the interaction. Because the artifact is process-local, this analysis path is a development tool on Cloud Run; the production download path is the manual-range Short (Task 05B) with Cloud Storage. Both the frontend and API require an affirmative source-rights declaration before starting acquisition; this is not automated rights verification or a substitute for platform compliance.
 
 ## Provider boundaries
 
@@ -141,14 +151,14 @@ Local development defaults to an in-memory repository and FastAPI background dis
 
 ## Transcript processing
 
-Task 05 keeps transcript acquisition behind small caption, media acquisition, audio extraction, and STT boundaries. For a YouTube job, the Worker first requests Tunelio timestamped captions and filters them to the user-selected source range. This avoids downloading media and calling STT when usable captions already exist.
+Task 05 keeps transcript acquisition behind small caption, media acquisition, audio extraction, and STT boundaries. For a YouTube job, the Worker first requests Titan captions (json3, WebVTT, or SRT are all parsed) for the requested language and filters them to the user-selected source range. This avoids downloading media and calling STT when usable captions already exist.
 
 Only when the video has no caption track, or the selected range contains no caption segments, does the Worker use the fallback path:
 
 ```text
-Tunelio 480p selected-range URL
+Titan full-source MP4 (VideoAcquisitionProvider.acquire)
 -> temporary MP4 on Cloud Run
--> FFmpeg 16 kHz mono 32 kbps MP3
+-> FFmpeg trims the selected range to 16 kHz mono 32 kbps MP3
 -> OpenAI whisper-1 verbose JSON with segment timestamps
 -> absolute source-video timestamps
 -> Firestore ProcessingJob.result.transcript

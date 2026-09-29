@@ -6,15 +6,15 @@ Task 05 produces a timestamped transcript for the user-selected YouTube source r
 
 The production order is:
 
-1. Request timestamped Tunelio captions.
+1. Request timestamped captions from the provider (Apify Titan subtitles mode, `json3`).
 2. Filter captions to the selected source range.
-3. If captions are unavailable for that range, acquire the 480p range and extract a temporary MP3 with FFmpeg.
+3. If captions are unavailable for that range, acquire the full source through the provider and trim the selected range to a temporary MP3 with FFmpeg.
 4. Send the MP3 to OpenAI `whisper-1` with segment timestamps.
 5. Normalize timestamps to the original source-video timeline and persist the result in Firestore.
 
-`POST /processing-jobs` accepts `transcript_language` as an ISO-style language code. The Korean MVP defaults to `ko`; callers should send another code when the source language is known. The same hint is passed to both Tunelio and Whisper so a provider default does not silently select an unrelated translated caption track.
+`POST /processing-jobs` accepts `transcript_language` as an ISO-style language code. The Korean MVP defaults to `ko`; callers should send another code when the source language is known. The same hint is passed to both the caption provider and Whisper so a provider default does not silently select an unrelated translated caption track.
 
-Tunelio documents `/transcript` as a six-credit request and says repeated unique-video requests may be cached by the provider. ShortsFlow also caches successful caption responses for six hours in each warm process. Failed requests are not cached. Current provider behavior and pricing can change; see <https://tunelio.dev/docs/>.
+Provider history: Tunelio was the caption and range provider until 2026-09-29, when it was retired in favour of Apify Titan (see [Architecture](ARCHITECTURE.md), "Provider decision"). Titan subtitles cost about $0.002 per item and media is billed per delivered byte; see <https://apify.com/titan_network/titan-youtube-video-downloader>.
 
 OpenAI accepts transcription files up to 25 MB and requires `whisper-1` for segment or word timestamp granularities. The fallback MP3 uses mono 16 kHz audio at 32 kbps so the maximum 60-minute selection remains below that upload limit. See <https://developers.openai.com/api/docs/guides/speech-to-text>.
 
@@ -23,12 +23,12 @@ OpenAI accepts transcription files up to 25 MB and requires `whisper-1` for segm
 Configure these values as secrets or secret-backed environment variables. Never commit their values.
 
 ```text
-SHORTSFLOW_TUNELIO_API_KEY=<server-only key>
+SHORTSFLOW_APIFY_API_TOKEN=<server-only key>
 SHORTSFLOW_OPENAI_API_KEY=<server-only key>
 SHORTSFLOW_OPENAI_STT_MODEL=whisper-1
 ```
 
-The Tunelio key is required for Task 05. The OpenAI key is optional only when every processed range has usable captions; without it, a captionless range fails with an actionable error instead of silently skipping transcript generation.
+The Apify token is required for Task 05. The OpenAI key is optional only when every processed range has usable captions; without it, a captionless range fails with an actionable error instead of silently skipping transcript generation.
 
 ## Persisted result
 
@@ -36,7 +36,7 @@ A completed `ProcessingJob` stores:
 
 ```text
 result.next_step = CANDIDATE
-result.transcript.provider = tunelio | openai_whisper
+result.transcript.provider = apify_titan | openai_whisper   (older jobs: tunelio)
 result.transcript.language
 result.transcript.is_generated
 result.transcript.source_start_seconds
@@ -51,8 +51,8 @@ Segment timestamps are absolute positions in the original source video, not posi
 
 Task 05 is complete when Cloud Run demonstrates both paths with authorized test sources:
 
-1. A source range with captions completes with `provider=tunelio` without media acquisition or an OpenAI call.
-2. A source range without captions downloads only the selected 480p proxy, extracts audio with FFmpeg, and completes with `provider=openai_whisper`.
+1. A source range with captions completes with `provider=apify_titan` without media acquisition or an OpenAI call.
+2. A source range without captions acquires the source through Titan, trims the range to audio with FFmpeg, and completes with `provider=openai_whisper`.
 3. Both results contain non-empty timestamped segments within the requested range.
 4. `next_step` is `CANDIDATE`.
 5. Provider authentication, quota, media download, FFmpeg, and STT failures persist an actionable job error.
@@ -69,3 +69,5 @@ OpenAI billing and the Secret Manager-backed `SHORTSFLOW_OPENAI_API_KEY` are now
 The production fallback remains unvalidated end to end. A new Cloud Run processing job attempted the captionless 965-968 second range three times but stopped before OpenAI because Tunelio reported insufficient credits while acquiring the caption or selected-range media. The earlier Cloud Run OpenAI `403` therefore cannot be retested through the complete pipeline until Tunelio credits are available and the Cloud Run revision is confirmed to reference the latest OpenAI secret version.
 
 Task 05 remains in progress and Task 06 must not begin until a Cloud Run job completes with `provider=openai_whisper`.
+
+On 2026-09-29 the Tunelio dependency was removed. Both the caption step and the fallback media step now run on Apify Titan, so exhausted Tunelio credits no longer block validation. The results above for `provider=tunelio` remain valid history for the caption-first logic, which is unchanged apart from the provider adapter.

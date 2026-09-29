@@ -33,12 +33,6 @@ type DownloadJob = {
   template_id: TemplateId;
   error_message: string | null;
   download_url: string | null;
-  download_expires_at?: number | null;
-};
-
-type SignedRangeCache = {
-  sourceUrl: string;
-  job: DownloadJob;
 };
 
 const DEFAULT_RANGE_SECONDS = 4 * 60;
@@ -142,29 +136,6 @@ function cacheSource(url: string, source: Source) {
   }
 }
 
-function reuseSignedRangeUrl(
-  cache: SignedRangeCache,
-  startSeconds: number,
-  endSeconds: number,
-) {
-  const expiresAt = cache.job.download_expires_at;
-  if (!expiresAt || expiresAt - 5 * 60 <= Date.now() / 1000) return null;
-  try {
-    const result = new URL(cache.job.download_url ?? "");
-    if (
-      result.protocol !== "https:" ||
-      !(result.hostname === "tunelio.dev" || result.hostname.endsWith(".tunelio.dev"))
-    ) {
-      return null;
-    }
-    result.searchParams.set("start", String(startSeconds));
-    result.searchParams.set("end", String(endSeconds));
-    return result.toString();
-  } catch {
-    return null;
-  }
-}
-
 export function SourceInput() {
   const [mode, setMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
@@ -178,8 +149,6 @@ export function SourceInput() {
   const [isStartingDownload, setIsStartingDownload] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [templateId, setTemplateId] = useState<TemplateId>("CLEAN_CAPTION");
-  const [signedRangeCache, setSignedRangeCache] =
-    useState<SignedRangeCache | null>(null);
 
   const sourceDuration = source?.metadata?.youtube?.duration_seconds ?? null;
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
@@ -244,7 +213,6 @@ export function SourceInput() {
             : 0,
         );
         setDownloadJob(null);
-        setSignedRangeCache(null);
         setRightsConfirmed(false);
         setTemplateId("CLEAN_CAPTION");
         return;
@@ -282,7 +250,6 @@ export function SourceInput() {
           : 0,
       );
       setDownloadJob(null);
-      setSignedRangeCache(null);
       setRightsConfirmed(false);
       setTemplateId("CLEAN_CAPTION");
     } catch (submissionError) {
@@ -301,26 +268,6 @@ export function SourceInput() {
     setError(null);
     setDownloadJob(null);
 
-    if (signedRangeCache?.sourceUrl === url.trim()) {
-      const reusedUrl = reuseSignedRangeUrl(
-        signedRangeCache,
-        rangeStart,
-        rangeEnd,
-      );
-      if (reusedUrl) {
-        setDownloadJob({
-          ...signedRangeCache.job,
-          start_seconds: rangeStart,
-          end_seconds: rangeEnd,
-          duration_seconds: rangeDuration,
-          template_id: templateId,
-          download_url: reusedUrl,
-        });
-        return;
-      }
-      setSignedRangeCache(null);
-    }
-
     setIsStartingDownload(true);
     try {
       const response = await fetch(`${API_URL}/sources/${source.id}/downloads`, {
@@ -331,18 +278,9 @@ export function SourceInput() {
           end_seconds: rangeEnd,
           rights_confirmed: true,
           template_id: templateId,
-          source_url: url.trim(),
         }),
       });
-      const createdJob = await readJsonResponse<DownloadJob>(response);
-      setDownloadJob(createdJob);
-      if (
-        createdJob.status === "READY" &&
-        createdJob.download_url?.startsWith("https://") &&
-        createdJob.download_expires_at
-      ) {
-        setSignedRangeCache({ sourceUrl: url.trim(), job: createdJob });
-      }
+      setDownloadJob(await readJsonResponse<DownloadJob>(response));
     } catch (downloadError) {
       setError(
         downloadError instanceof Error

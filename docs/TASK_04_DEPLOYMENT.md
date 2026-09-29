@@ -72,7 +72,7 @@ After the first deployment returns its `run.app` URL, configure a new revision w
 ```text
 SHORTSFLOW_APP_ENV=production
 SHORTSFLOW_FRONTEND_ORIGIN=https://shortsflow-weld.vercel.app
-SHORTSFLOW_TUNELIO_API_KEY=<Vercel과 동일한 서버 전용 키>
+SHORTSFLOW_APIFY_API_TOKEN=<Secret Manager 참조, 서버 전용>
 SHORTSFLOW_JOB_REPOSITORY_BACKEND=firestore
 SHORTSFLOW_TASK_DISPATCHER_BACKEND=cloud_tasks
 SHORTSFLOW_WORKER_AUTH_MODE=google_oidc
@@ -86,7 +86,7 @@ SHORTSFLOW_WORKER_SERVICE_ACCOUNT_EMAIL=shortsflow-runtime@<project-id>.iam.gser
 SHORTSFLOW_PROCESSING_MAX_ATTEMPTS=3
 ```
 
-Store `SHORTSFLOW_TUNELIO_API_KEY` as a Cloud Run secret rather than committing it. The Worker URL and OIDC audience use the service origin without `/worker/process`; the dispatcher appends the route.
+Store `SHORTSFLOW_APIFY_API_TOKEN` (formerly the Tunelio key) as a Cloud Run secret rather than committing it. The Worker URL and OIDC audience use the service origin without `/worker/process`; the dispatcher appends the route.
 
 ## Validation
 
