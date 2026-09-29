@@ -132,6 +132,35 @@ def test_openai_ranker_wraps_client_failures_as_retryable() -> None:
     with pytest.raises(RankingError) as excinfo:
         OpenAIRanker(client, model="m").rank(_candidates())
     assert excinfo.value.retryable is True
+    assert "TimeoutError" in str(excinfo.value)
+    assert "slow" in str(excinfo.value)
+
+
+def test_openai_api_errors_surface_status_and_message_without_secrets() -> None:
+    class FakeApiError(Exception):
+        status_code = 404
+        body = {
+            "error": {
+                "message": "The model `gpt-x` does not exist or you do not have access to it.",
+                "code": "model_not_found",
+            }
+        }
+
+    class FailingCompletions:
+        def create(self, **kwargs):
+            raise FakeApiError("sk-secret-should-not-appear")
+
+    client = type("C", (), {})()
+    client.chat = type("Chat", (), {"completions": FailingCompletions()})()
+
+    with pytest.raises(RankingError) as excinfo:
+        OpenAIRanker(client, model="gpt-x").rank(_candidates())
+
+    message = str(excinfo.value)
+    assert "HTTP 404" in message
+    assert "FakeApiError" in message
+    assert "does not exist or you do not have access" in message
+    assert "sk-secret" not in message
 
 
 def test_top_3_skips_heavily_overlapping_candidates() -> None:

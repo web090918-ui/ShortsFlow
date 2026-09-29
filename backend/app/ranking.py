@@ -138,6 +138,26 @@ def _string_list(value: Any, limit: int = 3) -> list[str]:
     return [str(entry).strip() for entry in value if str(entry).strip()][:limit]
 
 
+def _describe_client_error(exc: Exception) -> str:
+    """Build an actionable message from an OpenAI SDK error without leaking secrets."""
+    status_code = getattr(exc, "status_code", None)
+    detail = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict):
+            detail = str(error.get("message") or error.get("code") or "")
+    if not detail:
+        detail = str(exc)
+    detail = " ".join(detail.split())[:200]
+    prefix = "AI 랭킹 요청에 실패했습니다"
+    if status_code is not None:
+        prefix += f" (HTTP {status_code}, {exc.__class__.__name__})"
+    else:
+        prefix += f" ({exc.__class__.__name__})"
+    return f"{prefix}: {detail}" if detail else f"{prefix}."
+
+
 SYSTEM_PROMPT = """You rank candidate clips cut from one long video for publication as
 standalone vertical Shorts. Judge each candidate ONLY on generic criteria that apply
 to any creator; you know nothing about the channel or its audience:
@@ -222,7 +242,7 @@ class OpenAIRanker:
             content = response.choices[0].message.content
         except Exception as exc:
             logger.warning("AI ranking request failed", exc_info=exc)
-            raise RankingError("AI 랭킹 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.") from exc
+            raise RankingError(_describe_client_error(exc)) from exc
 
         try:
             payload = json.loads(content or "")
