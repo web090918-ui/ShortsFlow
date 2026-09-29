@@ -71,3 +71,12 @@ The production fallback remains unvalidated end to end. A new Cloud Run processi
 Task 05 remains in progress and Task 06 must not begin until a Cloud Run job completes with `provider=openai_whisper`.
 
 On 2026-09-29 the Tunelio dependency was removed. Both the caption step and the fallback media step now run on Apify Titan, so exhausted Tunelio credits no longer block validation. The results above for `provider=tunelio` remain valid history for the caption-first logic, which is unchanged apart from the provider adapter.
+
+Cloud Run validation on 2026-09-29 with the Titan-only revision and the authorized public test video `jNQXAC9IVRw` (19 seconds, English speech), range 2-12 seconds:
+
+- `POST /sources?prepare=true` reached `READY` in 19 seconds through Titan metadata mode with title, duration, and channel populated and `media.provider=apify_titan`.
+- Caption path (`transcript_language=en`), job `2af76b99`: `COMPLETED` in 32 seconds, one Worker attempt, `provider=apify_titan`, `language=en`, `is_generated=false`, 3 segments from 2.0 to 12.0 seconds, all inside the requested range, no media acquisition or OpenAI call.
+- Fallback path (`transcript_language=ko`, no Korean track), job `cb1ed13b`: `COMPLETED` in 3 minutes 42 seconds, one Worker attempt, `provider=openai_whisper`, 5 segments from 2.0 to 12.0 seconds, all inside the requested range. Titan delivered the full source, FFmpeg trimmed the range to MP3, and `whisper-1` returned segment timestamps. The Korean text is a forced-language transcription of English audio, which is expected for this test source and confirms the language hint is honoured.
+- Both jobs advanced `next_step=CANDIDATE`; temporary media lives in a per-attempt `TemporaryDirectory` and is removed on exit.
+
+Task 05 is complete. Task 06 may begin.

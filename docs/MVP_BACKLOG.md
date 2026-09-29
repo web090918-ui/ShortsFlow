@@ -120,7 +120,7 @@ Implementation status:
 
 ## Task 05 — Transcript
 
-Status: In progress — code complete, production provider validation pending
+Status: Complete — Cloud Run caption and Whisper fallback paths validated on 2026-09-29
 
 Goal: create a timestamped transcript from a processable video Source.
 
@@ -142,7 +142,8 @@ Implementation status:
 - Cloud Run caption-first validation completed with `provider=tunelio`, requested and returned language `ko`, 37 timestamped segments within source range 60-120 seconds, and one Worker attempt.
 - OpenAI billing and its Secret Manager-backed key are configured. A direct Google Cloud Shell request using the exact latest secret completed against `whisper-1` with HTTP `200`, validating the key, billing, project access, and model access.
 - A subsequent Cloud Run fallback job did not reach OpenAI because Tunelio credits were exhausted before selected-range media acquisition.
-- Decision 2026-09-29: Tunelio retired; Apify Titan now provides captions and the full-source media for the Whisper fallback, with FFmpeg trimming the selected range. Task 05 is not complete until a production job completes with `provider=openai_whisper`.
+- Decision 2026-09-29: Tunelio retired; Apify Titan now provides captions and the full-source media for the Whisper fallback, with FFmpeg trimming the selected range.
+- Cloud Run validation on 2026-09-29: the caption path completed with `provider=apify_titan` (3 segments, 32 seconds) and the fallback path completed with `provider=openai_whisper` (5 segments, 3 minutes 42 seconds), both within the requested 2-12 second range. See [Task 05](TASK_05_TRANSCRIPT.md).
 
 ## Task 05B — Manual-range Short
 
