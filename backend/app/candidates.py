@@ -20,6 +20,8 @@ from app.transcripts import TranscriptResult, TranscriptSegment
 GENERATOR_VERSION = "heuristic_v1"
 
 _SENTENCE_END = re.compile(r"[.!?。！？…]+[\"'”’)\]]*$")
+# Caption artifacts that are not speech: sound tags like [음악] / [Music] and ">>" speaker marks.
+_NON_SPEECH = re.compile(r"\[[^\]]*\]|\([^)]*\)|(?:^|\s)>>+")
 # Korean captions rarely carry punctuation; common sentence-final endings stand in.
 _KOREAN_SENTENCE_END = re.compile(r"(습니다|입니다|니다|세요|네요|군요|거든요|는데요|죠|다|요|까)$")
 
@@ -83,6 +85,11 @@ def _ends_sentence(text: str) -> bool:
     return bool(_SENTENCE_END.search(stripped) or _KOREAN_SENTENCE_END.search(stripped))
 
 
+def clean_caption_text(text: str) -> str:
+    """Drop non-speech caption markers so hooks and ranking text contain only words."""
+    return " ".join(_NON_SPEECH.sub(" ", text).split())
+
+
 def build_units(
     segments: list[TranscriptSegment],
     *,
@@ -94,8 +101,9 @@ def build_units(
     units: list[_Unit] = []
     current: _Unit | None = None
     for segment in ordered:
-        text = " ".join(segment.text.split())
+        text = clean_caption_text(segment.text)
         if not text:
+            # Music-only or marker-only captions become silence between units.
             continue
         if current is None:
             current = _Unit(segment.start_seconds, segment.end_seconds, text)

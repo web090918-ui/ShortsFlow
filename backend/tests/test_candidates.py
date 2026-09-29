@@ -155,6 +155,20 @@ def test_english_punctuation_marks_sentence_boundaries() -> None:
     assert boundary_ending
 
 
+def test_non_speech_caption_markers_are_removed_from_units() -> None:
+    segments = [
+        TranscriptSegment(start_seconds=0, end_seconds=3, text="[음악]"),
+        TranscriptSegment(start_seconds=3, end_seconds=6, text=">> 안녕하세요 [웃음] 여러분"),
+        TranscriptSegment(start_seconds=6, end_seconds=9, text="(applause) welcome back >> yes"),
+    ]
+
+    units = build_units(segments)
+
+    assert [unit.text for unit in units] == ["안녕하세요 여러분 welcome back yes"]
+    assert units[0].start == 3
+    assert units[0].gap_before == 0
+
+
 def test_empty_transcript_text_raises_non_retryable_error() -> None:
     transcript = _transcript(
         [TranscriptSegment(start_seconds=0, end_seconds=1, text=" ")], start=0, end=60

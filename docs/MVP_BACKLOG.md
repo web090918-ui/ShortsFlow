@@ -169,7 +169,7 @@ Implementation status:
 
 ## Task 06 — Candidate Generation
 
-Status: Implemented — Cloud Run validation pending
+Status: Complete — Cloud Run validation passed on 2026-09-29 (15 candidates from a 15-minute Korean range)
 
 - Generate 10-15 timestamped candidates from the transcript and video context.
 - Store candidate boundaries and supporting text needed for ranking and rendering.

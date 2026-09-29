@@ -66,4 +66,6 @@ Implemented on 2026-09-29 with 8 unit tests.
 
 Cloud Run check 2 passed on 2026-09-29: transcript job `bc55b543` on the 19-second test video `jNQXAC9IVRw` (range 2-12 seconds, English captions via Titan) completed with `step=CANDIDATE`, `result.next_step=RANKING`, `generator=heuristic_v1`, and one candidate covering 2.0-12.0 seconds with 26 words and a sentence-boundary start. One candidate is the expected short-range fallback because the selection is under 15 seconds.
 
-Check 3 (10-15 candidates on a source of at least ten minutes) is pending an authorized long source.
+Cloud Run check 3 passed on 2026-09-29: transcript job `5326e232` on the authorized Korean source `ZY-kQtE0WFE` (27 minutes 43 seconds, Korean captions via Titan), range 0-900 seconds. The Worker completed in 29 seconds with 331 caption segments and 15 candidates: all inside 0-900 seconds, all between 34.8 and 59.8 seconds long, ordered by start, and all starting on a sentence boundary. Hook texts were readable Korean sentences except where the caption itself was a sound tag (`[음악]`) or a `>>` speaker marker; those markers are now stripped from candidate text before unit building.
+
+Task 06 is complete. Task 07 may begin.
