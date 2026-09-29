@@ -19,6 +19,7 @@ from app.shorts_pipeline import (
     short_pipeline_from_settings,
 )
 from app.acquisition import titan_provider_from_settings
+from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
 from app.transcripts import (
     FfmpegAudioExtractor,
     OpenAIWhisperProvider,
@@ -46,6 +47,7 @@ class ProcessingJobStatus(str, Enum):
 class ProcessingStep(str, Enum):
     PIPELINE_BOOTSTRAP = "PIPELINE_BOOTSTRAP"
     TRANSCRIPT = "TRANSCRIPT"
+    CANDIDATE = "CANDIDATE"
     SHORT_RENDER = "SHORT_RENDER"
 
 
@@ -408,6 +410,12 @@ dispatcher: TaskDispatcher = _dispatcher_from_settings(settings)
 worker_authenticator: WorkerAuthenticator = _authenticator_from_settings(settings)
 transcript_processor = _transcript_processor_from_settings(settings)
 short_pipeline: ShortPipeline = short_pipeline_from_settings(settings)
+candidate_generator: CandidateGenerator = HeuristicCandidateGenerator(
+    min_seconds=settings.candidate_min_seconds,
+    max_seconds=settings.candidate_max_seconds,
+    target_count_min=settings.candidate_count_min,
+    target_count_max=settings.candidate_count_max,
+)
 router = APIRouter(tags=["processing-jobs"])
 
 
@@ -432,7 +440,7 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
     job = claim.job
     try:
         result = _run_step(job)
-        completed = job.model_copy(
+        completed = (repository.get(job.id) or job).model_copy(
             update={
                 "status": ProcessingJobStatus.COMPLETED,
                 "progress": 100,
@@ -508,10 +516,30 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
         end_seconds=job.end_seconds,
         language=job.transcript_language,
     )
+    # Task 06 runs in the same Worker attempt: the transcript is already in memory
+    # and candidate generation is deterministic and cheap.
+    _save_step_progress(job, step=ProcessingStep.CANDIDATE, progress=70)
+    candidates = candidate_generator.generate(transcript)
     return {
-        "next_step": "CANDIDATE",
+        "next_step": "RANKING",
         "transcript": transcript.model_dump(mode="json"),
+        "candidates": candidates.model_dump(mode="json"),
     }
+
+
+def _save_step_progress(
+    job: ProcessingJobRecord, *, step: ProcessingStep, progress: int
+) -> None:
+    current = repository.get(job.id) or job
+    repository.save(
+        current.model_copy(
+            update={
+                "step": step,
+                "progress": min(99, max(current.progress, progress)),
+                "updated_at": _now(),
+            }
+        )
+    )
 
 
 def enqueue_job(

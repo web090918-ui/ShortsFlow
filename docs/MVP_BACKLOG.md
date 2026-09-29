@@ -169,10 +169,19 @@ Implementation status:
 
 ## Task 06 — Candidate Generation
 
+Status: Implemented — Cloud Run validation pending
+
 - Generate 10-15 timestamped candidates from the transcript and video context.
 - Store candidate boundaries and supporting text needed for ranking and rendering.
 - Ensure each candidate can stand alone as a Short.
 - Do not personalize candidates with channel data.
+
+Implementation status:
+
+- `HeuristicCandidateGenerator` groups transcript segments into sentence/pause-bounded speech units, slides 15-60 second windows over them, prefers sentence-boundary starts, removes near-duplicates, and thins to at most 15 candidates spread across the selected range.
+- Generation runs in the same Worker attempt as the transcript; the job moves to `step=CANDIDATE` and completes with `result.candidates` and `next_step=RANKING`.
+- Each candidate carries absolute timestamps, the supporting transcript text, a hook line, word density, boundary flags, and surrounding pause lengths for Tasks 07 and 08.
+- Deterministic, no external calls, no channel data. See [Task 06](TASK_06_CANDIDATES.md).
 
 ## Task 07 — Generic AI Ranking and Top 3
 

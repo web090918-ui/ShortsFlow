@@ -10,3 +10,4 @@ ShortsFlow product and delivery decisions are maintained here:
 - [Task 04 Cloud Run deployment](TASK_04_DEPLOYMENT.md) records the async-job infrastructure and validation steps.
 - [Task 05 transcript](TASK_05_TRANSCRIPT.md) records the caption-first transcript pipeline and its validation state.
 - [Task 05B manual-range Short](TASK_05B_MANUAL_SHORT.md) records the URL + start/end to 9:16 MP4 pipeline, its provider boundaries, and deployment requirements.
+- [Task 06 candidates](TASK_06_CANDIDATES.md) records how 10-15 clip candidates are derived from the transcript and what each candidate carries for ranking and rendering.

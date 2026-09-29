@@ -35,7 +35,8 @@ The Apify token is required for Task 05. The OpenAI key is optional only when ev
 A completed `ProcessingJob` stores:
 
 ```text
-result.next_step = CANDIDATE
+result.next_step = RANKING   (CANDIDATE on jobs completed before Task 06)
+result.candidates = { ... }  (Task 06, same Worker attempt)
 result.transcript.provider = apify_titan | openai_whisper   (older jobs: tunelio)
 result.transcript.language
 result.transcript.is_generated

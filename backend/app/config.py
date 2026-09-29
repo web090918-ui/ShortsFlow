@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     shorts_download_ttl_seconds: int = 24 * 60 * 60
     shorts_max_clip_seconds: int = 180
     shorts_max_source_bytes: int = 2 * 1024 * 1024 * 1024
+    # Task 06 clip candidates generated from the transcript
+    candidate_min_seconds: float = 15
+    candidate_max_seconds: float = 60
+    candidate_count_min: int = 10
+    candidate_count_max: int = 15
 
     model_config = SettingsConfigDict(
         env_file=".env",

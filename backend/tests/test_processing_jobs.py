@@ -107,7 +107,12 @@ def test_worker_is_idempotent_for_duplicate_delivery(monkeypatch) -> None:
 
     assert first.status_code == 200
     assert first.json()["status"] == "COMPLETED"
-    assert first.json()["result"]["next_step"] == "CANDIDATE"
+    assert first.json()["result"]["next_step"] == "RANKING"
+    assert first.json()["step"] == "CANDIDATE"
+    candidates = first.json()["result"]["candidates"]
+    assert candidates["generator"] == "heuristic_v1"
+    assert len(candidates["items"]) >= 1
+    assert candidates["items"][0]["start_seconds"] >= 60
     assert first.json()["result"]["transcript"]["provider"] == "apify_titan"
     assert first.json()["attempt_count"] == 1
     assert second.status_code == 200
