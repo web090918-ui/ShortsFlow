@@ -234,6 +234,27 @@ def test_processing_job_for_an_upload_resolves_its_storage_url(monkeypatch, loca
     assert worker.json()["result"]["ranking"]["top_3"]
 
 
+def test_manual_short_from_an_upload_uses_its_storage_url(monkeypatch, local_storage) -> None:
+    monkeypatch.setattr(jobs_module, "repository", InMemoryProcessingJobRepository())
+    monkeypatch.setattr(jobs_module, "dispatcher", StubDispatcher())
+    source = _register(size=5)
+    client.put(f"/sources/{source['id']}/content", content=b"movie", headers={"Content-Type": "video/mp4"})
+
+    response = client.post(
+        "/shorts",
+        json={"source_id": source["id"], "start_seconds": 10, "end_seconds": 40, "rights_confirmed": True},
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["youtube_url"] == f"upload://uploads/{source['id']}.mp4"
+    assert response.json()["duration_seconds"] == 30
+
+    missing = client.post(
+        "/shorts", json={"source_id": str(uuid4()), "start_seconds": 0, "end_seconds": 30, "rights_confirmed": True}
+    )
+    assert missing.status_code == 422
+
+
 def test_processing_job_without_url_needs_a_ready_upload(monkeypatch, local_storage) -> None:
     monkeypatch.setattr(jobs_module, "repository", InMemoryProcessingJobRepository())
     monkeypatch.setattr(jobs_module, "dispatcher", StubDispatcher())

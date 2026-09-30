@@ -68,10 +68,10 @@ class CreateShortRequest(BaseModel):
             raise ValueError("processing_job_id/candidate_id와 직접 구간 입력은 함께 쓸 수 없습니다.")
         if from_candidate and (self.processing_job_id is None or not self.candidate_id):
             raise ValueError("processing_job_id와 candidate_id를 함께 입력해 주세요.")
-        if not from_candidate and (
-            self.youtube_url is None or self.start_seconds is None or self.end_seconds is None
-        ):
-            raise ValueError("youtube_url, start_seconds, end_seconds를 입력해 주세요.")
+        if not from_candidate and (self.start_seconds is None or self.end_seconds is None):
+            raise ValueError("start_seconds와 end_seconds를 입력해 주세요.")
+        if not from_candidate and self.youtube_url is None and self.source_id is None:
+            raise ValueError("youtube_url 또는 업로드 Source의 source_id를 입력해 주세요.")
         return self
 
 
@@ -348,11 +348,23 @@ def create_short(
     if payload.processing_job_id is not None:
         source_url, start, end, template, source_id, render_input = _resolve_candidate(payload)
     else:
-        assert payload.youtube_url is not None
         assert payload.start_seconds is not None and payload.end_seconds is not None
-        if not _is_youtube_url(payload.youtube_url):
-            raise _unprocessable("YouTube 영상 URL을 입력해 주세요.")
-        source_url = str(payload.youtube_url)
+        if payload.youtube_url is not None:
+            if not _is_youtube_url(payload.youtube_url):
+                raise _unprocessable("YouTube 영상 URL을 입력해 주세요.")
+            source_url = str(payload.youtube_url)
+        else:
+            # Manual range on an uploaded file: the Source carries the storage URL.
+            upload = source_repository.get(payload.source_id)  # type: ignore[arg-type]
+            reference = (upload.processing_reference or {}) if upload is not None else {}
+            if (
+                upload is None
+                or upload.type != SourceType.UPLOAD
+                or upload.status != SourceStatus.READY
+                or not isinstance(reference.get("source_url"), str)
+            ):
+                raise _unprocessable("업로드가 완료된 영상 Source를 선택해 주세요.")
+            source_url = str(reference["source_url"])
         start, end = payload.start_seconds, payload.end_seconds
         template = payload.template_id or RenderTemplate.CLEAN_CAPTION
         source_id = payload.source_id or uuid4()

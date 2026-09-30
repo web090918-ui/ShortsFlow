@@ -66,6 +66,8 @@ type AnalysisJob = {
 };
 
 const DEFAULT_RANGE_SECONDS = 15 * 60;
+const MAX_DIRECT_CLIP_SECONDS = 180;
+const STEPS = ["소스", "구간·옵션", "추천", "결과"];
 const MAX_RANGE_SECONDS = 60 * 60;
 const POLL_INTERVAL_MS = 1500;
 const SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -194,6 +196,8 @@ export function SourceInput() {
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [isStartingRender, setIsStartingRender] = useState(false);
   const [lastCandidate, setLastCandidate] = useState<RankedCandidate | null>(null);
+  const [directJob, setDirectJob] = useState<RenderJob | null>(null);
+  const [isStartingDirect, setIsStartingDirect] = useState(false);
 
   const sourceDuration =
     source?.metadata?.youtube?.duration_seconds ??
@@ -256,6 +260,61 @@ export function SourceInput() {
     };
   }, [renderJob]);
 
+  useEffect(() => {
+    if (isTerminalRender(directJob)) return;
+    const job = directJob as RenderJob;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_URL}/shorts/${job.id}`, { signal: controller.signal });
+        setDirectJob(await readJsonResponse<RenderJob>(response));
+      } catch (pollError) {
+        if (controller.signal.aborted) return;
+        const message =
+          pollError instanceof Error ? pollError.message : "렌더 상태를 확인하지 못했습니다.";
+        setDirectJob((current) =>
+          current
+            ? { ...current, status: "failed", artifact_state: "failed", error_message: message }
+            : current,
+        );
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [directJob]);
+
+  async function handleDirectRender() {
+    if (!source || rangeDuration <= 0 || rangeDuration > MAX_DIRECT_CLIP_SECONDS || !rightsConfirmed) {
+      return;
+    }
+    setError(null);
+    setDirectJob(null);
+    setIsStartingDirect(true);
+    try {
+      const response = await fetch(`${API_URL}/shorts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          youtube_url: source.type === "UPLOAD" ? undefined : url.trim(),
+          source_id: source.id,
+          start_seconds: rangeStart,
+          end_seconds: rangeEnd,
+          template_id: templateId,
+          rights_confirmed: true,
+        }),
+      });
+      setDirectJob(await readJsonResponse<RenderJob>(response));
+    } catch (renderError) {
+      setError(
+        renderError instanceof Error ? renderError.message : "쇼츠 생성을 시작하지 못했습니다.",
+      );
+    } finally {
+      setIsStartingDirect(false);
+    }
+  }
+
   function resetForSource(createdSource: Source) {
     const duration =
       createdSource.metadata?.youtube?.duration_seconds ??
@@ -269,6 +328,7 @@ export function SourceInput() {
     );
     setAnalysisJob(null);
     setRenderJob(null);
+    setDirectJob(null);
     setRightsConfirmed(false);
     setTemplateId("CLEAN_CAPTION");
   }
@@ -425,13 +485,22 @@ export function SourceInput() {
 
   const analysisActive = analysisJob !== null && !isTerminalAnalysis(analysisJob);
   const renderActive = renderJob !== null && !isTerminalRender(renderJob);
+  const directActive = directJob !== null && !isTerminalRender(directJob);
+  const currentStep =
+    renderJob || directJob
+      ? 4
+      : analysisJob?.status === "COMPLETED" || source?.metadata?.product_content
+        ? 3
+        : source?.status === "READY"
+          ? 2
+          : 1;
 
   return (
     <section className="source-panel" aria-labelledby="source-heading">
       <div className="source-heading">
         <div>
-          <p className="section-label">AI RECOMMENDED SHORTS</p>
-          <h2 id="source-heading">AI가 추천하는 구간으로 만들기</h2>
+          <p className="section-label">ONE SOURCE TO SHORT</p>
+          <h2 id="source-heading">쇼츠 만들기</h2>
         </div>
         <div className="mode-switch" aria-label="Source 입력 방식">
           <button
@@ -450,6 +519,19 @@ export function SourceInput() {
           </button>
         </div>
       </div>
+
+      <ol className="stepper" aria-label="진행 단계">
+        {STEPS.map((label, index) => {
+          const number = index + 1;
+          const state = number < currentStep ? "done" : number === currentStep ? "current" : "";
+          return (
+            <li key={label} className={state} aria-current={number === currentStep ? "step" : undefined}>
+              <span>{number}</span>
+              {label}
+            </li>
+          );
+        })}
+      </ol>
 
       <form onSubmit={handleSubmit}>
         {mode === "url" ? (
@@ -683,6 +765,40 @@ export function SourceInput() {
                     ? "분석 중..."
                     : "AI 추천 구간 찾기"}
               </button>
+
+              <button
+                className="submit-button secondary-button"
+                type="button"
+                onClick={handleDirectRender}
+                disabled={
+                  isStartingDirect ||
+                  directActive ||
+                  rangeDuration <= 0 ||
+                  rangeDuration > MAX_DIRECT_CLIP_SECONDS ||
+                  !rightsConfirmed
+                }
+                title={
+                  rangeDuration > MAX_DIRECT_CLIP_SECONDS
+                    ? `직접 만들기는 ${MAX_DIRECT_CLIP_SECONDS}초 이하 구간만 가능합니다`
+                    : undefined
+                }
+              >
+                {isStartingDirect
+                  ? "작업 등록 중..."
+                  : directActive
+                    ? "렌더링 중..."
+                    : rangeDuration > MAX_DIRECT_CLIP_SECONDS
+                      ? `이 구간 그대로 만들기 (${MAX_DIRECT_CLIP_SECONDS}초 이하만)`
+                      : "이 구간 그대로 만들기"}
+              </button>
+
+              {directJob ? (
+                <RenderResult
+                  job={directJob}
+                  onRetry={() => void handleDirectRender()}
+                  retryDisabled={isStartingDirect}
+                />
+              ) : null}
 
               {analysisJob ? (
                 <div className="download-status" aria-live="polite">

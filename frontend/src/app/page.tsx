@@ -1,11 +1,10 @@
-import { ShortsCreator } from "@/components/shorts-creator";
 import { SourceInput } from "@/components/source-input";
 
 const steps = [
-  "YouTube URL",
-  "직접 구간 지정 또는 AI 추천 Top 3",
-  "자막 템플릿으로 9:16 렌더",
-  "미리보기 · MP4 다운로드",
+  "YouTube URL, 파일 업로드 또는 쿠팡 파트너스 링크",
+  "구간과 자막 템플릿 선택",
+  "AI Score Top 3 (또는 상품 앵글 3개) 중 하나 선택",
+  "9:16 쇼츠 미리보기 · MP4 다운로드",
 ];
 
 export default function Home() {
@@ -16,9 +15,9 @@ export default function Home() {
           <p className="eyebrow">SHORTSFLOW</p>
           <h1>하나의 Source에서 Shorts를 시작하세요.</h1>
           <p className="intro">
-            YouTube URL을 입력하고 원하는 구간을 직접 지정하거나, 자막을 분석해 AI Score로
-            추천한 Top 3 중 하나를 고르세요. 선택한 구간은 자막 템플릿을 얹은 1080x1920 세로
-            쇼츠 MP4로 렌더링되어 바로 미리보고 다운로드할 수 있습니다.
+            YouTube 영상이나 업로드한 파일에서 구간을 고르면 AI Score로 추천한 Top 3 중 하나를
+            자막 템플릿을 얹은 1080x1920 쇼츠로 만들어 드립니다. 원하는 구간이 이미 정해져
+            있다면 그 구간 그대로 만들 수도 있고, 쿠팡 파트너스 링크는 상품 쇼츠로 이어집니다.
           </p>
 
           <ol className="flow" aria-label="ShortsFlow 기본 흐름">
@@ -32,7 +31,6 @@ export default function Home() {
         </section>
 
         <div className="panel-stack">
-          <ShortsCreator />
           <SourceInput />
         </div>
       </div>

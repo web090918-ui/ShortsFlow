@@ -257,7 +257,7 @@ Implementation status (2026-09-30):
 
 ## Task 11 — Upload Source Processing
 
-Status: Implemented — Cloud Run validation pending
+Status: Complete — Cloud Run validation passed on 2026-09-30 (signed PUT upload, Whisper transcript, ranking, captioned render)
 
 Added on 2026-09-30 so the `UPLOAD` Source type completes the same flow as a YouTube URL: upload a file, pick a range, get the AI Score Top 3, render and download.
 
@@ -265,6 +265,10 @@ Added on 2026-09-30 so the `UPLOAD` Source type completes the same flow as a You
 - `RoutingAcquirer` sends `upload://` job URLs to `UploadAcquirer`, which copies the object from `ArtifactStorage`; transcript skips captions and uses Whisper; candidates, ranking, render, preview, and download are unchanged.
 - `SourceRepository` gained a Firestore adapter so Sources survive across Cloud Run instances.
 - The bucket needs CORS for the site origin. See [Task 11](TASK_11_UPLOAD.md).
+
+## UI consolidation (2026-09-30)
+
+The home page is now one four-step wizard (소스 → 구간·옵션 → 추천 → 결과) instead of two panels. Step 1 takes a YouTube URL, a Coupang Partners link, or a file upload; step 2 offers "AI 추천 구간 찾기" and, for ranges of 180 seconds or less, "이 구간 그대로 만들기" (the former manual panel); step 3 shows the AI Score Top 3 or the three product angles; step 4 shows the preview, download, and artifact states. `POST /shorts` also accepts a manual range on an uploaded Source (`source_id` without `youtube_url`).
 
 ## Task 12 — Publish to YouTube (requested; changes the MVP1 exclusion on automatic publishing)
 

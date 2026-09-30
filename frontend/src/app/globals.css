@@ -857,3 +857,56 @@ h2 {
 .upload-metadata {
   grid-template-columns: 1fr;
 }
+
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.stepper li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.stepper li span {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--text);
+  font-family: monospace;
+  font-size: 0.7rem;
+}
+
+.stepper li.current {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.stepper li.current span,
+.stepper li.done span {
+  background: var(--accent);
+  color: #11130b;
+}
+
+.stepper li.done {
+  color: var(--text);
+}
+
+@media (max-width: 520px) {
+  .stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

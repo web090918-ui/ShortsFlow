@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -247,5 +247,74 @@ describe("SourceInput", () => {
       "http://localhost:8000/shorts/render-1/file?inline=true",
     );
     expect(screen.getByText(/자막 12개/)).toBeTruthy();
+  });
+
+  it("renders the selected range directly when it is 180 seconds or shorter", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+            type: "YOUTUBE",
+            status: "READY",
+            metadata: { youtube: { title: "Long video", duration_seconds: 1663 } },
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "direct-1",
+            status: "queued",
+            progress: 0,
+            start_seconds: 0,
+            end_seconds: 120,
+            duration_seconds: 120,
+            template_id: "CLEAN_CAPTION",
+            candidate_id: null,
+            download_url: null,
+            preview_url: null,
+            download_expires_at: null,
+            artifact_state: "pending",
+            captions_applied: 0,
+            error_message: null,
+          }),
+          { status: 202, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    render(<SourceInput />);
+    await user.type(
+      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      "https://youtube.com/watch?v=source123",
+    );
+    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
+
+    // 15 minutes is too long for a direct Short; the button says so until the range shrinks.
+    expect(screen.getByRole("button", { name: /180초 이하만/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("구간 종료"), { target: { value: "120" } });
+    await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
+    await user.click(screen.getByRole("button", { name: "이 구간 그대로 만들기" }));
+
+    expect(await screen.findByText("대기 중")).toBeTruthy();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8000/shorts",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          youtube_url: "https://youtube.com/watch?v=source123",
+          source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+          start_seconds: 0,
+          end_seconds: 120,
+          template_id: "CLEAN_CAPTION",
+          rights_confirmed: true,
+        }),
+      }),
+    );
   });
 });

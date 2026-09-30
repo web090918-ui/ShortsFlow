@@ -55,4 +55,13 @@ gcloud storage buckets update gs://shortsflow-shorts-aza-ceo --cors-file=cors.js
 
 ## Validation result
 
-Implemented on 2026-09-30 (backend 140 tests, frontend 18 tests). Cloud Run check 2 is recorded below once run.
+Implemented on 2026-09-30 (backend 141 tests, frontend 18 tests).
+
+Cloud Run check 2 passed on 2026-09-30 with a 34.2 MB, 59-second Korean MP4 (the Short rendered earlier that day):
+
+- `POST /sources/upload` returned `upload.mode=signed_put`; the PUT to the signed Cloud Storage URL completed in about a second with `200`.
+- `POST /sources/{id}/uploaded` marked the Source `READY` with `media.provider=upload` and the browser-supplied duration 59.45 s. (A raw `curl -X POST` without a body is answered `411` by Google's front end before reaching Cloud Run; browsers always send `Content-Length: 0`, and the check used `-d ''`.)
+- `POST /processing-jobs` without `source_url` created job `cfb321f0`, which completed in 13 seconds with `transcript.provider=openai_whisper`, 24 Korean segments, one candidate for the 59-second range, and `ranking=openai:gpt-4.1-mini` (AI Score 65).
+- `POST /shorts` for that candidate created render `93bc26aa`, which completed in 1 minute 35 seconds with 24 captions, `artifact_state=ready`, and a downloadable 1080x1920, 59.0-second MP4; the 5-second frame showed the burned captions over the uploaded footage.
+
+Task 11 is complete. Browser uploads on www.cutpick.com additionally require the bucket CORS rule above.
