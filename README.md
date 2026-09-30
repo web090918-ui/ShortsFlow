@@ -113,6 +113,7 @@ Environment variables use the `SHORTSFLOW_` prefix:
 - `SHORTSFLOW_OPENAI_STT_MODEL` — defaults to `whisper-1` for segment timestamps
 - `SHORTSFLOW_OPENAI_RANKING_MODEL` — defaults to `gpt-4.1-mini` for the generic AI Score
 - `SHORTSFLOW_OPENAI_PROJECT` — optional OpenAI project id for organization-scoped keys
+- `SHORTSFLOW_PROCESSING_LEASE_SECONDS` — Worker lease and Cloud Tasks deadline, default `600`; raise with the Titan run timeout and Cloud Run `--timeout` for long sources
 - `SHORTSFLOW_APIFY_API_TOKEN` — server-side secret; enables Apify Titan for metadata, captions, and media (required in production)
 - `SHORTSFLOW_SHORTS_ACQUISITION_PROVIDER` — `auto` (default), `apify_titan`, or `yt_dlp`
 - `SHORTSFLOW_SHORTS_STORAGE_BACKEND` — `local` (default) or `gcs` with `SHORTSFLOW_GCS_BUCKET`

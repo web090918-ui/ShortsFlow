@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     worker_oidc_audience: str | None = None
     worker_service_account_email: str | None = None
     processing_max_attempts: int = 3
+    # Worker lease and Cloud Tasks dispatch deadline. Cloud Tasks allows at most 1800 and
+    # the Cloud Run request timeout must be at least this long. Raise it together with
+    # SHORTSFLOW_APIFY_RUN_TIMEOUT_SECONDS when long sources must be acquired.
+    processing_lease_seconds: int = 600
     # Manual-range Short pipeline (URL + start/end -> 9:16 MP4)
     shorts_acquisition_provider: Literal["auto", "apify_titan", "yt_dlp"] = "auto"
     apify_api_token: SecretStr | None = None

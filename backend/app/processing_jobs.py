@@ -33,7 +33,7 @@ from app.transcripts import (
 
 
 logger = logging.getLogger(__name__)
-LEASE_SECONDS = 10 * 60
+LEASE_SECONDS = get_settings().processing_lease_seconds
 
 
 def _now() -> datetime:
