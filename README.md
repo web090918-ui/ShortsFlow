@@ -16,6 +16,8 @@ MVP1 accepts three source types:
 - Affiliate or product URL
 - Video file upload
 
+Continuing from another machine? Start with the [handoff notes](docs/HANDOFF.md).
+
 See the product, architecture, and delivery details in:
 
 - [Product](docs/PRODUCT.md)
