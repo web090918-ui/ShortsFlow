@@ -35,7 +35,7 @@ describe("SourceInput", () => {
     render(<SourceInput />);
 
     await user.type(
-      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
@@ -82,7 +82,7 @@ describe("SourceInput", () => {
 
     const firstRender = render(<SourceInput />);
     await user.type(
-      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
@@ -91,7 +91,7 @@ describe("SourceInput", () => {
 
     render(<SourceInput />);
     await user.type(
-      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
@@ -191,7 +191,7 @@ describe("SourceInput", () => {
 
     render(<SourceInput />);
     await user.type(
-      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
@@ -288,7 +288,7 @@ describe("SourceInput", () => {
 
     render(<SourceInput />);
     await user.type(
-      screen.getByLabelText("YouTube 또는 쿠팡 파트너스 상품 링크"),
+      screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));

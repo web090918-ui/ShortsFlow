@@ -5,8 +5,6 @@ import type { CSSProperties, FormEvent } from "react";
 
 import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
-import { ProductStudio } from "@/components/product-studio";
-import type { ProductContent, ProductFacts } from "@/components/product-studio";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { currentDurationReader, putUpload } from "@/lib/upload";
@@ -26,8 +24,6 @@ type Source = {
       duration_seconds?: number | null;
       thumbnail_url?: string | null;
     };
-    product?: ProductFacts;
-    product_content?: ProductContent;
     upload?: {
       filename: string;
       content_type: string;
@@ -168,6 +164,17 @@ function cacheSource(url: string, source: Source) {
     );
   } catch {
     // Source caching is an optimization; storage denial must not block creation.
+  }
+}
+
+const AFFILIATE_HOSTS = ["coupang.com", "agoda.com", "agoda.co.kr", "trip.com", "ctrip.com"];
+
+function isAffiliateUrl(value: string) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return AFFILIATE_HOSTS.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  } catch {
+    return false;
   }
 }
 
@@ -344,6 +351,10 @@ export function SourceInput() {
     }
 
     const requestedUrl = url.trim();
+    if (mode === "url" && isAffiliateUrl(requestedUrl)) {
+      setError("상품·여행 링크는 \"상품·여행 링크로 만들기\" 페이지에서 처리합니다. 상단 메뉴에서 이동해 주세요.");
+      return;
+    }
     if (mode === "url") {
       const cachedSource = readCachedSource(requestedUrl);
       if (cachedSource) {
@@ -489,7 +500,7 @@ export function SourceInput() {
   const currentStep =
     renderJob || directJob
       ? 4
-      : analysisJob?.status === "COMPLETED" || source?.metadata?.product_content
+      : analysisJob?.status === "COMPLETED"
         ? 3
         : source?.status === "READY"
           ? 2
@@ -536,7 +547,7 @@ export function SourceInput() {
       <form onSubmit={handleSubmit}>
         {mode === "url" ? (
           <label className="field">
-            <span>YouTube 또는 쿠팡 파트너스 상품 링크</span>
+            <span>YouTube URL</span>
             <input
               type="url"
               value={url}
@@ -611,20 +622,6 @@ export function SourceInput() {
             </div>
           ) : null}
           <code>{source.id}</code>
-          {source.type === "PRODUCT" && source.status === "READY" && source.metadata?.product ? (
-            <ProductStudio
-              sourceId={source.id}
-              product={source.metadata.product}
-              content={source.metadata.product_content ?? null}
-              onContent={(content) =>
-                setSource((current) =>
-                  current
-                    ? { ...current, metadata: { ...current.metadata, product_content: content } }
-                    : current,
-                )
-              }
-            />
-          ) : null}
           {(source.type === "YOUTUBE" || source.type === "UPLOAD") &&
           source.status === "READY" &&
           typeof sourceDuration === "number" ? (

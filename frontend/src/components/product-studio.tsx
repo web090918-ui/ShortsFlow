@@ -41,6 +41,7 @@ type Props = {
   product: ProductFacts;
   content: ProductContent | null;
   onContent: (content: ProductContent) => void;
+  onRenderStarted?: () => void;
 };
 
 const POLL_INTERVAL_MS = 1500;
@@ -63,7 +64,7 @@ function won(value: number | null) {
   return value === null ? null : `${value.toLocaleString("ko-KR")}원`;
 }
 
-export function ProductStudio({ sourceId, product, content, onContent }: Props) {
+export function ProductStudio({ sourceId, product, content, onContent, onRenderStarted }: Props) {
   const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(null);
@@ -146,6 +147,7 @@ export function ProductStudio({ sourceId, product, content, onContent }: Props) 
         }),
       });
       setRenderJob(await readJsonResponse<RenderJob>(response));
+      onRenderStarted?.();
     } catch (renderError) {
       setError(
         renderError instanceof Error ? renderError.message : "상품 쇼츠 렌더를 시작하지 못했습니다.",
