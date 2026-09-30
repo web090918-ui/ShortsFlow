@@ -77,4 +77,13 @@ Project `proj_U2Y72hXucvHowySPskoQnLzG` does not have access to model `gpt-4.1-m
 
 The key and billing are valid (the same key completed `whisper-1` jobs the same day); the OpenAI project restricts which models it may use. Ranking failures are classified retryable, so the job used all three Cloud Tasks attempts before ending `FAILED` with the message above. The first two production attempts showed only the generic "AI 랭킹 요청에 실패했습니다" text; the ranker now includes the HTTP status, exception class, and the provider's message (never the key) so the cause is visible on the job.
 
-Unblock by either allowing `gpt-4.1-mini` for that project in the OpenAI dashboard (Settings → Limits → Model usage) or pointing `SHORTSFLOW_OPENAI_RANKING_MODEL` at a model the project already allows. Neither requires a code change. Production checks 2 and 3 remain pending until then.
+Resolution on 2026-09-30: the key is organization-scoped, so `SHORTSFLOW_OPENAI_PROJECT=proj_InkVn5EtOT2q8LKO2v8bFE9X` (sent as the `OpenAI-Project` header on both the Whisper and ranking clients) moved the calls to a project that allows the model. No code path changed apart from passing the project id.
+
+Cloud Run validation passed on 2026-09-30, job `6c6e8414` on the authorized Korean source `ZY-kQtE0WFE`, range 0-900 seconds:
+
+- `COMPLETED` in 54 seconds (Titan captions, 15 candidates, ranking) with one Worker attempt, `step=RANKING`, `result.next_step=RENDER`, `ranker=openai:gpt-4.1-mini`, `criteria_version=generic_v1`.
+- All 15 candidates scored, scores spread 15-78 with no ties in the top ten (78, 72, 70, 68, 67, 65, 62, 60, 58, 55, 50, 45, 40, 20, 15).
+- Top 3 were three distinct moments (4-64 s, 862-900 s, 136-195 s) with no pairwise overlap above the 50 percent rule.
+- Every reason was Korean and referred to the clip's own content, for example rank 1: "유럽 여행을 간다는 구체적 내용과 비행기의 경유 정보로 흥미를 유발하지만 초반 인사말이 다소 평범해 흥미도가 살짝 떨어집니다." The lowest score (15) went to a fragment whose hook was only "땡큐." with the reason that it has no hook and its content is disconnected.
+
+Task 07 is complete. Task 08 may begin; its preview screen must label the number `AI Score` or `Recommended Score`.
