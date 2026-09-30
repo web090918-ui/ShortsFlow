@@ -18,13 +18,15 @@ from pydantic import BaseModel
 
 from app.acquisition import (
     AcquisitionError,
+    AcquisitionPendingError,
     VideoAcquisitionProvider,
     YtDlpProvider,
-    titan_provider_from_settings,
+    titan_acquirer_from_settings,
 )
 from app.captions import CaptionCue, build_ass, select_cues
 from app.config import Settings
 from app.downloads import RenderTemplate
+from app.source_media import SourceMediaRepository
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
 
 
@@ -195,6 +197,9 @@ class ShortPipeline:
             )
         except ShortPipelineError:
             raise
+        except AcquisitionPendingError:
+            # Not a failure: the Worker defers the job and retries later.
+            raise
         except AcquisitionError as exc:
             raise ShortPipelineError(
                 ShortErrorCode.SOURCE_DOWNLOAD_FAILED, str(exc), retryable=exc.retryable
@@ -304,12 +309,15 @@ class ShortPipeline:
         )
 
 
-def _acquisition_provider_from_settings(settings: Settings) -> VideoAcquisitionProvider:
+def _acquisition_provider_from_settings(
+    settings: Settings, media_cache: SourceMediaRepository
+) -> VideoAcquisitionProvider:
     selection = settings.shorts_acquisition_provider
     if selection == "auto":
         selection = "apify_titan" if settings.apify_api_token is not None else "yt_dlp"
     if selection == "apify_titan":
-        titan = titan_provider_from_settings(settings)
+        # Resumable and cached: long sources defer the job instead of blocking the Worker.
+        titan = titan_acquirer_from_settings(settings, media_cache)
         if titan is None:
             raise RuntimeError("SHORTSFLOW_APIFY_API_TOKEN must be configured.")
         return titan
@@ -335,9 +343,11 @@ def _storage_from_settings(settings: Settings) -> ArtifactStorage:
     )
 
 
-def short_pipeline_from_settings(settings: Settings) -> ShortPipeline:
+def short_pipeline_from_settings(
+    settings: Settings, media_cache: SourceMediaRepository
+) -> ShortPipeline:
     return ShortPipeline(
-        _acquisition_provider_from_settings(settings),
+        _acquisition_provider_from_settings(settings, media_cache),
         FfmpegVideoProcessor(),
         _storage_from_settings(settings),
     )

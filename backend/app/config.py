@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     apify_titan_actor_id: str = "titan_network~titan-youtube-video-downloader"
     apify_titan_quality: str = "1080"
     apify_run_timeout_seconds: int = 480
+    # Resumable media acquisition: wait this long inline, then defer the job and
+    # re-check every acquisition_retry_seconds until titan_pending_max_seconds.
+    titan_initial_wait_seconds: int = 90
+    titan_pending_max_seconds: int = 90 * 60
+    acquisition_retry_seconds: int = 60
+    source_media_ttl_seconds: int = 23 * 60 * 60
     shorts_storage_backend: Literal["local", "gcs"] = "local"
     shorts_local_storage_dir: str | None = None
     gcs_bucket: str | None = None

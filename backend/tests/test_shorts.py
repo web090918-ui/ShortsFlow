@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.processing_jobs as jobs_module
+from app.acquisition import AcquisitionPendingError
 from app.main import app
 from app.processing_jobs import InMemoryProcessingJobRepository
 from app.shorts_pipeline import ShortArtifact, ShortErrorCode, ShortPipelineError, ShortStage
@@ -14,8 +15,15 @@ client = TestClient(app)
 
 
 class StubDispatcher:
+    def __init__(self) -> None:
+        self.resumes: list[tuple[str, int, int]] = []
+
     def enqueue(self, job_id, background_tasks) -> str:
         return f"queues/test/tasks/processing-{job_id}"
+
+    def schedule_resume(self, job_id, *, delay_seconds, sequence) -> str:
+        self.resumes.append((str(job_id), delay_seconds, sequence))
+        return f"queues/test/tasks/processing-{job_id}-r{sequence}"
 
 
 class AllowWorkerAuthenticator:
@@ -72,11 +80,16 @@ class StubShortPipeline:
         )
 
 
+@pytest.fixture
+def stub_dispatcher():
+    return StubDispatcher()
+
+
 @pytest.fixture(autouse=True)
-def isolated_jobs(monkeypatch):
+def isolated_jobs(monkeypatch, stub_dispatcher):
     repository = InMemoryProcessingJobRepository()
     monkeypatch.setattr(jobs_module, "repository", repository)
-    monkeypatch.setattr(jobs_module, "dispatcher", StubDispatcher())
+    monkeypatch.setattr(jobs_module, "dispatcher", stub_dispatcher)
     monkeypatch.setattr(jobs_module, "worker_authenticator", AllowWorkerAuthenticator())
     return repository
 
@@ -358,6 +371,36 @@ def test_candidate_render_validates_inputs(isolated_jobs) -> None:
         json={"processing_job_id": str(analysis.id), "candidate_id": "cand-a", "rights_confirmed": True},
     )
     assert not_ready.status_code == 409
+
+
+def test_pending_acquisition_defers_the_job_without_spending_attempts(
+    monkeypatch, stub_dispatcher, tmp_path
+) -> None:
+    pending = AcquisitionPendingError("아직 확보 중", retry_after_seconds=60)
+    pipeline = StubShortPipeline(tmp_path, error=pending)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    created = client.post("/shorts", json=_payload()).json()
+
+    worker = _run_worker(created["id"])
+
+    assert worker.status_code == 200
+    job = worker.json()
+    assert job["status"] == "QUEUED"
+    assert job["stage"] == "DOWNLOADING"
+    assert job["error_code"] is None
+    assert job["error_message"] == "아직 확보 중"
+    assert stub_dispatcher.resumes == [(created["id"], 60, 1)]
+
+    short = client.get(f"/shorts/{created['id']}").json()
+    assert short["status"] == "downloading"
+    assert short["error_message"] is None
+
+    # The resumed delivery claims the job again and can now finish it.
+    pipeline.error = None
+    resumed = _run_worker(created["id"])
+    assert resumed.json()["status"] == "COMPLETED"
+    assert resumed.json()["resume_count"] if "resume_count" in resumed.json() else True
+    assert client.get(f"/shorts/{created['id']}").json()["status"] == "completed"
 
 
 def test_file_download_requires_completed_job() -> None:

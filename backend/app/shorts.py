@@ -113,6 +113,9 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         short_status = ShortStatus.FAILED
     elif job.status == ProcessingJobStatus.PROCESSING:
         short_status = _STAGE_STATUS.get(job.stage or "", ShortStatus.PROCESSING)
+    elif job.stage:
+        # Queued again while waiting on the media provider: still "downloading" to the user.
+        short_status = _STAGE_STATUS.get(job.stage, ShortStatus.QUEUED)
     else:
         short_status = ShortStatus.QUEUED
 

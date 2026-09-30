@@ -18,10 +18,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from datetime import timedelta
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from app.config import Settings
+from app.source_media import (
+    SourceMediaEntry,
+    SourceMediaRepository,
+    SourceMediaStatus,
+    utcnow,
+)
 from app.youtube import PreparedVideoSource, _YtDlpLogger, _deno_runtime_path
 
 
@@ -37,6 +44,33 @@ class AcquisitionError(RuntimeError):
     def __init__(self, message: str, *, retryable: bool = True) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+class AcquisitionPendingError(Exception):
+    """The provider is still producing the file; check again after ``retry_after_seconds``.
+
+    Deliberately not an ``AcquisitionError``: callers must not treat it as a failure.
+    """
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def youtube_video_id(url: str) -> str:
+    """Return the YouTube video id, or the URL itself when it cannot be parsed."""
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    if hostname == "youtu.be":
+        return parsed.path.strip("/").split("/", 1)[0] or url
+    if hostname == "youtube.com" or hostname.endswith(".youtube.com"):
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+        if video_id:
+            return video_id
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) >= 2 and parts[0] in {"embed", "live", "shorts"}:
+            return parts[1]
+    return url
 
 
 class SubtitlesUnavailableError(AcquisitionError):
@@ -230,6 +264,41 @@ class ApifyTitanClient:
         except AcquisitionError as exc:
             logger.warning("Could not abort Apify run %s: %s", run_id, exc)
 
+    def start_run(
+        self, actor_input: dict[str, Any], *, max_wait_seconds: float
+    ) -> dict[str, Any]:
+        """Start the actor and return the run record (``id``, ``defaultDatasetId``)."""
+        payload = self._request(
+            "POST",
+            f"/v2/acts/{self._actor_id}/runs",
+            body={**actor_input, "maxWaitSec": int(max_wait_seconds)},
+        )
+        run = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(run, dict) or not run.get("id"):
+            raise AcquisitionError("영상 확보 작업을 시작하지 못했습니다.")
+        return run
+
+    def get_run(self, run_id: str, *, wait_seconds: int = 0) -> dict[str, Any]:
+        payload = self._request(
+            "GET",
+            f"/v2/actor-runs/{run_id}",
+            params={"waitForFinish": str(max(0, min(60, wait_seconds)))},
+        )
+        run = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(run, dict):
+            raise AcquisitionError("영상 확보 작업 상태를 확인하지 못했습니다.")
+        return run
+
+    def dataset_items(self, dataset_id: str) -> list[dict[str, Any]]:
+        items = self._request(
+            "GET",
+            f"/v2/datasets/{dataset_id}/items",
+            params={"clean": "true", "format": "json"},
+        )
+        if not isinstance(items, list):
+            raise AcquisitionError("영상 확보 결과를 읽지 못했습니다.")
+        return [item for item in items if isinstance(item, dict)]
+
     def run(
         self,
         actor_input: dict[str, Any],
@@ -238,15 +307,8 @@ class ApifyTitanClient:
         progress: ProgressCallback | None = None,
         progress_range: tuple[int, int] = (0, 100),
     ) -> list[dict[str, Any]]:
-        payload = self._request(
-            "POST",
-            f"/v2/acts/{self._actor_id}/runs",
-            body={**actor_input, "maxWaitSec": int(timeout_seconds)},
-        )
-        run = payload.get("data") if isinstance(payload, dict) else None
-        if not isinstance(run, dict) or not run.get("id"):
-            raise AcquisitionError("영상 확보 작업을 시작하지 못했습니다.")
-
+        """Start a run and wait for it synchronously (metadata, subtitles, short media)."""
+        run = self.start_run(actor_input, max_wait_seconds=timeout_seconds)
         low, high = progress_range
         deadline = time.monotonic() + timeout_seconds
         try:
@@ -254,14 +316,7 @@ class ApifyTitanClient:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise AcquisitionError("영상 확보 작업 시간이 초과되었습니다.")
-                payload = self._request(
-                    "GET",
-                    f"/v2/actor-runs/{run['id']}",
-                    params={"waitForFinish": str(int(min(60, max(1, remaining))))},
-                )
-                finished = payload.get("data") if isinstance(payload, dict) else None
-                if not isinstance(finished, dict):
-                    raise AcquisitionError("영상 확보 작업 상태를 확인하지 못했습니다.")
+                finished = self.get_run(str(run["id"]), wait_seconds=int(min(60, max(1, remaining))))
                 status = str(finished.get("status") or "")
                 if status == "SUCCEEDED":
                     break
@@ -279,15 +334,9 @@ class ApifyTitanClient:
         dataset_id = finished.get("defaultDatasetId") or run.get("defaultDatasetId")
         if not isinstance(dataset_id, str) or not dataset_id:
             raise AcquisitionError("영상 확보 결과 저장소를 찾지 못했습니다.")
-        items = self._request(
-            "GET",
-            f"/v2/datasets/{dataset_id}/items",
-            params={"clean": "true", "format": "json"},
-        )
-        if not isinstance(items, list):
-            raise AcquisitionError("영상 확보 결과를 읽지 못했습니다.")
+        items = self.dataset_items(dataset_id)
         _report(progress, high)
-        return [item for item in items if isinstance(item, dict)]
+        return items
 
 
 class ApifyTitanProvider:
@@ -534,17 +583,229 @@ class YtDlpProvider:
         )
 
 
-def titan_provider_from_settings(settings: Settings) -> ApifyTitanProvider | None:
-    """Build the production provider, or ``None`` when no Apify token is configured."""
+class CachedTitanAcquirer:
+    """Titan media acquisition that survives Worker attempts and reuses results.
+
+    - A fresh ``READY`` cache entry is downloaded directly (about a minute).
+    - Otherwise a Titan run is started and waited for ``initial_wait_seconds``; short
+      videos finish here. Longer runs are recorded as ``PENDING`` and the caller gets
+      ``AcquisitionPendingError`` so the job can be re-delivered later instead of
+      holding a Worker instance open.
+    - On the next attempt the run is checked, and when it succeeded the link is
+      cached for the media TTL and downloaded.
+    """
+
+    name = "apify_titan"
+
+    def __init__(
+        self,
+        client: ApifyTitanClient,
+        cache: SourceMediaRepository,
+        *,
+        quality: str = "1080",
+        initial_wait_seconds: float = 90,
+        pending_max_seconds: float = 90 * 60,
+        retry_after_seconds: int = 60,
+        media_ttl_seconds: int = 23 * 60 * 60,
+        max_source_bytes: int = DEFAULT_MAX_SOURCE_BYTES,
+        download_timeout_seconds: float = 600,
+    ) -> None:
+        self._client = client
+        self._cache = cache
+        self._quality = quality
+        self._initial_wait_seconds = initial_wait_seconds
+        self._pending_max_seconds = pending_max_seconds
+        self._retry_after_seconds = retry_after_seconds
+        self._media_ttl_seconds = media_ttl_seconds
+        self._max_source_bytes = max_source_bytes
+        self._download_timeout_seconds = download_timeout_seconds
+
+    def _key(self, video_id: str) -> str:
+        return f"{self.name}:{video_id}:{self._quality}"
+
+    def _download(
+        self, entry: SourceMediaEntry, destination: Path, progress: ProgressCallback | None
+    ) -> AcquiredVideo:
+        download_to_file(
+            _https_only(str(entry.file_url)),
+            destination,
+            max_bytes=self._max_source_bytes,
+            timeout_seconds=self._download_timeout_seconds,
+            progress=progress,
+            progress_range=(40, 100),
+        )
+        return AcquiredVideo(
+            path=destination,
+            provider=self.name,
+            title=entry.title,
+            duration_seconds=entry.duration_seconds,
+        )
+
+    def _complete(self, entry: SourceMediaEntry, run: dict[str, Any]) -> SourceMediaEntry:
+        dataset_id = run.get("defaultDatasetId") or entry.dataset_id
+        if not isinstance(dataset_id, str) or not dataset_id:
+            raise AcquisitionError("영상 확보 결과 저장소를 찾지 못했습니다.")
+        item = ApifyTitanProvider._completed_item(self._client.dataset_items(dataset_id))
+        now = utcnow()
+        duration = item.get("durationSec")
+        return self._cache.save(
+            entry.model_copy(
+                update={
+                    "status": SourceMediaStatus.READY,
+                    "dataset_id": dataset_id,
+                    "file_url": _https_only(str(_item_file_url(item))),
+                    "title": item.get("title") if isinstance(item.get("title"), str) else None,
+                    "duration_seconds": float(duration)
+                    if isinstance(duration, (int, float))
+                    else None,
+                    "error_message": None,
+                    "updated_at": now,
+                    "expires_at": now + timedelta(seconds=self._media_ttl_seconds),
+                }
+            )
+        )
+
+    def _fail(self, entry: SourceMediaEntry, message: str, *, retryable: bool) -> None:
+        self._cache.save(
+            entry.model_copy(
+                update={
+                    "status": SourceMediaStatus.FAILED,
+                    "error_message": message,
+                    "updated_at": utcnow(),
+                }
+            )
+        )
+        raise AcquisitionError(message, retryable=retryable)
+
+    def _start(self, url: str, video_id: str) -> SourceMediaEntry:
+        run = self._client.start_run(
+            {
+                "startUrls": [url],
+                "outputType": "media",
+                "quality": self._quality,
+                "format": "mp4",
+                "storageType": "apify",
+                "maxConcurrency": 1,
+            },
+            max_wait_seconds=self._pending_max_seconds,
+        )
+        now = utcnow()
+        return self._cache.save(
+            SourceMediaEntry(
+                key=self._key(video_id),
+                video_id=video_id,
+                quality=self._quality,
+                status=SourceMediaStatus.PENDING,
+                provider=self.name,
+                run_id=str(run["id"]),
+                dataset_id=run.get("defaultDatasetId")
+                if isinstance(run.get("defaultDatasetId"), str)
+                else None,
+                created_at=now,
+                updated_at=now,
+                expires_at=now + timedelta(seconds=self._pending_max_seconds),
+            )
+        )
+
+    def _wait(
+        self,
+        entry: SourceMediaEntry,
+        *,
+        budget_seconds: float,
+        progress: ProgressCallback | None,
+    ) -> SourceMediaEntry:
+        """Poll the run for up to ``budget_seconds``; return READY or raise pending."""
+        deadline = time.monotonic() + budget_seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            run = self._client.get_run(
+                str(entry.run_id), wait_seconds=int(max(0, min(60, remaining)))
+            )
+            status = str(run.get("status") or "")
+            if status == "SUCCEEDED":
+                return self._complete(entry, run)
+            if status in ApifyTitanClient.TERMINAL_RUN_STATUSES:
+                self._fail(entry, "영상 확보 서비스가 원본 영상을 가져오지 못했습니다.", retryable=True)
+            if remaining <= 0:
+                break
+            _report(progress, 5)
+        now = utcnow()
+        if entry.expires_at is not None and now >= entry.expires_at:
+            self._client._abort(str(entry.run_id))
+            self._fail(
+                entry,
+                "원본 영상 확보가 너무 오래 걸려 중단했습니다. 더 짧은 영상이나 구간으로 다시 시도해 주세요.",
+                retryable=False,
+            )
+        started = entry.created_at
+        raise AcquisitionPendingError(
+            f"원본 영상을 아직 확보하는 중입니다 ({int((now - started).total_seconds() // 60)}분 경과).",
+            retry_after_seconds=self._retry_after_seconds,
+        )
+
+    def acquire(
+        self,
+        url: str,
+        *,
+        destination: Path,
+        progress: ProgressCallback | None = None,
+    ) -> AcquiredVideo:
+        _report(progress, 2)
+        video_id = youtube_video_id(url)
+        entry = self._cache.get(self._key(video_id))
+        now = utcnow()
+        if entry is not None and entry.status == SourceMediaStatus.READY and entry.is_fresh(now):
+            _report(progress, 40)
+            return self._download(entry, destination, progress)
+        if entry is not None and entry.status == SourceMediaStatus.PENDING and entry.run_id:
+            # A previous attempt started the run; check it briefly and resume or defer.
+            ready = self._wait(entry, budget_seconds=5, progress=progress)
+            _report(progress, 40)
+            return self._download(ready, destination, progress)
+        # No usable entry (missing, expired, or failed earlier): start a fresh run.
+        entry = self._start(url, video_id)
+        ready = self._wait(entry, budget_seconds=self._initial_wait_seconds, progress=progress)
+        _report(progress, 40)
+        return self._download(ready, destination, progress)
+
+
+def titan_client_from_settings(settings: Settings) -> ApifyTitanClient | None:
     if settings.apify_api_token is None:
         return None
+    return ApifyTitanClient(
+        settings.apify_api_token.get_secret_value(),
+        actor_id=settings.apify_titan_actor_id,
+        base_url=settings.apify_base_url,
+    )
+
+
+def titan_provider_from_settings(settings: Settings) -> ApifyTitanProvider | None:
+    """Build the synchronous provider, or ``None`` when no Apify token is configured."""
+    client = titan_client_from_settings(settings)
+    if client is None:
+        return None
     return ApifyTitanProvider(
-        ApifyTitanClient(
-            settings.apify_api_token.get_secret_value(),
-            actor_id=settings.apify_titan_actor_id,
-            base_url=settings.apify_base_url,
-        ),
+        client,
         quality=settings.apify_titan_quality,
         run_timeout_seconds=settings.apify_run_timeout_seconds,
+        max_source_bytes=settings.shorts_max_source_bytes,
+    )
+
+
+def titan_acquirer_from_settings(
+    settings: Settings, cache: SourceMediaRepository
+) -> CachedTitanAcquirer | None:
+    """Build the resumable, cached media acquirer used by Worker steps."""
+    client = titan_client_from_settings(settings)
+    if client is None:
+        return None
+    return CachedTitanAcquirer(
+        client,
+        cache,
+        quality=settings.apify_titan_quality,
+        initial_wait_seconds=settings.titan_initial_wait_seconds,
+        pending_max_seconds=settings.titan_pending_max_seconds,
+        retry_after_seconds=settings.acquisition_retry_seconds,
+        media_ttl_seconds=settings.source_media_ttl_seconds,
         max_source_bytes=settings.shorts_max_source_bytes,
     )

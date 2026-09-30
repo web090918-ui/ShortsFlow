@@ -18,8 +18,16 @@ from app.shorts_pipeline import (
     ShortStage,
     short_pipeline_from_settings,
 )
-from app.acquisition import titan_provider_from_settings
+from app.acquisition import (
+    AcquisitionPendingError,
+    titan_acquirer_from_settings,
+    titan_provider_from_settings,
+)
 from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
+from app.source_media import (
+    SourceMediaRepository,
+    source_media_repository_from_settings,
+)
 from app.captions import CaptionCue
 from app.ranking import CandidateRanker, HeuristicRanker, OpenAIRanker
 from app.sources import SourceStatus, repository as source_repository
@@ -96,6 +104,8 @@ class ProcessingJobRecord(ProcessingJobResponse):
     lease_expires_at: datetime | None = None
     # Step inputs not exposed on the API, e.g. captions for a SHORT_RENDER job.
     render_input: dict[str, Any] | None = None
+    # Times the job was re-delivered while waiting on the media provider.
+    resume_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -224,11 +234,21 @@ class TaskDispatcher(Protocol):
         background_tasks: BackgroundTasks,
     ) -> str: ...
 
+    def schedule_resume(self, job_id: UUID, *, delay_seconds: int, sequence: int) -> str:
+        """Deliver the job again later without counting as a failed attempt."""
+        ...
+
 
 class LocalTaskDispatcher:
     def enqueue(self, job_id: UUID, background_tasks: BackgroundTasks) -> str:
         background_tasks.add_task(process_job, job_id, 0)
         return f"local://processing-jobs/{job_id}"
+
+    def schedule_resume(self, job_id: UUID, *, delay_seconds: int, sequence: int) -> str:
+        timer = threading.Timer(delay_seconds, process_job, args=(job_id, 0))
+        timer.daemon = True
+        timer.start()
+        return f"local://processing-jobs/{job_id}/resume/{sequence}"
 
 
 class CloudTasksDispatcher:
@@ -249,9 +269,8 @@ class CloudTasksDispatcher:
         self._service_account_email = service_account_email
         self._audience = audience
 
-    def enqueue(self, job_id: UUID, background_tasks: BackgroundTasks) -> str:
-        task_name = f"{self._parent}/tasks/processing-{job_id}"
-        task = {
+    def _create(self, task_name: str, job_id: UUID, *, delay_seconds: int = 0) -> str:
+        task: dict[str, Any] = {
             "name": task_name,
             "http_request": {
                 "http_method": "POST",
@@ -265,6 +284,8 @@ class CloudTasksDispatcher:
             },
             "dispatch_deadline": {"seconds": LEASE_SECONDS},
         }
+        if delay_seconds > 0:
+            task["schedule_time"] = _now() + timedelta(seconds=delay_seconds)
         try:
             created = self._client.create_task(
                 request={"parent": self._parent, "task": task}
@@ -274,6 +295,18 @@ class CloudTasksDispatcher:
                 return task_name
             raise
         return str(created.name)
+
+    def enqueue(self, job_id: UUID, background_tasks: BackgroundTasks) -> str:
+        return self._create(f"{self._parent}/tasks/processing-{job_id}", job_id)
+
+    def schedule_resume(self, job_id: UUID, *, delay_seconds: int, sequence: int) -> str:
+        # A distinct task name per resume keeps Cloud Tasks' retry count at zero, so
+        # waiting on the provider never consumes the job's failure attempts.
+        return self._create(
+            f"{self._parent}/tasks/processing-{job_id}-r{sequence}",
+            job_id,
+            delay_seconds=delay_seconds,
+        )
 
 
 class WorkerAuthenticator(Protocol):
@@ -385,10 +418,11 @@ def _authenticator_from_settings(settings: Settings) -> WorkerAuthenticator:
 
 
 def _transcript_processor_from_settings(
-    settings: Settings,
+    settings: Settings, media_cache: SourceMediaRepository
 ) -> TranscriptProcessor | None:
     titan = titan_provider_from_settings(settings)
-    if titan is None:
+    acquirer = titan_acquirer_from_settings(settings, media_cache)
+    if titan is None or acquirer is None:
         return None
     stt_provider = None
     if settings.openai_api_key is not None:
@@ -405,7 +439,7 @@ def _transcript_processor_from_settings(
         )
     return TranscriptProcessor(
         TitanCaptionProvider(titan),
-        audio_acquirer=ProviderAudioAcquirer(titan),
+        audio_acquirer=ProviderAudioAcquirer(acquirer),
         audio_extractor=FfmpegAudioExtractor(),
         stt_provider=stt_provider,
     )
@@ -415,8 +449,9 @@ settings = get_settings()
 repository: ProcessingJobRepository = _repository_from_settings(settings)
 dispatcher: TaskDispatcher = _dispatcher_from_settings(settings)
 worker_authenticator: WorkerAuthenticator = _authenticator_from_settings(settings)
-transcript_processor = _transcript_processor_from_settings(settings)
-short_pipeline: ShortPipeline = short_pipeline_from_settings(settings)
+source_media_repository: SourceMediaRepository = source_media_repository_from_settings(settings)
+transcript_processor = _transcript_processor_from_settings(settings, source_media_repository)
+short_pipeline: ShortPipeline = short_pipeline_from_settings(settings, source_media_repository)
 candidate_generator: CandidateGenerator = HeuristicCandidateGenerator(
     min_seconds=settings.candidate_min_seconds,
     max_seconds=settings.candidate_max_seconds,
@@ -486,6 +521,27 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
             }
         )
         return repository.save(completed)
+    except AcquisitionPendingError as exc:
+        # The provider is still producing the source. Release the lease, keep the
+        # job queued with its stage, and ask the dispatcher to deliver it again.
+        current = repository.get(job.id) or job
+        waiting = repository.save(
+            current.model_copy(
+                update={
+                    "status": ProcessingJobStatus.QUEUED,
+                    "stage": ShortStage.DOWNLOADING.value,
+                    "error_code": None,
+                    "error_message": str(exc),
+                    "resume_count": current.resume_count + 1,
+                    "lease_expires_at": None,
+                    "updated_at": _now(),
+                }
+            )
+        )
+        dispatcher.schedule_resume(
+            job.id, delay_seconds=exc.retry_after_seconds, sequence=waiting.resume_count
+        )
+        return waiting
     except Exception as exc:
         # Pipeline errors flag whether another Cloud Tasks attempt could help.
         retryable = bool(getattr(exc, "retryable", True))
