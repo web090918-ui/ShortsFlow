@@ -22,6 +22,25 @@ def test_select_cues_clamps_to_clip_and_drops_unreadable_fragments() -> None:
     ]
 
 
+def test_select_cues_trims_overlaps_so_one_cue_shows_at_a_time() -> None:
+    cues = [
+        CaptionCue(start_seconds=0.0, end_seconds=4.0, text="첫 문장"),
+        CaptionCue(start_seconds=2.5, end_seconds=6.0, text="둘째 문장"),
+        CaptionCue(start_seconds=5.9, end_seconds=6.1, text="너무 짧아짐"),
+        CaptionCue(start_seconds=8.0, end_seconds=10.0, text="셋째 문장"),
+    ]
+
+    selected = select_cues(cues, start_seconds=0, end_seconds=20)
+
+    assert [(c.start_seconds, c.end_seconds, c.text) for c in selected] == [
+        (0.0, 2.5, "첫 문장"),
+        (2.5, 5.9, "둘째 문장"),
+        (8.0, 10.0, "셋째 문장"),
+    ]
+    for first, second in zip(selected, selected[1:]):
+        assert first.end_seconds <= second.start_seconds
+
+
 def test_build_ass_uses_clip_relative_times_and_template_style() -> None:
     document = build_ass(
         _cues(),

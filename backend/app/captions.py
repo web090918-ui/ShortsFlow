@@ -95,11 +95,18 @@ def _ass_text(text: str) -> str:
 def select_cues(
     cues: list[CaptionCue], *, start_seconds: float, end_seconds: float
 ) -> list[CaptionCue]:
-    """Keep cues overlapping the clip, clamped to its bounds and still readable."""
+    """Keep cues overlapping the clip, clamped to its bounds, one on screen at a time.
+
+    Auto-generated captions often overlap the next cue; showing both stacks two
+    boxes on screen, so each cue ends where the next one starts.
+    """
+    ordered = sorted(cues, key=lambda item: item.start_seconds)
     selected: list[CaptionCue] = []
-    for cue in sorted(cues, key=lambda item: item.start_seconds):
+    for index, cue in enumerate(ordered):
         start = max(cue.start_seconds, start_seconds)
         end = min(cue.end_seconds, end_seconds)
+        if index + 1 < len(ordered):
+            end = min(end, max(ordered[index + 1].start_seconds, start))
         if end - start < MIN_CUE_SECONDS:
             continue
         selected.append(CaptionCue(start_seconds=start, end_seconds=end, text=cue.text))
