@@ -50,16 +50,29 @@ class VideoProcessor(Protocol):
         *,
         start_seconds: float,
         end_seconds: float,
+        subtitles_path: Path | None = None,
     ) -> None: ...
 
 
-def _vertical_filter() -> str:
+def _escape_filter_path(path: Path) -> str:
+    """Quote a filename for use inside an FFmpeg filtergraph option."""
+    value = path.as_posix()
+    for char in ("\\", "'", ":", ",", "[", "]", ";"):
+        value = value.replace(char, "\\" + char)
+    return value
+
+
+def _vertical_filter(subtitles_path: Path | None = None) -> str:
     # Scale so the frame covers 1080x1920, then center crop. A 1920x1080 source
     # becomes 3413x1920 before the crop, which is the "scale + center crop" MVP rule.
-    return (
+    chain = (
         f"scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=increase,"
         f"crop={SHORT_WIDTH}:{SHORT_HEIGHT},setsar=1"
     )
+    if subtitles_path is not None:
+        # Burn the template-styled ASS file after the crop so positions match 1080x1920.
+        chain += f",subtitles=filename='{_escape_filter_path(subtitles_path)}'"
+    return chain
 
 
 class FfmpegVideoProcessor:
@@ -197,6 +210,7 @@ class FfmpegVideoProcessor:
         *,
         start_seconds: float,
         end_seconds: float,
+        subtitles_path: Path | None = None,
     ) -> None:
         # One encode pass instead of trim followed by convert: same result, half the time.
         self._encode(
@@ -204,5 +218,5 @@ class FfmpegVideoProcessor:
             output_path,
             start_seconds=start_seconds,
             end_seconds=end_seconds,
-            video_filter=_vertical_filter(),
+            video_filter=_vertical_filter(subtitles_path),
         )

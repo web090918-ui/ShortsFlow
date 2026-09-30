@@ -60,6 +60,26 @@ def test_trim_to_vertical_builds_single_pass_command(fake_tools, tmp_path: Path)
     assert output.read_bytes() == b"rendered"
 
 
+def test_trim_to_vertical_burns_subtitles_after_the_crop(fake_tools, tmp_path: Path) -> None:
+    subtitles = tmp_path / "it's, a:b.ass"
+
+    FfmpegVideoProcessor().trim_to_vertical(
+        tmp_path / "input.mp4",
+        tmp_path / "output.mp4",
+        start_seconds=0,
+        end_seconds=10,
+        subtitles_path=subtitles,
+    )
+
+    video_filter = fake_tools[0][fake_tools[0].index("-vf") + 1]
+    crop_index = video_filter.index("crop=1080:1920")
+    subtitles_index = video_filter.index(",subtitles=filename='")
+    assert crop_index < subtitles_index
+    escaped = video_filter[subtitles_index:]
+    assert "it\\'s\\, a\\:b.ass'" in escaped
+    assert "\\" in escaped and escaped.endswith("'")
+
+
 def test_trim_and_convert_are_separate_operations(fake_tools, tmp_path: Path) -> None:
     processor = FfmpegVideoProcessor()
 

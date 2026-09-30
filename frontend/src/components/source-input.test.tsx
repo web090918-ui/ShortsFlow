@@ -100,8 +100,21 @@ describe("SourceInput", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("creates a selected-range download job and shows the MP4 link", async () => {
+  it("runs the AI analysis, shows Top 3 with AI Score, and renders the chosen clip", async () => {
     const user = userEvent.setup();
+    const candidate = {
+      candidate_id: "cand-1",
+      index: 3,
+      rank: 1,
+      ai_score: 78,
+      reason: "훅이 강하고 완결된 이야기입니다.",
+      strengths: ["명확한 주제", "구체적 설명"],
+      concerns: [],
+      start_seconds: 136,
+      end_seconds: 195,
+      duration_seconds: 59,
+      hook_text: "호텔 바우처 이런 거 처음 받아보네.",
+    };
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
@@ -110,12 +123,7 @@ describe("SourceInput", () => {
             id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
             type: "YOUTUBE",
             status: "READY",
-            metadata: {
-              youtube: {
-                title: "Long video",
-                duration_seconds: 600,
-              },
-            },
+            metadata: { youtube: { title: "Long video", duration_seconds: 1663 } },
           }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         ),
@@ -123,18 +131,57 @@ describe("SourceInput", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            id: "download-job-1",
-            source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
-            status: "READY",
+            id: "analysis-1",
+            status: "COMPLETED",
+            step: "RANKING",
             progress: 100,
-            start_seconds: 0,
-            end_seconds: 240,
-            duration_seconds: 240,
-            template_id: "BOLD_HIGHLIGHT",
             error_message: null,
-            download_url: "/downloads/download-job-1/file",
+            result: {
+              ranking: {
+                top_3: [candidate, { ...candidate, candidate_id: "cand-2", rank: 2, ai_score: 72, reason: "두 번째 이유" }],
+                items: [],
+              },
+            },
           }),
           { status: 202, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "render-1",
+            status: "queued",
+            progress: 0,
+            start_seconds: 136,
+            end_seconds: 195,
+            duration_seconds: 59,
+            template_id: "BOLD_HIGHLIGHT",
+            candidate_id: "cand-1",
+            download_url: null,
+            preview_url: null,
+            captions_applied: 0,
+            error_message: null,
+          }),
+          { status: 202, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "render-1",
+            status: "completed",
+            progress: 100,
+            start_seconds: 136,
+            end_seconds: 195,
+            duration_seconds: 59,
+            template_id: "BOLD_HIGHLIGHT",
+            candidate_id: "cand-1",
+            download_url: "/shorts/render-1/file",
+            preview_url: "/shorts/render-1/file?inline=true",
+            captions_applied: 12,
+            error_message: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       );
 
@@ -145,36 +192,56 @@ describe("SourceInput", () => {
     );
     await user.click(screen.getByRole("button", { name: "Source 생성" }));
 
-    expect(await screen.findByText("사용할 영상 구간")).toBeTruthy();
-    expect(screen.getByText("선택 4:00")).toBeTruthy();
+    expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
+    expect(screen.getByText("선택 15:00")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Bold Highlight/ }));
-    const prepareButton = screen.getByRole("button", {
-      name: "480p 분석 구간 준비",
-    });
-    expect((prepareButton as HTMLButtonElement).disabled).toBe(true);
+    const analyzeButton = screen.getByRole("button", { name: "AI 추천 구간 찾기" });
+    expect((analyzeButton as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
-    expect((prepareButton as HTMLButtonElement).disabled).toBe(false);
-    await user.click(prepareButton);
+    expect((analyzeButton as HTMLButtonElement).disabled).toBe(false);
+    await user.click(analyzeButton);
 
-    const downloadLink = await screen.findByRole("link", {
-      name: "분석용 MP4 다운로드",
-    });
-    expect(downloadLink.getAttribute("href")).toBe(
-      "http://localhost:8000/downloads/download-job-1/file",
-    );
+    expect(await screen.findByText("AI 추천 Top 3")).toBeTruthy();
+    expect(screen.getAllByText("AI Score")).toHaveLength(2);
+    expect(screen.getByText("78")).toBeTruthy();
+    expect(screen.getByText("훅이 강하고 완결된 이야기입니다.")).toBeTruthy();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8000/sources/3d81a939-9f07-4a2a-864f-d027b55caec1/downloads",
+      "http://localhost:8000/processing-jobs",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
+          source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+          source_url: "https://youtube.com/watch?v=source123",
           start_seconds: 0,
-          end_seconds: 240,
+          end_seconds: 900,
           rights_confirmed: true,
           template_id: "BOLD_HIGHLIGHT",
+          transcript_language: "ko",
         }),
       }),
     );
-  });
 
+    await user.click(screen.getAllByRole("button", { name: "이 구간으로 쇼츠 만들기" })[0]);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8000/shorts",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          processing_job_id: "analysis-1",
+          candidate_id: "cand-1",
+          rights_confirmed: true,
+        }),
+      }),
+    );
+    const downloadLink = await screen.findByRole("link", { name: "쇼츠 다운로드" }, { timeout: 4000 });
+    expect(downloadLink.getAttribute("href")).toBe("http://localhost:8000/shorts/render-1/file");
+    const video = screen.getByLabelText("완성된 쇼츠 미리보기") as HTMLVideoElement;
+    expect(video.getAttribute("src")).toBe(
+      "http://localhost:8000/shorts/render-1/file?inline=true",
+    );
+    expect(screen.getByText(/자막 12개/)).toBeTruthy();
+  });
 });

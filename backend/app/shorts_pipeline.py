@@ -22,7 +22,9 @@ from app.acquisition import (
     YtDlpProvider,
     titan_provider_from_settings,
 )
+from app.captions import CaptionCue, build_ass, select_cues
 from app.config import Settings
+from app.downloads import RenderTemplate
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
 
 
@@ -62,6 +64,7 @@ class StoredArtifact:
     download_url: str | None
     local_path: Path | None
     expires_at: datetime | None
+    preview_url: str | None = None
 
 
 class ArtifactStorage(Protocol):
@@ -94,12 +97,14 @@ class GcsArtifactStorage:
         self._bucket = client.bucket(bucket_name)
         self._ttl_seconds = ttl_seconds
 
-    def _signed_url(self, blob: Any, filename: str) -> str:
+    def _signed_url(self, blob: Any, filename: str, *, inline: bool = False) -> str:
+        disposition = "inline" if inline else f'attachment; filename="{filename}"'
         options: dict[str, Any] = {
             "version": "v4",
             "expiration": timedelta(seconds=self._ttl_seconds),
             "method": "GET",
-            "response_disposition": f'attachment; filename="{filename}"',
+            "response_disposition": disposition,
+            "response_type": "video/mp4",
         }
         try:
             return str(blob.generate_signed_url(**options))
@@ -127,6 +132,8 @@ class GcsArtifactStorage:
             download_url=self._signed_url(blob, filename),
             local_path=None,
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=self._ttl_seconds),
+            # Same object, inline disposition, so the browser can play it in <video>.
+            preview_url=self._signed_url(blob, filename, inline=True),
         )
 
 
@@ -135,8 +142,11 @@ class ShortArtifact(BaseModel):
     storage: str
     storage_key: str
     download_url: str | None
+    preview_url: str | None = None
     local_path: str | None
     expires_at: datetime | None
+    template_id: str | None = None
+    captions_applied: int = 0
     source_title: str | None
     source_duration_seconds: float
     source_width: int | None
@@ -170,11 +180,15 @@ class ShortPipeline:
         start_seconds: float,
         end_seconds: float,
         report: ProgressReporter,
+        captions: list[CaptionCue] | None = None,
+        template: RenderTemplate | None = None,
     ) -> ShortArtifact:
         try:
             return self._run(
                 job_id=job_id,
                 source_url=source_url,
+                captions=captions,
+                template=template,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -204,6 +218,8 @@ class ShortPipeline:
         start_seconds: float,
         end_seconds: float,
         report: ProgressReporter,
+        captions: list[CaptionCue] | None,
+        template: RenderTemplate | None,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -229,11 +245,31 @@ class ShortPipeline:
                 )
 
             report(ShortStage.PROCESSING, 55)
+            clip_end = min(end_seconds, info.duration_seconds)
+            subtitles_path = None
+            captions_applied = 0
+            if captions and template is not None:
+                selected = select_cues(
+                    captions, start_seconds=start_seconds, end_seconds=clip_end
+                )
+                if selected:
+                    subtitles_path = temp_path / "captions.ass"
+                    subtitles_path.write_text(
+                        build_ass(
+                            selected,
+                            template=template,
+                            clip_start_seconds=start_seconds,
+                            clip_end_seconds=clip_end,
+                        ),
+                        encoding="utf-8",
+                    )
+                    captions_applied = len(selected)
             self._processor.trim_to_vertical(
                 acquired.path,
                 output_path,
                 start_seconds=start_seconds,
-                end_seconds=min(end_seconds, info.duration_seconds),
+                end_seconds=clip_end,
+                subtitles_path=subtitles_path,
             )
             output_bytes = output_path.stat().st_size
 
@@ -255,8 +291,11 @@ class ShortPipeline:
             storage=stored.storage,
             storage_key=stored.key,
             download_url=stored.download_url,
+            preview_url=stored.preview_url,
             local_path=str(stored.local_path) if stored.local_path else None,
             expires_at=stored.expires_at,
+            template_id=template.value if template is not None else None,
+            captions_applied=captions_applied,
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,
             source_width=info.width,

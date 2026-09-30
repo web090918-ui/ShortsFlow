@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 
 import { API_URL } from "@/config";
+import { formatTimecode } from "@/lib/timecode";
 
 type InputMode = "url" | "upload";
 type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
@@ -22,21 +23,50 @@ type Source = {
   };
 };
 
-type DownloadJob = {
+type RankedCandidate = {
+  candidate_id: string;
+  index: number;
+  rank: number;
+  ai_score: number;
+  reason: string;
+  strengths: string[];
+  concerns: string[];
+  start_seconds: number;
+  end_seconds: number;
+  duration_seconds: number;
+  hook_text: string;
+};
+
+type AnalysisJob = {
   id: string;
-  source_id: string;
-  status: "QUEUED" | "DOWNLOADING" | "READY" | "FAILED";
+  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+  step: "PIPELINE_BOOTSTRAP" | "TRANSCRIPT" | "CANDIDATE" | "RANKING" | "SHORT_RENDER";
+  progress: number;
+  error_message: string | null;
+  result: {
+    ranking?: { top_3: RankedCandidate[]; items: RankedCandidate[] };
+    candidates?: { items: Array<{ id: string }> };
+  } | null;
+};
+
+type RenderJob = {
+  id: string;
+  status: "queued" | "downloading" | "processing" | "uploading" | "completed" | "failed";
   progress: number;
   start_seconds: number;
   end_seconds: number;
   duration_seconds: number;
   template_id: TemplateId;
-  error_message: string | null;
+  candidate_id: string | null;
   download_url: string | null;
+  preview_url: string | null;
+  captions_applied: number;
+  error_message: string | null;
 };
 
-const DEFAULT_RANGE_SECONDS = 4 * 60;
+const DEFAULT_RANGE_SECONDS = 15 * 60;
 const MAX_RANGE_SECONDS = 60 * 60;
+const POLL_INTERVAL_MS = 1500;
 const SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const SOURCE_CACHE_PREFIX = "shortsflow:source:";
 const TEMPLATES: Array<{
@@ -64,6 +94,21 @@ const TEMPLATES: Array<{
     previewClassName: "template-minimal",
   },
 ];
+const ANALYSIS_STEP_LABELS: Record<AnalysisJob["step"], string> = {
+  PIPELINE_BOOTSTRAP: "준비 중",
+  TRANSCRIPT: "자막·음성 분석 중",
+  CANDIDATE: "후보 구간 만드는 중",
+  RANKING: "AI Score 매기는 중",
+  SHORT_RENDER: "렌더링 중",
+};
+const RENDER_STATUS_LABELS: Record<RenderJob["status"], string> = {
+  queued: "대기 중",
+  downloading: "원본 영상 확보 중",
+  processing: "구간 자르기 · 자막 · 9:16 변환 중",
+  uploading: "완성 파일 저장 중",
+  completed: "완료",
+  failed: "실패",
+};
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json();
@@ -81,9 +126,9 @@ function formatDuration(seconds?: number | null) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-function resolveDownloadUrl(downloadUrl: string) {
-  if (/^https:\/\//i.test(downloadUrl)) return downloadUrl;
-  return `${API_URL}${downloadUrl}`;
+function resolveApiUrl(url: string) {
+  if (/^https:\/\//i.test(url)) return url;
+  return `${API_URL}${url}`;
 }
 
 function sourceCacheKey(url: string) {
@@ -136,6 +181,14 @@ function cacheSource(url: string, source: Source) {
   }
 }
 
+function isTerminalAnalysis(job: AnalysisJob | null) {
+  return !job || job.status === "COMPLETED" || job.status === "FAILED";
+}
+
+function isTerminalRender(job: RenderJob | null) {
+  return !job || job.status === "completed" || job.status === "failed";
+}
+
 export function SourceInput() {
   const [mode, setMode] = useState<InputMode>("url");
   const [url, setUrl] = useState("");
@@ -145,50 +198,83 @@ export function SourceInput() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(0);
-  const [downloadJob, setDownloadJob] = useState<DownloadJob | null>(null);
-  const [isStartingDownload, setIsStartingDownload] = useState(false);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [templateId, setTemplateId] = useState<TemplateId>("CLEAN_CAPTION");
+  const [transcriptLanguage, setTranscriptLanguage] = useState("ko");
+  const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
+  const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
+  const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
+  const [isStartingRender, setIsStartingRender] = useState(false);
 
   const sourceDuration = source?.metadata?.youtube?.duration_seconds ?? null;
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
+  const topCandidates = analysisJob?.result?.ranking?.top_3 ?? [];
 
   useEffect(() => {
-    if (
-      !downloadJob ||
-      downloadJob.status === "READY" ||
-      downloadJob.status === "FAILED"
-    ) {
-      return;
-    }
-
+    if (isTerminalAnalysis(analysisJob)) return;
+    const job = analysisJob as AnalysisJob;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`${API_URL}/downloads/${downloadJob.id}`, {
+        const response = await fetch(`${API_URL}/processing-jobs/${job.id}`, {
           signal: controller.signal,
         });
-        setDownloadJob(await readJsonResponse<DownloadJob>(response));
+        setAnalysisJob(await readJsonResponse<AnalysisJob>(response));
       } catch (pollError) {
         if (controller.signal.aborted) return;
         const message =
-          pollError instanceof Error
-            ? pollError.message
-            : "다운로드 상태를 확인하지 못했습니다.";
-        setDownloadJob((current) =>
-          current
-            ? { ...current, status: "FAILED", error_message: message }
-            : current,
+          pollError instanceof Error ? pollError.message : "분석 상태를 확인하지 못했습니다.";
+        setAnalysisJob((current) =>
+          current ? { ...current, status: "FAILED", error_message: message } : current,
         );
       }
-    }, 1500);
-
+    }, POLL_INTERVAL_MS);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [downloadJob]);
+  }, [analysisJob]);
+
+  useEffect(() => {
+    if (isTerminalRender(renderJob)) return;
+    const job = renderJob as RenderJob;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_URL}/shorts/${job.id}`, {
+          signal: controller.signal,
+        });
+        setRenderJob(await readJsonResponse<RenderJob>(response));
+      } catch (pollError) {
+        if (controller.signal.aborted) return;
+        const message =
+          pollError instanceof Error ? pollError.message : "렌더 상태를 확인하지 못했습니다.";
+        setRenderJob((current) =>
+          current ? { ...current, status: "failed", error_message: message } : current,
+        );
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [renderJob]);
+
+  function resetForSource(createdSource: Source) {
+    const duration = createdSource.metadata?.youtube?.duration_seconds;
+    setSource(createdSource);
+    setRangeStart(0);
+    setRangeEnd(
+      typeof duration === "number" && duration > 0
+        ? Math.min(duration, DEFAULT_RANGE_SECONDS)
+        : 0,
+    );
+    setAnalysisJob(null);
+    setRenderJob(null);
+    setRightsConfirmed(false);
+    setTemplateId("CLEAN_CAPTION");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -204,23 +290,12 @@ export function SourceInput() {
     if (mode === "url") {
       const cachedSource = readCachedSource(requestedUrl);
       if (cachedSource) {
-        const duration = cachedSource.metadata?.youtube?.duration_seconds;
-        setSource(cachedSource);
-        setRangeStart(0);
-        setRangeEnd(
-          typeof duration === "number" && duration > 0
-            ? Math.min(duration, DEFAULT_RANGE_SECONDS)
-            : 0,
-        );
-        setDownloadJob(null);
-        setRightsConfirmed(false);
-        setTemplateId("CLEAN_CAPTION");
+        resetForSource(cachedSource);
         return;
       }
     }
 
     setIsSubmitting(true);
-
     try {
       let response: Response;
       if (mode === "url") {
@@ -237,21 +312,9 @@ export function SourceInput() {
           body: formData,
         });
       }
-
       const createdSource = await readJsonResponse<Source>(response);
-      const duration = createdSource.metadata?.youtube?.duration_seconds;
-
-      setSource(createdSource);
       if (mode === "url") cacheSource(requestedUrl, createdSource);
-      setRangeStart(0);
-      setRangeEnd(
-        typeof duration === "number" && duration > 0
-          ? Math.min(duration, DEFAULT_RANGE_SECONDS)
-          : 0,
-      );
-      setDownloadJob(null);
-      setRightsConfirmed(false);
-      setTemplateId("CLEAN_CAPTION");
+      resetForSource(createdSource);
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
@@ -263,44 +326,74 @@ export function SourceInput() {
     }
   }
 
-  async function handleRangeDownload() {
+  async function handleAnalyze() {
     if (!source || rangeDuration <= 0 || rangeTooLong || !rightsConfirmed) return;
     setError(null);
-    setDownloadJob(null);
-
-    setIsStartingDownload(true);
+    setAnalysisJob(null);
+    setRenderJob(null);
+    setIsStartingAnalysis(true);
     try {
-      const response = await fetch(`${API_URL}/sources/${source.id}/downloads`, {
+      const response = await fetch(`${API_URL}/processing-jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          source_id: source.id,
+          source_url: url.trim(),
           start_seconds: rangeStart,
           end_seconds: rangeEnd,
           rights_confirmed: true,
           template_id: templateId,
+          transcript_language: transcriptLanguage,
         }),
       });
-      setDownloadJob(await readJsonResponse<DownloadJob>(response));
-    } catch (downloadError) {
+      setAnalysisJob(await readJsonResponse<AnalysisJob>(response));
+    } catch (analysisError) {
       setError(
-        downloadError instanceof Error
-          ? downloadError.message
-          : "선택 구간 다운로드를 시작하지 못했습니다.",
+        analysisError instanceof Error
+          ? analysisError.message
+          : "AI 추천 분석을 시작하지 못했습니다.",
       );
     } finally {
-      setIsStartingDownload(false);
+      setIsStartingAnalysis(false);
+    }
+  }
+
+  async function handleRender(candidate: RankedCandidate) {
+    if (!analysisJob) return;
+    setError(null);
+    setRenderJob(null);
+    setIsStartingRender(true);
+    try {
+      const response = await fetch(`${API_URL}/shorts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          processing_job_id: analysisJob.id,
+          candidate_id: candidate.candidate_id,
+          rights_confirmed: true,
+        }),
+      });
+      setRenderJob(await readJsonResponse<RenderJob>(response));
+    } catch (renderError) {
+      setError(
+        renderError instanceof Error ? renderError.message : "쇼츠 렌더를 시작하지 못했습니다.",
+      );
+    } finally {
+      setIsStartingRender(false);
     }
   }
 
   function updateRangeStart(value: number) {
     setRangeStart(Math.max(0, Math.min(value, rangeEnd - 1)));
-    setDownloadJob(null);
+    setAnalysisJob(null);
+    setRenderJob(null);
   }
 
   function updateRangeEnd(value: number) {
     if (typeof sourceDuration !== "number") return;
     setRangeEnd(Math.min(sourceDuration, Math.max(value, rangeStart + 1)));
-    setDownloadJob(null);
+    setAnalysisJob(null);
+    setRenderJob(null);
   }
 
   const rangeStyle =
@@ -311,12 +404,15 @@ export function SourceInput() {
         } as CSSProperties)
       : undefined;
 
+  const analysisActive = analysisJob !== null && !isTerminalAnalysis(analysisJob);
+  const renderActive = renderJob !== null && !isTerminalRender(renderJob);
+
   return (
     <section className="source-panel" aria-labelledby="source-heading">
       <div className="source-heading">
         <div>
-          <p className="section-label">START WITH ONE SOURCE</p>
-          <h2 id="source-heading">Shorts 원본을 입력하세요</h2>
+          <p className="section-label">AI RECOMMENDED SHORTS</p>
+          <h2 id="source-heading">AI가 추천하는 구간으로 만들기</h2>
         </div>
         <div className="mode-switch" aria-label="Source 입력 방식">
           <button
@@ -381,10 +477,7 @@ export function SourceInput() {
               {source.metadata.youtube.thumbnail_url ? (
                 // The remote host varies by video, so this stays a plain image.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={source.metadata.youtube.thumbnail_url}
-                  alt=""
-                />
+                <img src={source.metadata.youtube.thumbnail_url} alt="" />
               ) : null}
               <div>
                 <h3>{source.metadata.youtube.title ?? "제목 없음"}</h3>
@@ -406,10 +499,10 @@ export function SourceInput() {
             <section className="range-picker" aria-labelledby="range-heading">
               <div className="range-heading-row">
                 <div>
-                  <h3 id="range-heading">사용할 영상 구간</h3>
+                  <h3 id="range-heading">분석할 영상 구간</h3>
                   <p>
-                    시작과 종료 시간을 선택하세요. 분석용 480p로 준비하며 한 번에
-                    최대 60분입니다.
+                    이 구간의 자막을 분석해 15~60초 후보를 만들고 AI Score로 Top 3를
+                    추천합니다. 한 번에 최대 60분입니다.
                   </p>
                 </div>
                 <strong>
@@ -468,9 +561,22 @@ export function SourceInput() {
                 {rangeTooLong ? " · 최대 60분을 초과했습니다." : ""}
               </p>
 
+              <label className="field language-field">
+                <span>영상 언어</span>
+                <select
+                  aria-label="영상 언어"
+                  value={transcriptLanguage}
+                  onChange={(event) => setTranscriptLanguage(event.target.value)}
+                >
+                  <option value="ko">한국어</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                </select>
+              </label>
+
               <fieldset className="template-picker">
-                <legend>쇼츠 템플릿</legend>
-                <p>선택한 스타일은 Task 08 렌더링에서 적용됩니다.</p>
+                <legend>자막 템플릿</legend>
+                <p>선택한 스타일로 자막을 얹어 렌더링합니다.</p>
                 <div className="template-options">
                   {TEMPLATES.map((template) => (
                     <button
@@ -478,10 +584,7 @@ export function SourceInput() {
                       type="button"
                       className="template-card"
                       aria-pressed={templateId === template.id}
-                      onClick={() => {
-                        setTemplateId(template.id);
-                        setDownloadJob(null);
-                      }}
+                      onClick={() => setTemplateId(template.id)}
                     >
                       <span
                         className={`template-preview ${template.previewClassName}`}
@@ -515,35 +618,127 @@ export function SourceInput() {
               <button
                 className="submit-button"
                 type="button"
-                onClick={handleRangeDownload}
+                onClick={handleAnalyze}
                 disabled={
-                  isStartingDownload ||
+                  isStartingAnalysis ||
+                  analysisActive ||
                   rangeDuration <= 0 ||
                   rangeTooLong ||
                   !rightsConfirmed
                 }
               >
-                {isStartingDownload ? "작업 생성 중..." : "480p 분석 구간 준비"}
+                {isStartingAnalysis
+                  ? "분석 시작 중..."
+                  : analysisActive
+                    ? "분석 중..."
+                    : "AI 추천 구간 찾기"}
               </button>
 
-              {downloadJob ? (
+              {analysisJob ? (
                 <div className="download-status" aria-live="polite">
                   <div>
-                    <span>{downloadJob.status}</span>
-                    <strong>{downloadJob.progress}%</strong>
+                    <span>
+                      {analysisJob.status === "COMPLETED"
+                        ? "분석 완료"
+                        : analysisJob.status === "FAILED"
+                          ? "분석 실패"
+                          : ANALYSIS_STEP_LABELS[analysisJob.step]}
+                    </span>
+                    <strong>{analysisJob.progress}%</strong>
                   </div>
-                  <progress max={100} value={downloadJob.progress} />
-                  {downloadJob.status === "FAILED" ? (
+                  <progress max={100} value={analysisJob.progress} />
+                  {analysisJob.status === "FAILED" ? (
                     <p className="range-error">
-                      {downloadJob.error_message ?? "선택 구간 처리에 실패했습니다."}
+                      {analysisJob.error_message ?? "AI 추천 분석에 실패했습니다."}
                     </p>
                   ) : null}
-                  {downloadJob.status === "READY" && downloadJob.download_url ? (
+                </div>
+              ) : null}
+
+              {analysisJob?.status === "COMPLETED" ? (
+                <section className="candidate-list" aria-labelledby="top3-heading">
+                  <h3 id="top3-heading">AI 추천 Top 3</h3>
+                  {topCandidates.length === 0 ? (
+                    <p className="range-help">추천할 후보를 찾지 못했습니다.</p>
+                  ) : null}
+                  {topCandidates.map((candidate) => {
+                    const isSelected = renderJob?.candidate_id === candidate.candidate_id;
+                    return (
+                      <article
+                        key={candidate.candidate_id}
+                        className={isSelected ? "candidate-card selected" : "candidate-card"}
+                      >
+                        <header>
+                          <span className="candidate-rank">#{candidate.rank}</span>
+                          <span className="ai-score">
+                            AI Score <strong>{candidate.ai_score}</strong>
+                          </span>
+                          <span className="candidate-time">
+                            {formatTimecode(candidate.start_seconds)} –{" "}
+                            {formatTimecode(candidate.end_seconds)} ·{" "}
+                            {Math.round(candidate.duration_seconds)}초
+                          </span>
+                        </header>
+                        <p className="candidate-hook">“{candidate.hook_text}”</p>
+                        <p className="candidate-reason">{candidate.reason}</p>
+                        {candidate.strengths.length > 0 ? (
+                          <ul className="candidate-tags">
+                            {candidate.strengths.map((strength) => (
+                              <li key={strength}>{strength}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="submit-button"
+                          onClick={() => handleRender(candidate)}
+                          disabled={isStartingRender || renderActive}
+                        >
+                          {isSelected && renderActive
+                            ? "렌더링 중..."
+                            : "이 구간으로 쇼츠 만들기"}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </section>
+              ) : null}
+
+              {renderJob ? (
+                <div className="download-status" aria-live="polite">
+                  <div>
+                    <span>{RENDER_STATUS_LABELS[renderJob.status]}</span>
+                    <strong>{renderJob.progress}%</strong>
+                  </div>
+                  <progress max={100} value={renderJob.progress} />
+                  <p className="shorts-status-range">
+                    {formatTimecode(renderJob.start_seconds)} –{" "}
+                    {formatTimecode(renderJob.end_seconds)} · {renderJob.template_id}
+                    {renderJob.status === "completed"
+                      ? ` · 자막 ${renderJob.captions_applied}개`
+                      : ""}
+                  </p>
+                  {renderJob.status === "failed" ? (
+                    <p className="range-error">
+                      {renderJob.error_message ?? "쇼츠 렌더에 실패했습니다."}
+                    </p>
+                  ) : null}
+                  {renderJob.status === "completed" && renderJob.preview_url ? (
+                    <video
+                      className="preview-video"
+                      controls
+                      playsInline
+                      preload="metadata"
+                      src={resolveApiUrl(renderJob.preview_url)}
+                      aria-label="완성된 쇼츠 미리보기"
+                    />
+                  ) : null}
+                  {renderJob.status === "completed" && renderJob.download_url ? (
                     <a
                       className="download-button"
-                      href={resolveDownloadUrl(downloadJob.download_url)}
+                      href={resolveApiUrl(renderJob.download_url)}
                     >
-                      분석용 MP4 다운로드
+                      쇼츠 다운로드
                     </a>
                   ) : null}
                 </div>

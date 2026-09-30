@@ -1,22 +1,24 @@
-"""Public API for the manual-range Short: YouTube URL + start/end -> 9:16 MP4.
+"""Public API for rendering a Short: manual range or a ranked candidate -> 9:16 MP4.
 
 This router is a thin facade over the Task 04 processing-job infrastructure. It
 creates a ``SHORT_RENDER`` job, exposes user-facing status, and serves or redirects
-to the finished artifact.
+to the finished artifact for download and inline preview.
 """
 
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
+from app import processing_jobs as jobs
+from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
-from app import processing_jobs as jobs
 from app.processing_jobs import (
     ProcessingJobRecord,
     ProcessingJobStatus,
@@ -42,12 +44,32 @@ class ShortStatus(str, Enum):
 
 
 class CreateShortRequest(BaseModel):
-    youtube_url: HttpUrl = Field(max_length=2048)
-    start_seconds: float = Field(ge=0)
-    end_seconds: float = Field(gt=0)
+    """Either a manual range (``youtube_url`` + times) or a ranked candidate."""
+
+    youtube_url: HttpUrl | None = Field(default=None, max_length=2048)
+    start_seconds: float | None = Field(default=None, ge=0)
+    end_seconds: float | None = Field(default=None, gt=0)
     rights_confirmed: bool = False
-    template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    template_id: RenderTemplate | None = None
     source_id: UUID | None = None
+    processing_job_id: UUID | None = None
+    candidate_id: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _one_input_mode(self) -> "CreateShortRequest":
+        from_candidate = self.processing_job_id is not None or self.candidate_id is not None
+        manual = self.youtube_url is not None or self.start_seconds is not None or (
+            self.end_seconds is not None
+        )
+        if from_candidate and manual:
+            raise ValueError("processing_job_id/candidate_id와 직접 구간 입력은 함께 쓸 수 없습니다.")
+        if from_candidate and (self.processing_job_id is None or not self.candidate_id):
+            raise ValueError("processing_job_id와 candidate_id를 함께 입력해 주세요.")
+        if not from_candidate and (
+            self.youtube_url is None or self.start_seconds is None or self.end_seconds is None
+        ):
+            raise ValueError("youtube_url, start_seconds, end_seconds를 입력해 주세요.")
+        return self
 
 
 class ShortJobResponse(BaseModel):
@@ -59,8 +81,12 @@ class ShortJobResponse(BaseModel):
     end_seconds: float
     duration_seconds: float
     template_id: RenderTemplate
+    candidate_id: str | None
+    processing_job_id: UUID | None
     download_url: str | None
+    preview_url: str | None
     download_expires_at: datetime | None
+    captions_applied: int = 0
     error_message: str | None
     created_at: datetime
     updated_at: datetime
@@ -91,14 +117,21 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         short_status = ShortStatus.QUEUED
 
     download_url = None
+    preview_url = None
     expires_at = None
+    captions_applied = 0
     if short_status == ShortStatus.COMPLETED:
         short = _short_result(job)
         download_url = short.get("download_url") or f"/shorts/{job.id}/file"
+        preview_url = short.get("preview_url") or f"/shorts/{job.id}/file?inline=true"
         raw_expires = short.get("expires_at")
         if isinstance(raw_expires, str):
             expires_at = datetime.fromisoformat(raw_expires)
+        if isinstance(short.get("captions_applied"), int):
+            captions_applied = short["captions_applied"]
 
+    render_input = job.render_input or {}
+    processing_job_id = render_input.get("processing_job_id")
     return ShortJobResponse(
         id=job.id,
         status=short_status,
@@ -108,8 +141,12 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         end_seconds=job.end_seconds,
         duration_seconds=job.duration_seconds,
         template_id=job.template_id,
+        candidate_id=render_input.get("candidate_id"),
+        processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
+        preview_url=preview_url,
         download_expires_at=expires_at,
+        captions_applied=captions_applied,
         error_message=job.error_message if short_status == ShortStatus.FAILED else None,
         created_at=job.created_at,
         updated_at=job.updated_at,
@@ -127,64 +164,130 @@ def _get_short_job(job_id: UUID) -> ProcessingJobRecord:
     return job
 
 
+def _unprocessable(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail)
+
+
+def _resolve_candidate(
+    payload: CreateShortRequest,
+) -> tuple[str, float, float, RenderTemplate, UUID, dict[str, Any]]:
+    """Derive URL, range, template, and captions from a completed analysis job."""
+    analysis = jobs.repository.get(payload.processing_job_id)  # type: ignore[arg-type]
+    if analysis is None or analysis.step == ProcessingStep.SHORT_RENDER:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Processing job not found."
+        )
+    if analysis.status != ProcessingJobStatus.COMPLETED or not analysis.result:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="후보 분석이 완료된 뒤에 쇼츠를 만들 수 있습니다.",
+        )
+    candidate_set = analysis.result.get("candidates") or {}
+    candidate = next(
+        (
+            item
+            for item in candidate_set.get("items", [])
+            if isinstance(item, dict) and item.get("id") == payload.candidate_id
+        ),
+        None,
+    )
+    if candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found."
+        )
+    transcript = analysis.result.get("transcript") or {}
+    captions = []
+    for segment in transcript.get("segments", []):
+        if not isinstance(segment, dict):
+            continue
+        if (
+            segment.get("end_seconds", 0) <= candidate["start_seconds"]
+            or segment.get("start_seconds", 0) >= candidate["end_seconds"]
+        ):
+            continue
+        # Sound tags and speaker marks are not speech; keep them off the screen too.
+        text = clean_caption_text(str(segment.get("text") or ""))
+        if not text:
+            continue
+        captions.append(
+            {
+                "start_seconds": segment["start_seconds"],
+                "end_seconds": segment["end_seconds"],
+                "text": text,
+            }
+        )
+    template = payload.template_id or analysis.template_id
+    render_input = {
+        "processing_job_id": str(analysis.id),
+        "candidate_id": candidate["id"],
+        "candidate_index": candidate.get("index"),
+        "captions": captions,
+    }
+    return (
+        analysis.source_url,
+        float(candidate["start_seconds"]),
+        float(candidate["end_seconds"]),
+        template,
+        analysis.source_id,
+        render_input,
+    )
+
+
 @router.post("", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_short(
     payload: CreateShortRequest, background_tasks: BackgroundTasks
 ) -> ShortJobResponse:
     settings = get_settings()
-    if not _is_youtube_url(payload.youtube_url):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="YouTube 영상 URL을 입력해 주세요.",
-        )
     if not payload.rights_confirmed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="원본 영상에 대한 소유권 또는 필요한 이용 허가를 확인해야 합니다.",
-        )
-    duration = payload.end_seconds - payload.start_seconds
-    if duration <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="종료 시간은 시작 시간보다 커야 합니다.",
-        )
-    if duration > settings.shorts_max_clip_seconds:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"쇼츠 길이는 최대 {settings.shorts_max_clip_seconds}초까지 가능합니다.",
-        )
-    if payload.source_id is not None:
-        source = source_repository.get(payload.source_id)
-        if (
-            source is not None
-            and source.type == SourceType.YOUTUBE
-            and source.status == SourceStatus.READY
-        ):
-            source_duration = source.metadata.get("youtube", {}).get("duration_seconds")
+        raise _unprocessable("원본 영상에 대한 소유권 또는 필요한 이용 허가를 확인해야 합니다.")
+
+    render_input: dict[str, Any] | None = None
+    if payload.processing_job_id is not None:
+        source_url, start, end, template, source_id, render_input = _resolve_candidate(payload)
+    else:
+        assert payload.youtube_url is not None
+        assert payload.start_seconds is not None and payload.end_seconds is not None
+        if not _is_youtube_url(payload.youtube_url):
+            raise _unprocessable("YouTube 영상 URL을 입력해 주세요.")
+        source_url = str(payload.youtube_url)
+        start, end = payload.start_seconds, payload.end_seconds
+        template = payload.template_id or RenderTemplate.CLEAN_CAPTION
+        source_id = payload.source_id or uuid4()
+        if payload.source_id is not None:
+            source = source_repository.get(payload.source_id)
             if (
-                isinstance(source_duration, (int, float))
-                and payload.end_seconds > source_duration
+                source is not None
+                and source.type == SourceType.YOUTUBE
+                and source.status == SourceStatus.READY
             ):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="선택한 종료 시간이 원본 영상 길이를 초과합니다.",
-                )
+                source_duration = source.metadata.get("youtube", {}).get("duration_seconds")
+                if isinstance(source_duration, (int, float)) and end > source_duration:
+                    raise _unprocessable("선택한 종료 시간이 원본 영상 길이를 초과합니다.")
+
+    duration = end - start
+    if duration <= 0:
+        raise _unprocessable("종료 시간은 시작 시간보다 커야 합니다.")
+    if duration > settings.shorts_max_clip_seconds:
+        raise _unprocessable(
+            f"쇼츠 길이는 최대 {settings.shorts_max_clip_seconds}초까지 가능합니다."
+        )
 
     now = _now()
     job = ProcessingJobRecord(
         id=uuid4(),
-        source_id=payload.source_id or uuid4(),
-        source_url=str(payload.youtube_url),
+        source_id=source_id,
+        source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.SHORT_RENDER,
         progress=0,
-        start_seconds=payload.start_seconds,
-        end_seconds=payload.end_seconds,
+        start_seconds=start,
+        end_seconds=end,
         duration_seconds=duration,
-        template_id=payload.template_id,
+        template_id=template,
         attempt_count=0,
         error_message=None,
         result=None,
+        render_input=render_input,
         created_at=now,
         updated_at=now,
         started_at=None,
@@ -199,7 +302,7 @@ def get_short(job_id: UUID) -> ShortJobResponse:
 
 
 @router.get("/{job_id}/file")
-def download_short_file(job_id: UUID):
+def download_short_file(job_id: UUID, inline: bool = False):
     job = _get_short_job(job_id)
     if job.status != ProcessingJobStatus.COMPLETED:
         raise HTTPException(
@@ -207,7 +310,7 @@ def download_short_file(job_id: UUID):
             detail="쇼츠 영상이 아직 준비되지 않았습니다.",
         )
     short = _short_result(job)
-    signed_url = short.get("download_url")
+    signed_url = short.get("preview_url" if inline else "download_url")
     if isinstance(signed_url, str) and signed_url.startswith("https://"):
         return RedirectResponse(signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
@@ -223,4 +326,5 @@ def download_short_file(job_id: UUID):
         path=local_path,
         media_type="video/mp4",
         filename=f"cutpick-short-{start}-{end}.mp4",
+        content_disposition_type="inline" if inline else "attachment",
     )

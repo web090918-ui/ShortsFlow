@@ -202,12 +202,21 @@ Implementation status:
 
 ## Task 08 — Preview and Render
 
+Status: Implemented — Cloud Run validation pending
+
 - Let the user inspect the Top 3 and select one candidate.
 - Apply the previously selected MVP caption template (`CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`).
 - Render the selected candidate as a basic 9:16 Short.
 - Provide a preview of the completed render.
 - Track render state and failure details.
 - Do not build an advanced timeline editor or advanced auto reframe.
+
+Implementation status:
+
+- `POST /shorts` accepts `processing_job_id` + `candidate_id`; the server resolves the range, template, and transcript cues from the completed analysis job and reuses the Task 05B render pipeline.
+- Captions are written as an ASS file per template (NanumGothic, three style presets) and burned by FFmpeg in the same pass as the trim and 9:16 crop.
+- Responses carry `preview_url` (inline) and `download_url`; the frontend shows the Top 3 with `AI Score` and reasons, renders the chosen clip, and plays it in a `<video>` element.
+- Real-FFmpeg frame checks confirmed Korean captions for all templates. See [Task 08](TASK_08_RENDER.md).
 
 ## Task 09 — Download UX
 

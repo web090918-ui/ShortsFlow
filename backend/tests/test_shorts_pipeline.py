@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from app.acquisition import AcquiredVideo, AcquisitionError
+from app.captions import CaptionCue
+from app.downloads import RenderTemplate
 from app.shorts_pipeline import (
     LocalArtifactStorage,
     ShortErrorCode,
@@ -48,10 +50,20 @@ class StubProcessor:
     def convert_to_vertical(self, input_path, output_path):
         raise AssertionError("pipeline should use the single-pass render")
 
-    def trim_to_vertical(self, input_path, output_path, *, start_seconds, end_seconds):
+    def trim_to_vertical(
+        self, input_path, output_path, *, start_seconds, end_seconds, subtitles_path=None
+    ):
         if self.fail:
             raise VideoProcessingError("boom")
-        self.calls.append({"start": start_seconds, "end": end_seconds})
+        self.calls.append(
+            {
+                "start": start_seconds,
+                "end": end_seconds,
+                "subtitles": subtitles_path.read_text(encoding="utf-8")
+                if subtitles_path is not None
+                else None,
+            }
+        )
         output_path.write_bytes(b"short")
 
 
@@ -99,13 +111,62 @@ def test_pipeline_acquires_renders_stores_and_cleans_up() -> None:
     assert artifact.download_url == "https://example.com/short.mp4"
     assert artifact.source_duration_seconds == 120
     assert artifact.output_bytes == len(b"short")
-    assert processor.calls == [{"start": 10.0, "end": 40.0}]
+    assert artifact.captions_applied == 0
+    assert artifact.template_id is None
+    assert processor.calls == [{"start": 10.0, "end": 40.0, "subtitles": None}]
     assert [stage for stage, _ in stages][:1] == [ShortStage.DOWNLOADING]
     assert ShortStage.PROCESSING in {stage for stage, _ in stages}
     assert ShortStage.UPLOADING in {stage for stage, _ in stages}
     # Temporary media is removed after the attempt.
     assert not provider.destinations[0].exists()
     assert not provider.destinations[0].parent.exists()
+
+
+def test_pipeline_burns_template_captions_for_the_clip_range() -> None:
+    processor = StubProcessor()
+    pipeline = ShortPipeline(StubProvider(), processor, StubStorage())
+    captions = [
+        CaptionCue(start_seconds=5, end_seconds=12, text="앞부분"),
+        CaptionCue(start_seconds=12, end_seconds=20, text="본문 자막"),
+        CaptionCue(start_seconds=50, end_seconds=55, text="범위 밖"),
+    ]
+
+    artifact = pipeline.run(
+        job_id="job-2",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10,
+        end_seconds=40,
+        report=lambda stage, progress: None,
+        captions=captions,
+        template=RenderTemplate.MINIMAL,
+    )
+
+    assert artifact.captions_applied == 2
+    assert artifact.template_id == "MINIMAL"
+    ass = processor.calls[0]["subtitles"]
+    assert ass is not None
+    assert "Style: Default,NanumGothic,48," in ass
+    assert "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,앞부분" in ass
+    assert "Dialogue: 0,0:00:02.00,0:00:10.00,Default,,0,0,0,,본문 자막" in ass
+    assert "범위 밖" not in ass
+
+
+def test_pipeline_skips_subtitles_when_no_caption_overlaps_clip() -> None:
+    processor = StubProcessor()
+    pipeline = ShortPipeline(StubProvider(), processor, StubStorage())
+
+    artifact = pipeline.run(
+        job_id="job-3",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10,
+        end_seconds=40,
+        report=lambda stage, progress: None,
+        captions=[CaptionCue(start_seconds=90, end_seconds=95, text="나중")],
+        template=RenderTemplate.CLEAN_CAPTION,
+    )
+
+    assert artifact.captions_applied == 0
+    assert processor.calls[0]["subtitles"] is None
 
 
 def test_pipeline_rejects_range_past_actual_duration_without_retry() -> None:

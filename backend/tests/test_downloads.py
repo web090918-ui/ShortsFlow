@@ -195,7 +195,9 @@ class StubProcessor:
     def convert_to_vertical(self, input_path, output_path):
         raise AssertionError("not used")
 
-    def trim_to_vertical(self, input_path, output_path, *, start_seconds, end_seconds):
+    def trim_to_vertical(
+        self, input_path, output_path, *, start_seconds, end_seconds, subtitles_path=None
+    ):
         raise AssertionError("not used")
 
 

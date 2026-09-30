@@ -29,9 +29,26 @@ class StubShortPipeline:
         self.error = error
         self.calls: list[dict] = []
 
-    def run(self, *, job_id, source_url, start_seconds, end_seconds, report):
+    def run(
+        self,
+        *,
+        job_id,
+        source_url,
+        start_seconds,
+        end_seconds,
+        report,
+        captions=None,
+        template=None,
+    ):
         self.calls.append(
-            {"job_id": job_id, "url": source_url, "start": start_seconds, "end": end_seconds}
+            {
+                "job_id": job_id,
+                "url": source_url,
+                "start": start_seconds,
+                "end": end_seconds,
+                "captions": [cue.text for cue in captions] if captions else None,
+                "template": template,
+            }
         )
         report(ShortStage.DOWNLOADING, 10)
         if self.error is not None:
@@ -143,6 +160,8 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "url": "https://www.youtube.com/watch?v=abc123",
             "start": 135,
             "end": 185,
+            "captions": None,
+            "template": None,
         }
     ]
 
@@ -210,6 +229,135 @@ def test_retryable_failure_requeues_until_last_attempt(monkeypatch, tmp_path) ->
     short = client.get(f"/shorts/{created['id']}").json()
     assert short["status"] == "failed"
     assert short["error_message"] == "다운로드 실패"
+
+
+def _completed_analysis_job(repository, *, template="BOLD_HIGHLIGHT"):
+    """Persist a finished transcript/candidate/ranking job like the Worker would."""
+    from datetime import datetime, timezone
+
+    from app.processing_jobs import ProcessingJobRecord, ProcessingStep
+
+    now = datetime.now(timezone.utc)
+    job = ProcessingJobRecord(
+        id=uuid4(),
+        source_id=uuid4(),
+        source_url="https://www.youtube.com/watch?v=analysis1",
+        status="COMPLETED",
+        step=ProcessingStep.RANKING,
+        progress=100,
+        start_seconds=0,
+        end_seconds=600,
+        duration_seconds=600,
+        template_id=template,
+        attempt_count=1,
+        error_message=None,
+        result={
+            "next_step": "RENDER",
+            "transcript": {
+                "segments": [
+                    {"start_seconds": 95, "end_seconds": 101, "text": "이전 문장"},
+                    {"start_seconds": 101, "end_seconds": 110, "text": ">> 후보 안 첫 문장 [음악]"},
+                    {"start_seconds": 110, "end_seconds": 120, "text": "[음악]"},
+                    {"start_seconds": 120, "end_seconds": 150, "text": "후보 안 둘째 문장"},
+                    {"start_seconds": 170, "end_seconds": 180, "text": "후보 밖"},
+                ]
+            },
+            "candidates": {
+                "items": [
+                    {"id": "cand-a", "index": 1, "start_seconds": 100, "end_seconds": 155},
+                    {"id": "cand-b", "index": 2, "start_seconds": 300, "end_seconds": 340},
+                ]
+            },
+            "ranking": {"top_3": []},
+        },
+        created_at=now,
+        updated_at=now,
+        started_at=now,
+        completed_at=now,
+    )
+    repository.save(job)
+    return job
+
+
+def test_creates_short_from_ranked_candidate_with_captions(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+
+    response = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 202
+    created = response.json()
+    assert created["youtube_url"] == "https://www.youtube.com/watch?v=analysis1"
+    assert created["start_seconds"] == 100
+    assert created["end_seconds"] == 155
+    assert created["template_id"] == "BOLD_HIGHLIGHT"
+    assert created["candidate_id"] == "cand-a"
+    assert created["processing_job_id"] == str(analysis.id)
+
+    worker = _run_worker(created["id"])
+    assert worker.status_code == 200
+    call = pipeline.calls[0]
+    assert call["start"] == 100 and call["end"] == 155
+    assert call["template"] == "BOLD_HIGHLIGHT"
+    # Only cues overlapping the candidate reach the renderer.
+    assert call["captions"] == ["이전 문장", "후보 안 첫 문장", "후보 안 둘째 문장"]
+
+    short = client.get(f"/shorts/{created['id']}").json()
+    assert short["status"] == "completed"
+    assert short["preview_url"] == f"/shorts/{created['id']}/file?inline=true"
+
+    inline = client.get(short["preview_url"])
+    assert inline.status_code == 200
+    assert inline.headers["content-disposition"].startswith("inline")
+
+
+def test_candidate_render_validates_inputs(isolated_jobs) -> None:
+    analysis = _completed_analysis_job(isolated_jobs)
+
+    mixed = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "youtube_url": "https://youtu.be/x",
+            "rights_confirmed": True,
+        },
+    )
+    assert mixed.status_code == 422
+
+    missing_candidate = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "nope",
+            "rights_confirmed": True,
+        },
+    )
+    assert missing_candidate.status_code == 404
+
+    unknown_job = client.post(
+        "/shorts",
+        json={"processing_job_id": str(uuid4()), "candidate_id": "cand-a", "rights_confirmed": True},
+    )
+    assert unknown_job.status_code == 404
+
+    incomplete = isolated_jobs.get(analysis.id).model_copy(update={"status": "QUEUED"})
+    isolated_jobs.save(incomplete)
+    not_ready = client.post(
+        "/shorts",
+        json={"processing_job_id": str(analysis.id), "candidate_id": "cand-a", "rights_confirmed": True},
+    )
+    assert not_ready.status_code == 409
 
 
 def test_file_download_requires_completed_job() -> None:

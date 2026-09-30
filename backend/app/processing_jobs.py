@@ -20,6 +20,7 @@ from app.shorts_pipeline import (
 )
 from app.acquisition import titan_provider_from_settings
 from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
+from app.captions import CaptionCue
 from app.ranking import CandidateRanker, HeuristicRanker, OpenAIRanker
 from app.sources import SourceStatus, repository as source_repository
 from app.transcripts import (
@@ -93,6 +94,8 @@ class ProcessingJobRecord(ProcessingJobResponse):
     source_url: str
     task_name: str | None = None
     lease_expires_at: datetime | None = None
+    # Step inputs not exposed on the API, e.g. captions for a SHORT_RENDER job.
+    render_input: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -526,12 +529,21 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
                 )
             )
 
+        render_input = job.render_input or {}
+        raw_captions = render_input.get("captions")
+        captions = (
+            [CaptionCue.model_validate(cue) for cue in raw_captions]
+            if isinstance(raw_captions, list)
+            else None
+        )
         artifact = short_pipeline.run(
             job_id=str(job.id),
             source_url=job.source_url,
             start_seconds=job.start_seconds,
             end_seconds=job.end_seconds,
             report=report,
+            captions=captions,
+            template=job.template_id if captions else None,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
