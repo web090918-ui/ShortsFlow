@@ -5,39 +5,13 @@ import type { FormEvent } from "react";
 
 import { API_URL } from "@/config";
 import { formatTimecode, parseTimecode } from "@/lib/timecode";
+import { RenderResult } from "@/components/render-result";
+import type { RenderJob } from "@/components/render-result";
 
 export const MAX_CLIP_SECONDS = 180;
 const POLL_INTERVAL_MS = 1500;
 
-type ShortStatus =
-  | "queued"
-  | "downloading"
-  | "processing"
-  | "uploading"
-  | "completed"
-  | "failed";
-
-export type ShortJob = {
-  id: string;
-  status: ShortStatus;
-  progress: number;
-  youtube_url: string;
-  start_seconds: number;
-  end_seconds: number;
-  duration_seconds: number;
-  download_url: string | null;
-  download_expires_at: string | null;
-  error_message: string | null;
-};
-
-const STATUS_LABELS: Record<ShortStatus, string> = {
-  queued: "대기 중",
-  downloading: "원본 영상 확보 중",
-  processing: "구간 자르기 · 9:16 변환 중",
-  uploading: "완성 파일 저장 중",
-  completed: "완료",
-  failed: "실패",
-};
+export type ShortJob = RenderJob;
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json();
@@ -46,11 +20,6 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
     throw new Error(detail ?? "요청을 처리하지 못했습니다.");
   }
   return payload as T;
-}
-
-function resolveDownloadUrl(downloadUrl: string) {
-  if (/^https:\/\//i.test(downloadUrl)) return downloadUrl;
-  return `${API_URL}${downloadUrl}`;
 }
 
 function isYouTubeUrl(value: string) {
@@ -77,6 +46,13 @@ export function validateRange(startText: string, endText: string) {
   return { start, end, error: null };
 }
 
+type RenderRequest = {
+  youtube_url: string;
+  start_seconds: number;
+  end_seconds: number;
+  rights_confirmed: true;
+};
+
 export function ShortsCreator() {
   const [url, setUrl] = useState("");
   const [startText, setStartText] = useState("00:00:00");
@@ -85,6 +61,7 @@ export function ShortsCreator() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ShortJob | null>(null);
+  const [lastRequest, setLastRequest] = useState<RenderRequest | null>(null);
 
   const range = validateRange(startText, endText);
   const rangeDuration =
@@ -106,7 +83,9 @@ export function ShortsCreator() {
         const message =
           pollError instanceof Error ? pollError.message : "작업 상태를 확인하지 못했습니다.";
         setJob((current) =>
-          current ? { ...current, status: "failed", error_message: message } : current,
+          current
+            ? { ...current, status: "failed", artifact_state: "failed", error_message: message }
+            : current,
         );
       }
     }, POLL_INTERVAL_MS);
@@ -116,6 +95,27 @@ export function ShortsCreator() {
       window.clearTimeout(timer);
     };
   }, [job]);
+
+  async function submitRender(request: RenderRequest) {
+    setError(null);
+    setIsSubmitting(true);
+    setJob(null);
+    setLastRequest(request);
+    try {
+      const response = await fetch(`${API_URL}/shorts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      setJob(await readJsonResponse<ShortJob>(response));
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "쇼츠 생성을 시작하지 못했습니다.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,27 +135,16 @@ export function ShortsCreator() {
       return;
     }
 
-    setIsSubmitting(true);
-    setJob(null);
-    try {
-      const response = await fetch(`${API_URL}/shorts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          youtube_url: requestedUrl,
-          start_seconds: range.start,
-          end_seconds: range.end,
-          rights_confirmed: true,
-        }),
-      });
-      setJob(await readJsonResponse<ShortJob>(response));
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "쇼츠 생성을 시작하지 못했습니다.",
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
+    await submitRender({
+      youtube_url: requestedUrl,
+      start_seconds: range.start,
+      end_seconds: range.end,
+      rights_confirmed: true,
+    });
+  }
+
+  function handleRetry() {
+    if (lastRequest) void submitRender(lastRequest);
   }
 
   return (
@@ -241,25 +230,7 @@ export function ShortsCreator() {
       ) : null}
 
       {job ? (
-        <div className="download-status shorts-status" aria-live="polite">
-          <div>
-            <span>{STATUS_LABELS[job.status]}</span>
-            <strong>{job.progress}%</strong>
-          </div>
-          <progress max={100} value={job.progress} />
-          <p className="shorts-status-range">
-            {formatTimecode(job.start_seconds)} – {formatTimecode(job.end_seconds)} ·{" "}
-            {formatTimecode(job.duration_seconds)}
-          </p>
-          {job.status === "failed" ? (
-            <p className="range-error">{job.error_message ?? "쇼츠 생성에 실패했습니다."}</p>
-          ) : null}
-          {job.status === "completed" && job.download_url ? (
-            <a className="download-button" href={resolveDownloadUrl(job.download_url)}>
-              쇼츠 다운로드
-            </a>
-          ) : null}
-        </div>
+        <RenderResult job={job} onRetry={handleRetry} retryDisabled={isSubmitting} />
       ) : null}
     </section>
   );

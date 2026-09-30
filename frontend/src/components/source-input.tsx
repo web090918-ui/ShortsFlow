@@ -5,6 +5,8 @@ import type { CSSProperties, FormEvent } from "react";
 
 import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
+import { RenderResult } from "@/components/render-result";
+import type { RenderJob } from "@/components/render-result";
 
 type InputMode = "url" | "upload";
 type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
@@ -49,21 +51,6 @@ type AnalysisJob = {
   } | null;
 };
 
-type RenderJob = {
-  id: string;
-  status: "queued" | "downloading" | "processing" | "uploading" | "completed" | "failed";
-  progress: number;
-  start_seconds: number;
-  end_seconds: number;
-  duration_seconds: number;
-  template_id: TemplateId;
-  candidate_id: string | null;
-  download_url: string | null;
-  preview_url: string | null;
-  captions_applied: number;
-  error_message: string | null;
-};
-
 const DEFAULT_RANGE_SECONDS = 15 * 60;
 const MAX_RANGE_SECONDS = 60 * 60;
 const POLL_INTERVAL_MS = 1500;
@@ -101,14 +88,6 @@ const ANALYSIS_STEP_LABELS: Record<AnalysisJob["step"], string> = {
   RANKING: "AI Score 매기는 중",
   SHORT_RENDER: "렌더링 중",
 };
-const RENDER_STATUS_LABELS: Record<RenderJob["status"], string> = {
-  queued: "대기 중",
-  downloading: "원본 영상 확보 중",
-  processing: "구간 자르기 · 자막 · 9:16 변환 중",
-  uploading: "완성 파일 저장 중",
-  completed: "완료",
-  failed: "실패",
-};
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json();
@@ -124,11 +103,6 @@ function formatDuration(seconds?: number | null) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
-
-function resolveApiUrl(url: string) {
-  if (/^https:\/\//i.test(url)) return url;
-  return `${API_URL}${url}`;
 }
 
 function sourceCacheKey(url: string) {
@@ -205,6 +179,7 @@ export function SourceInput() {
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [isStartingRender, setIsStartingRender] = useState(false);
+  const [lastCandidate, setLastCandidate] = useState<RankedCandidate | null>(null);
 
   const sourceDuration = source?.metadata?.youtube?.duration_seconds ?? null;
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
@@ -251,7 +226,9 @@ export function SourceInput() {
         const message =
           pollError instanceof Error ? pollError.message : "렌더 상태를 확인하지 못했습니다.";
         setRenderJob((current) =>
-          current ? { ...current, status: "failed", error_message: message } : current,
+          current
+            ? { ...current, status: "failed", artifact_state: "failed", error_message: message }
+            : current,
         );
       }
     }, POLL_INTERVAL_MS);
@@ -362,6 +339,7 @@ export function SourceInput() {
     if (!analysisJob) return;
     setError(null);
     setRenderJob(null);
+    setLastCandidate(candidate);
     setIsStartingRender(true);
     try {
       const response = await fetch(`${API_URL}/shorts`, {
@@ -705,43 +683,13 @@ export function SourceInput() {
               ) : null}
 
               {renderJob ? (
-                <div className="download-status" aria-live="polite">
-                  <div>
-                    <span>{RENDER_STATUS_LABELS[renderJob.status]}</span>
-                    <strong>{renderJob.progress}%</strong>
-                  </div>
-                  <progress max={100} value={renderJob.progress} />
-                  <p className="shorts-status-range">
-                    {formatTimecode(renderJob.start_seconds)} –{" "}
-                    {formatTimecode(renderJob.end_seconds)} · {renderJob.template_id}
-                    {renderJob.status === "completed"
-                      ? ` · 자막 ${renderJob.captions_applied}개`
-                      : ""}
-                  </p>
-                  {renderJob.status === "failed" ? (
-                    <p className="range-error">
-                      {renderJob.error_message ?? "쇼츠 렌더에 실패했습니다."}
-                    </p>
-                  ) : null}
-                  {renderJob.status === "completed" && renderJob.preview_url ? (
-                    <video
-                      className="preview-video"
-                      controls
-                      playsInline
-                      preload="metadata"
-                      src={resolveApiUrl(renderJob.preview_url)}
-                      aria-label="완성된 쇼츠 미리보기"
-                    />
-                  ) : null}
-                  {renderJob.status === "completed" && renderJob.download_url ? (
-                    <a
-                      className="download-button"
-                      href={resolveApiUrl(renderJob.download_url)}
-                    >
-                      쇼츠 다운로드
-                    </a>
-                  ) : null}
-                </div>
+                <RenderResult
+                  job={renderJob}
+                  onRetry={() => {
+                    if (lastCandidate) void handleRender(lastCandidate);
+                  }}
+                  retryDisabled={isStartingRender}
+                />
               ) : null}
             </section>
           ) : null}

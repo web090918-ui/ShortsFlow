@@ -18,7 +18,12 @@ const baseJob = {
   end_seconds: 185,
   duration_seconds: 50,
   download_url: null,
+  preview_url: null,
   download_expires_at: null,
+  artifact_state: "pending" as const,
+  template_id: "CLEAN_CAPTION" as const,
+  candidate_id: null,
+  captions_applied: 0,
   error_message: null,
 };
 
@@ -51,6 +56,7 @@ describe("ShortsCreator", () => {
           ...baseJob,
           status: "completed",
           progress: 100,
+          artifact_state: "ready",
           download_url: `/shorts/${baseJob.id}/file`,
         }),
       );
@@ -79,7 +85,7 @@ describe("ShortsCreator", () => {
       }),
     );
 
-    const link = await screen.findByRole("link", { name: "쇼츠 다운로드" }, { timeout: 4000 });
+    const link = await screen.findByRole("link", { name: /쇼츠 다운로드/ }, { timeout: 4000 });
     expect(link.getAttribute("href")).toBe(`http://localhost:8000/shorts/${baseJob.id}/file`);
     expect(screen.getByText("완료")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -114,6 +120,7 @@ describe("ShortsCreator", () => {
           ...baseJob,
           status: "failed",
           progress: 10,
+          artifact_state: "failed",
           error_message: "선택한 종료 시간이 원본 영상 길이를 초과합니다.",
         }),
       );
@@ -132,6 +139,6 @@ describe("ShortsCreator", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText("실패")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "쇼츠 다운로드" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /쇼츠 다운로드/ })).toBeNull();
   });
 });

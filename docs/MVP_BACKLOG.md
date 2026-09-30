@@ -221,9 +221,17 @@ Implementation status:
 
 ## Task 09 — Download UX
 
+Status: Implemented — Cloud Run state check pending
+
 - Provide a clear download action for the completed render.
 - Handle unavailable, expired, and failed artifacts with useful UI states.
 - Complete the YouTube URL to downloadable Short end-to-end acceptance path.
+
+Implementation status:
+
+- `GET /shorts/{id}` reports `artifact_state` (`pending`, `ready`, `expired`, `unavailable`, `failed`) from the link TTL and `ArtifactStorage.exists`; links are only returned when `ready`, and `/file` answers `410` with a distinct message for expired and removed artifacts.
+- A shared `RenderResult` component renders every state in both panels: inline preview plus "쇼츠 다운로드 (MP4)" with the expiry time, "다시 만들기" for expired or removed artifacts, "다시 시도" for failures. Expiry is re-checked client-side every 30 seconds.
+- Both end-to-end acceptance paths (manual range on 2026-09-29, AI Top 3 on 2026-09-30) are recorded in [Task 09](TASK_09_DOWNLOAD.md).
 
 ## Task 10 — Product/Affiliate Flow
 

@@ -792,3 +792,14 @@ h2 {
   background: #000;
   aspect-ratio: 9 / 16;
 }
+
+.secondary-button {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.download-expiry {
+  margin: 0;
+  text-align: center;
+}

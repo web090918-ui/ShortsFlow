@@ -72,12 +72,19 @@ class StoredArtifact:
 class ArtifactStorage(Protocol):
     def store(self, file_path: Path, *, key: str, filename: str) -> StoredArtifact: ...
 
+    def exists(self, key: str) -> bool:
+        """Whether the stored artifact is still there (lifecycle rules may remove it)."""
+        ...
+
 
 class LocalArtifactStorage:
     """Keeps rendered Shorts on the local disk; the API serves them by job id."""
 
     def __init__(self, root: Path) -> None:
         self._root = root
+
+    def exists(self, key: str) -> bool:
+        return (self._root / key).is_file()
 
     def store(self, file_path: Path, *, key: str, filename: str) -> StoredArtifact:
         destination = self._root / key
@@ -98,6 +105,13 @@ class GcsArtifactStorage:
     def __init__(self, client: Any, bucket_name: str, *, ttl_seconds: int) -> None:
         self._bucket = client.bucket(bucket_name)
         self._ttl_seconds = ttl_seconds
+
+    def exists(self, key: str) -> bool:
+        try:
+            return bool(self._bucket.blob(key).exists())
+        except Exception as exc:  # network or permission trouble: report unavailable
+            logger.warning("Could not check artifact %s: %s", key, exc)
+            return False
 
     def _signed_url(self, blob: Any, filename: str, *, inline: bool = False) -> str:
         disposition = "inline" if inline else f'attachment; filename="{filename}"'
@@ -173,6 +187,10 @@ class ShortPipeline:
     @property
     def provider_name(self) -> str:
         return self._provider.name
+
+    @property
+    def storage(self) -> ArtifactStorage:
+        return self._storage
 
     def run(
         self,

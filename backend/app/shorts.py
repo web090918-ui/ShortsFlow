@@ -8,7 +8,7 @@ to the finished artifact for download and inline preview.
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
@@ -72,6 +72,9 @@ class CreateShortRequest(BaseModel):
         return self
 
 
+ArtifactState = Literal["pending", "ready", "expired", "unavailable", "failed"]
+
+
 class ShortJobResponse(BaseModel):
     id: UUID
     status: ShortStatus
@@ -86,11 +89,30 @@ class ShortJobResponse(BaseModel):
     download_url: str | None
     preview_url: str | None
     download_expires_at: datetime | None
+    # pending: still rendering; ready: downloadable; expired: link TTL passed;
+    # unavailable: artifact removed from storage; failed: render failed.
+    artifact_state: ArtifactState
     captions_applied: int = 0
     error_message: str | None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+
+
+def _artifact_state(job: ProcessingJobRecord, short_status: "ShortStatus") -> ArtifactState:
+    if short_status == ShortStatus.FAILED:
+        return "failed"
+    if short_status != ShortStatus.COMPLETED:
+        return "pending"
+    short = _short_result(job)
+    raw_expires = short.get("expires_at")
+    if isinstance(raw_expires, str) and datetime.fromisoformat(raw_expires) <= _now():
+        return "expired"
+    storage = getattr(jobs.short_pipeline, "storage", None)
+    key = short.get("storage_key")
+    if storage is not None and isinstance(key, str) and not storage.exists(key):
+        return "unavailable"
+    return "ready"
 
 
 _STAGE_STATUS = {
@@ -123,15 +145,17 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
     preview_url = None
     expires_at = None
     captions_applied = 0
+    artifact_state = _artifact_state(job, short_status)
     if short_status == ShortStatus.COMPLETED:
         short = _short_result(job)
-        download_url = short.get("download_url") or f"/shorts/{job.id}/file"
-        preview_url = short.get("preview_url") or f"/shorts/{job.id}/file?inline=true"
         raw_expires = short.get("expires_at")
         if isinstance(raw_expires, str):
             expires_at = datetime.fromisoformat(raw_expires)
         if isinstance(short.get("captions_applied"), int):
             captions_applied = short["captions_applied"]
+        if artifact_state == "ready":
+            download_url = short.get("download_url") or f"/shorts/{job.id}/file"
+            preview_url = short.get("preview_url") or f"/shorts/{job.id}/file?inline=true"
 
     render_input = job.render_input or {}
     processing_job_id = render_input.get("processing_job_id")
@@ -149,6 +173,7 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         download_url=download_url,
         preview_url=preview_url,
         download_expires_at=expires_at,
+        artifact_state=artifact_state,
         captions_applied=captions_applied,
         error_message=job.error_message if short_status == ShortStatus.FAILED else None,
         created_at=job.created_at,
@@ -311,6 +336,17 @@ def download_short_file(job_id: UUID, inline: bool = False):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="쇼츠 영상이 아직 준비되지 않았습니다.",
+        )
+    artifact_state = _artifact_state(job, ShortStatus.COMPLETED)
+    if artifact_state == "expired":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="다운로드 링크가 만료되었습니다. 쇼츠를 다시 만들어 주세요.",
+        )
+    if artifact_state == "unavailable":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="쇼츠 영상이 보관 기간이 지나 삭제되었습니다. 다시 만들어 주세요.",
         )
     short = _short_result(job)
     signed_url = short.get("preview_url" if inline else "download_url")

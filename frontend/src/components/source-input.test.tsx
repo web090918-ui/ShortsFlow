@@ -159,6 +159,8 @@ describe("SourceInput", () => {
             candidate_id: "cand-1",
             download_url: null,
             preview_url: null,
+            download_expires_at: null,
+            artifact_state: "pending",
             captions_applied: 0,
             error_message: null,
           }),
@@ -178,6 +180,8 @@ describe("SourceInput", () => {
             candidate_id: "cand-1",
             download_url: "/shorts/render-1/file",
             preview_url: "/shorts/render-1/file?inline=true",
+            download_expires_at: null,
+            artifact_state: "ready",
             captions_applied: 12,
             error_message: null,
           }),
@@ -236,7 +240,7 @@ describe("SourceInput", () => {
         }),
       }),
     );
-    const downloadLink = await screen.findByRole("link", { name: "쇼츠 다운로드" }, { timeout: 4000 });
+    const downloadLink = await screen.findByRole("link", { name: /쇼츠 다운로드/ }, { timeout: 4000 });
     expect(downloadLink.getAttribute("href")).toBe("http://localhost:8000/shorts/render-1/file");
     const video = screen.getByLabelText("완성된 쇼츠 미리보기") as HTMLVideoElement;
     expect(video.getAttribute("src")).toBe(

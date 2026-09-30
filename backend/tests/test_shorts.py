@@ -31,11 +31,23 @@ class AllowWorkerAuthenticator:
         assert authorization == "Bearer test-token"
 
 
+class StubStorage:
+    def __init__(self) -> None:
+        self.missing: set[str] = set()
+
+    def store(self, file_path, *, key, filename):
+        raise AssertionError("not used by the stub pipeline")
+
+    def exists(self, key: str) -> bool:
+        return key not in self.missing
+
+
 class StubShortPipeline:
     def __init__(self, tmp_path: Path, *, error: Exception | None = None) -> None:
         self.tmp_path = tmp_path
         self.error = error
         self.calls: list[dict] = []
+        self.storage = StubStorage()
 
     def run(
         self,
@@ -180,6 +192,7 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
 
     short = client.get(f"/shorts/{created['id']}").json()
     assert short["status"] == "completed"
+    assert short["artifact_state"] == "ready"
     assert short["progress"] == 100
     assert short["download_url"] == f"/shorts/{created['id']}/file"
     assert short["error_message"] is None
@@ -401,6 +414,73 @@ def test_pending_acquisition_defers_the_job_without_spending_attempts(
     assert resumed.json()["status"] == "COMPLETED"
     assert resumed.json()["resume_count"] if "resume_count" in resumed.json() else True
     assert client.get(f"/shorts/{created['id']}").json()["status"] == "completed"
+
+
+def _complete(monkeypatch, tmp_path, *, expires_at=None):
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    created = client.post("/shorts", json=_payload()).json()
+    _run_worker(created["id"])
+    if expires_at is not None:
+        job = jobs_module.repository.get(__import__("uuid").UUID(created["id"]))
+        result = dict(job.result)
+        result["short"] = {**result["short"], "expires_at": expires_at.isoformat()}
+        jobs_module.repository.save(job.model_copy(update={"result": result}))
+    return pipeline, created["id"]
+
+
+def test_expired_download_link_is_reported_and_not_served(monkeypatch, tmp_path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    _, job_id = _complete(
+        monkeypatch, tmp_path, expires_at=datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+
+    short = client.get(f"/shorts/{job_id}").json()
+    assert short["status"] == "completed"
+    assert short["artifact_state"] == "expired"
+    assert short["download_url"] is None
+    assert short["preview_url"] is None
+    assert short["download_expires_at"] is not None
+
+    response = client.get(f"/shorts/{job_id}/file")
+    assert response.status_code == 410
+    assert "만료" in response.json()["detail"]
+
+
+def test_removed_artifact_is_reported_as_unavailable(monkeypatch, tmp_path) -> None:
+    pipeline, job_id = _complete(monkeypatch, tmp_path)
+    pipeline.storage.missing.add(f"shorts/{job_id}.mp4")
+
+    short = client.get(f"/shorts/{job_id}").json()
+    assert short["artifact_state"] == "unavailable"
+    assert short["download_url"] is None
+
+    response = client.get(f"/shorts/{job_id}/file")
+    assert response.status_code == 410
+    assert "삭제" in response.json()["detail"]
+
+
+def test_future_expiry_keeps_the_artifact_ready(monkeypatch, tmp_path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    _, job_id = _complete(
+        monkeypatch, tmp_path, expires_at=datetime.now(timezone.utc) + timedelta(hours=20)
+    )
+
+    short = client.get(f"/shorts/{job_id}").json()
+    assert short["artifact_state"] == "ready"
+    assert short["download_url"] == f"/shorts/{job_id}/file"
+
+
+def test_failed_and_pending_jobs_expose_artifact_state(monkeypatch, tmp_path) -> None:
+    created = client.post("/shorts", json=_payload()).json()
+    assert created["artifact_state"] == "pending"
+
+    error = ShortPipelineError(ShortErrorCode.FFMPEG_FAILED, "편집 실패", retryable=False)
+    monkeypatch.setattr(jobs_module, "short_pipeline", StubShortPipeline(tmp_path, error=error))
+    _run_worker(created["id"])
+    assert client.get(f"/shorts/{created['id']}").json()["artifact_state"] == "failed"
 
 
 def test_file_download_requires_completed_job() -> None:
