@@ -235,7 +235,17 @@ Implementation status:
 
 ## Task 10 — Product/Affiliate Flow
 
+Status: Implemented (Coupang Partners) — Cloud Run validation pending
+
 Begin only after Task 09 is complete.
+
+Implementation status (2026-09-30):
+
+- `CoupangPartnersLinkProvider` parses the Partners link-generation URL into product facts (title, prices, discount, ids, 1000px CDN image) with no request to coupang.com, which returns 403 to servers. Public product and short links fail with guidance to paste the Partners URL.
+- `POST /sources/{id}/product-content` generates selling points and three angles (hook, script lines, CTA) with the OpenAI ranking model; a template generator covers development.
+- `POST /shorts/product` queues a `PRODUCT_RENDER` job: OpenAI TTS (`gpt-4o-mini-tts`) narrates each line, measured durations drive the caption cues, and FFmpeg composes a blurred cover background, a zooming product image, and ASS text (title, price, speech, CTA, Coupang Partners disclosure) into a 1080x1920 MP4 stored through the shared `ArtifactStorage`. Preview, download, and artifact states are reused.
+- Real-FFmpeg composition was verified locally with the Coupang image; production TTS and angle generation are pending a Cloud Run run.
+- Affiliate conversion tracking is not implemented.
 
 - Implement `ProductSourceProvider` for selected product URL providers.
 - Extract product facts and usable images/video.
