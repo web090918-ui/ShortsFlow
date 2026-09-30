@@ -131,6 +131,8 @@ Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are d
 
 Current deployed entry points are `https://www.cutpick.com` for the frontend and `https://shortflow-268642207702.asia-northeast3.run.app` for the Cloud Run backend. Secret values are stored outside the repository.
 
+The frontend reads its API base from `NEXT_PUBLIC_API_URL` at build time, so the Vercel project's Production environment variable must be the Cloud Run URL above and the site must be redeployed after changing it. On 2026-09-30 the deployed bundle still pointed at the retired Vercel backend `shortsflow-api.vercel.app` (yt-dlp, no Titan, no Cloud Tasks), which produced "YouTube가 현재 서버 요청을 제한했습니다" for every YouTube URL even though Cloud Run worked; the fix is the environment variable, not code. Cloud Run's `SHORTSFLOW_FRONTEND_ORIGIN` already allows `https://www.cutpick.com`.
+
 ## Validation
 
 ```powershell
