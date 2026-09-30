@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from app.config import Settings, get_settings
 from app.downloads import MAX_RANGE_SECONDS, RenderTemplate
 from app.shorts_pipeline import (
+    ArtifactStorage,
     ShortPipeline,
     ShortStage,
     short_pipeline_from_settings,
@@ -29,6 +30,11 @@ from app.source_media import (
     source_media_repository_from_settings,
 )
 from app.captions import CaptionCue
+from app.product_content import ContentAngle
+from app.product_pipeline import ProductShortPipeline
+from app.products import ProductFacts
+from app.tts import OpenAISpeechSynthesizer
+from app.video_processing import FfmpegVideoProcessor
 from app.ranking import CandidateRanker, HeuristicRanker, OpenAIRanker
 from app.sources import SourceStatus, repository as source_repository
 from app.transcripts import (
@@ -61,6 +67,7 @@ class ProcessingStep(str, Enum):
     CANDIDATE = "CANDIDATE"
     RANKING = "RANKING"
     SHORT_RENDER = "SHORT_RENDER"
+    PRODUCT_RENDER = "PRODUCT_RENDER"
 
 
 class CreateProcessingJobRequest(BaseModel):
@@ -483,6 +490,36 @@ def _candidate_ranker_from_settings(settings: Settings) -> CandidateRanker:
 
 
 candidate_ranker: CandidateRanker = _candidate_ranker_from_settings(settings)
+
+
+def _product_pipeline_from_settings(
+    settings: Settings, storage: ArtifactStorage
+) -> ProductShortPipeline | None:
+    if settings.openai_api_key is None:
+        return None
+    from openai import OpenAI
+
+    synthesizer = OpenAISpeechSynthesizer(
+        OpenAI(
+            api_key=settings.openai_api_key.get_secret_value(),
+            project=settings.openai_project,
+            timeout=120,
+            max_retries=1,
+        ),
+        model=settings.openai_tts_model,
+        voice=settings.openai_tts_voice,
+    )
+    return ProductShortPipeline(
+        synthesizer,
+        FfmpegVideoProcessor(),
+        storage,
+        max_seconds=settings.product_short_max_seconds,
+    )
+
+
+product_pipeline: ProductShortPipeline | None = _product_pipeline_from_settings(
+    settings, short_pipeline.storage
+)
 router = APIRouter(tags=["processing-jobs"])
 
 
@@ -570,20 +607,46 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
         raise
 
 
+def _save_stage(job: ProcessingJobRecord, stage: ShortStage, progress: int) -> None:
+    current = repository.get(job.id) or job
+    repository.save(
+        current.model_copy(
+            update={
+                "stage": stage.value,
+                "progress": min(99, max(current.progress, progress)),
+                "updated_at": _now(),
+            }
+        )
+    )
+
+
 def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
+    if job.step == ProcessingStep.PRODUCT_RENDER:
+        if product_pipeline is None:
+            raise RuntimeError(
+                "상품 쇼츠 음성 합성을 위해 SHORTSFLOW_OPENAI_API_KEY를 설정해야 합니다."
+            )
+        render_input = job.render_input or {}
+        facts = ProductFacts.model_validate(render_input["facts"])
+        angle = ContentAngle.model_validate(render_input["angle"])
+
+        def report_product(stage: ShortStage, progress: int) -> None:
+            _save_stage(job, stage, progress)
+
+        artifact = product_pipeline.run(
+            job_id=str(job.id),
+            facts=facts,
+            angle=angle,
+            template=job.template_id,
+            report=report_product,
+            cta_url=render_input.get("cta_url"),
+        )
+        return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
+
     if job.step == ProcessingStep.SHORT_RENDER:
 
         def report(stage: ShortStage, progress: int) -> None:
-            current = repository.get(job.id) or job
-            repository.save(
-                current.model_copy(
-                    update={
-                        "stage": stage.value,
-                        "progress": min(99, max(current.progress, progress)),
-                        "updated_at": _now(),
-                    }
-                )
-            )
+            _save_stage(job, stage, progress)
 
         render_input = job.render_input or {}
         raw_captions = render_input.get("captions")

@@ -113,6 +113,75 @@ def select_cues(
     return selected
 
 
+def build_product_ass(
+    cues: list[CaptionCue],
+    *,
+    template: RenderTemplate,
+    total_seconds: float,
+    title: str,
+    price_line: str | None,
+    cta: str,
+    disclosure: str,
+) -> str:
+    """ASS for a product Short: title and price on top, spoken lines in the middle,
+    CTA and the affiliate disclosure pinned at the bottom for the whole clip."""
+    style = TEMPLATE_STYLES[template]
+    header = "\n".join(
+        [
+            "[Script Info]",
+            "ScriptType: v4.00+",
+            f"PlayResX: {PLAY_RES_X}",
+            f"PlayResY: {PLAY_RES_Y}",
+            "WrapStyle: 0",
+            "ScaledBorderAndShadow: yes",
+            "",
+            "[V4+ Styles]",
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+            "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
+            "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+            "MarginR, MarginV, Encoding",
+            # Spoken line: template style, centred a little below the middle.
+            f"Style: Speech,{FONT_NAME},{style.font_size},{style.primary},&H000000FF,"
+            f"{style.outline},{style.back},{style.bold},0,0,0,100,100,0,0,"
+            f"{style.border_style},{style.outline_width},{style.shadow},2,90,90,560,1",
+            # Title block at the top: white on a dark box.
+            f"Style: Title,{FONT_NAME},56,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
+            "100,100,0,0,3,14,0,8,80,80,120,1",
+            # Price under the title: accent colour.
+            f"Style: Price,{FONT_NAME},68,&H004FFFD7,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
+            "100,100,0,0,3,14,0,8,80,80,260,1",
+            # CTA above the disclosure.
+            f"Style: Cta,{FONT_NAME},48,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
+            "100,100,0,0,3,12,0,2,80,80,150,1",
+            # Disclosure: small, always visible, required by Coupang Partners.
+            f"Style: Disclosure,{FONT_NAME},30,&H00DDDDDD,&H000000FF,&H00000000,&H90000000,0,0,0,0,"
+            "100,100,0,0,3,8,0,2,60,60,40,1",
+            "",
+            "[Events]",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+        ]
+    )
+    end = _ass_time(total_seconds)
+    lines = [
+        header,
+        f"Dialogue: 0,{_ass_time(0)},{end},Title,,0,0,0,,{_ass_text(title)}",
+    ]
+    if price_line:
+        lines.append(f"Dialogue: 0,{_ass_time(0)},{end},Price,,0,0,0,,{_ass_text(price_line)}")
+    lines.append(f"Dialogue: 0,{_ass_time(0)},{end},Cta,,0,0,0,,{_ass_text(cta)}")
+    lines.append(
+        f"Dialogue: 0,{_ass_time(0)},{end},Disclosure,,0,0,0,,{_ass_text(disclosure)}"
+    )
+    for cue in select_cues(cues, start_seconds=0, end_seconds=total_seconds):
+        text = _ass_text(cue.text)
+        if text:
+            lines.append(
+                f"Dialogue: 1,{_ass_time(cue.start_seconds)},{_ass_time(cue.end_seconds)},"
+                f"Speech,,0,0,0,,{text}"
+            )
+    return "\n".join(lines) + "\n"
+
+
 def build_ass(
     cues: list[CaptionCue],
     *,

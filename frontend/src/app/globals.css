@@ -803,3 +803,53 @@ h2 {
   margin: 0;
   text-align: center;
 }
+
+.product-card {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.product-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.product-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.product-price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 8px;
+}
+
+.product-price strong {
+  font-size: 1.1rem;
+}
+
+.product-price s {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.angle-script {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.angle-script .angle-cta {
+  color: var(--accent);
+}

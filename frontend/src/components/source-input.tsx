@@ -5,6 +5,8 @@ import type { CSSProperties, FormEvent } from "react";
 
 import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
+import { ProductStudio } from "@/components/product-studio";
+import type { ProductContent, ProductFacts } from "@/components/product-studio";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 
@@ -22,6 +24,8 @@ type Source = {
       duration_seconds?: number | null;
       thumbnail_url?: string | null;
     };
+    product?: ProductFacts;
+    product_content?: ProductContent;
   };
 };
 
@@ -413,7 +417,7 @@ export function SourceInput() {
       <form onSubmit={handleSubmit}>
         {mode === "url" ? (
           <label className="field">
-            <span>YouTube 또는 상품 URL</span>
+            <span>YouTube 또는 쿠팡 파트너스 상품 링크</span>
             <input
               type="url"
               value={url}
@@ -471,6 +475,20 @@ export function SourceInput() {
             </div>
           ) : null}
           <code>{source.id}</code>
+          {source.type === "PRODUCT" && source.status === "READY" && source.metadata?.product ? (
+            <ProductStudio
+              sourceId={source.id}
+              product={source.metadata.product}
+              content={source.metadata.product_content ?? null}
+              onContent={(content) =>
+                setSource((current) =>
+                  current
+                    ? { ...current, metadata: { ...current.metadata, product_content: content } }
+                    : current,
+                )
+              }
+            />
+          ) : null}
           {source.type === "YOUTUBE" &&
           source.status === "READY" &&
           typeof sourceDuration === "number" ? (

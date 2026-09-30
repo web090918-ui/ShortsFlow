@@ -133,14 +133,16 @@ def test_create_and_prepare_youtube_source_in_one_request(monkeypatch) -> None:
     assert response.json()["metadata"]["youtube"]["video_id"] == "source123"
 
 
-def test_rejects_preparing_a_product_source() -> None:
+def test_unsupported_product_site_fails_preparation_with_guidance() -> None:
     created = client.post(
         "/sources", json={"url": "https://shop.example.com/products/camera"}
     ).json()
 
     response = client.post(f"/sources/{created['id']}/prepare")
 
-    assert response.status_code == 409
+    assert response.status_code == 502
+    assert "쿠팡 파트너스" in response.json()["detail"]
+    assert client.get(f"/sources/{created['id']}").json()["status"] == "FAILED"
 
 
 class FailingYouTubeProvider:

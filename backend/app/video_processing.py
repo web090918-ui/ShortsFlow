@@ -220,3 +220,135 @@ class FfmpegVideoProcessor:
             end_seconds=end_seconds,
             video_filter=_vertical_filter(subtitles_path),
         )
+
+    def _run(self, command: list[str], *, failure: str) -> None:
+        try:
+            subprocess.run(
+                command, check=True, capture_output=True, timeout=self._timeout_seconds
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VideoProcessingError("영상 편집 시간이 초과되었습니다.") from exc
+        except subprocess.CalledProcessError as exc:
+            detail = exc.stderr.decode("utf-8", errors="replace").strip() if exc.stderr else ""
+            raise VideoProcessingError(
+                failure + (f" ({detail[:200]})" if detail else "")
+            ) from exc
+
+    def make_silence(self, destination: Path, *, seconds: float) -> None:
+        command = [
+            self._executable("ffmpeg"),
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=24000:cl=mono",
+            "-t",
+            f"{seconds:.3f}",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "48k",
+            "-y",
+            str(destination),
+        ]
+        self._run(command, failure="무음 구간을 만들지 못했습니다.")
+
+    def concat_audio(self, parts: list[Path], output_path: Path) -> None:
+        """Join MP3 clips into one AAC track, re-encoding so mixed encoders are safe."""
+        if not parts:
+            raise VideoProcessingError("이어 붙일 음성이 없습니다.")
+        command = [self._executable("ffmpeg"), "-nostdin", "-hide_banner", "-loglevel", "error"]
+        for part in parts:
+            command += ["-i", str(part)]
+        inputs = "".join(f"[{index}:a:0]" for index in range(len(parts)))
+        command += [
+            "-filter_complex",
+            f"{inputs}concat=n={len(parts)}:v=0:a=1[a]",
+            "-map",
+            "[a]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-y",
+            str(output_path),
+        ]
+        self._run(command, failure="음성을 이어 붙이지 못했습니다.")
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            raise VideoProcessingError("이어 붙인 음성이 비어 있습니다.")
+
+    def compose_product_short(
+        self,
+        image_path: Path,
+        audio_path: Path,
+        output_path: Path,
+        *,
+        duration_seconds: float,
+        subtitles_path: Path | None = None,
+        fps: int = 30,
+    ) -> None:
+        """Still product image -> 1080x1920 clip: blurred cover background, the image
+        fitted in the middle with a slow zoom, template text from ASS, narration audio."""
+        frames = max(1, int(round(duration_seconds * fps)))
+        chain = (
+            # Background: cover, blur, darken slightly so text stays readable.
+            f"[0:v]scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=increase,"
+            f"crop={SHORT_WIDTH}:{SHORT_HEIGHT},boxblur=24:3,eq=brightness=-0.08[bg];"
+            # Foreground: fit within 1080x1080 with even dimensions.
+            "[0:v]scale=1000:1000:force_original_aspect_ratio=decrease,"
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];"
+            "[bg][fg]overlay=(W-w)/2:(H-h)/2-80[comp];"
+            # Ken Burns: zoom from 1.0 to about 1.12 across the clip.
+            f"[comp]zoompan=z='1+0.12*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:s={SHORT_WIDTH}x{SHORT_HEIGHT}:fps={fps},setsar=1"
+        )
+        if subtitles_path is not None:
+            chain += f",subtitles=filename='{_escape_filter_path(subtitles_path)}'"
+        chain += "[v]"
+        command = [
+            self._executable("ffmpeg"),
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-loop",
+            "1",
+            "-framerate",
+            str(fps),
+            "-i",
+            str(image_path),
+            "-i",
+            str(audio_path),
+            "-filter_complex",
+            chain,
+            "-map",
+            "[v]",
+            "-map",
+            "1:a:0",
+            "-t",
+            f"{duration_seconds:.3f}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "22",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            str(fps),
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(output_path),
+        ]
+        self._run(command, failure="상품 쇼츠를 합성하지 못했습니다.")
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            raise VideoProcessingError("합성된 영상이 비어 있습니다.")

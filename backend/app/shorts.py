@@ -27,6 +27,9 @@ from app.processing_jobs import (
     _now,
     enqueue_job,
 )
+from app.product_content import ContentAngle
+from app.product_pipeline import render_input_for
+from app.products import ProductFacts
 from app.shorts_pipeline import ShortStage
 from app.sources import SourceStatus, SourceType, repository as source_repository
 
@@ -185,11 +188,83 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
 def _get_short_job(job_id: UUID) -> ProcessingJobRecord:
     # Read through the module so the repository configured at runtime is used.
     job = jobs.repository.get(job_id)
-    if job is None or job.step != ProcessingStep.SHORT_RENDER:
+    if job is None or job.step not in {ProcessingStep.SHORT_RENDER, ProcessingStep.PRODUCT_RENDER}:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Short job not found."
         )
     return job
+
+
+class CreateProductShortRequest(BaseModel):
+    """Render a product Short from a READY product Source and one content angle."""
+
+    source_id: UUID
+    angle_id: str = Field(min_length=1, max_length=64)
+    template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    cta_url: HttpUrl | None = None
+    terms_confirmed: bool = False
+
+
+@router.post("/product", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_product_short(
+    payload: CreateProductShortRequest, background_tasks: BackgroundTasks
+) -> ShortJobResponse:
+    if not payload.terms_confirmed:
+        raise _unprocessable("쿠팡 파트너스 약관에 따라 상품 정보와 이미지를 사용함을 확인해야 합니다.")
+    source = source_repository.get(payload.source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+    if source.type != SourceType.PRODUCT or source.status != SourceStatus.READY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="준비가 완료된 상품 Source만 쇼츠로 만들 수 있습니다.",
+        )
+    content = source.metadata.get("product_content")
+    if not isinstance(content, dict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="먼저 콘텐츠 앵글을 생성해 주세요.",
+        )
+    angle = next(
+        (
+            item
+            for item in content.get("angles", [])
+            if isinstance(item, dict) and item.get("id") == payload.angle_id
+        ),
+        None,
+    )
+    if angle is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Angle not found.")
+    facts = ProductFacts.model_validate(source.metadata["product"])
+    angle_model = ContentAngle.model_validate(angle)
+
+    now = _now()
+    job = ProcessingJobRecord(
+        id=uuid4(),
+        source_id=source.id,
+        source_url=source.url or facts.product_url,
+        status=ProcessingJobStatus.QUEUED,
+        step=ProcessingStep.PRODUCT_RENDER,
+        progress=0,
+        start_seconds=0,
+        end_seconds=1,
+        duration_seconds=1,
+        template_id=payload.template_id,
+        attempt_count=0,
+        error_message=None,
+        result=None,
+        render_input=render_input_for(
+            facts,
+            angle_model,
+            cta_url=str(payload.cta_url) if payload.cta_url else None,
+            content_generator=str(content.get("generator") or "unknown"),
+        ),
+        created_at=now,
+        updated_at=now,
+        started_at=None,
+        completed_at=None,
+    )
+    return _to_response(enqueue_job(job, background_tasks))
 
 
 def _unprocessable(detail: str) -> HTTPException:

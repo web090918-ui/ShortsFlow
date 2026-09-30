@@ -9,6 +9,12 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.acquisition import AcquisitionError, titan_provider_from_settings
+from app.product_content import (
+    ContentGenerationError,
+    ProductContentGenerator,
+    product_content_generator_from_settings,
+)
+from app.products import ProductFacts, ProductSourceError, prepare_product
 from app.youtube import VideoSourceProvider, VideoSourceProviderError, YouTubeSourceProvider
 from app.config import get_settings
 
@@ -133,6 +139,9 @@ def _youtube_provider_from_settings() -> VideoSourceProvider:
 
 
 youtube_provider: VideoSourceProvider = _youtube_provider_from_settings()
+product_content_generator: ProductContentGenerator = product_content_generator_from_settings(
+    get_settings()
+)
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 
@@ -145,7 +154,7 @@ def create_url_source(payload: SourceUrlRequest, prepare: bool = False) -> Sourc
         metadata={"hostname": _hostname(payload.url)},
     )
     repository.save(source)
-    if prepare and source.type == SourceType.YOUTUBE:
+    if prepare and source.type in {SourceType.YOUTUBE, SourceType.PRODUCT}:
         return prepare_source(source.id)
     return source
 
@@ -194,15 +203,45 @@ def get_source(source_id: UUID) -> SourceResponse:
     return source
 
 
+class ProductContentRequest(BaseModel):
+    notes: str | None = Field(default=None, max_length=500)
+    refresh: bool = False
+
+
+@router.post("/{source_id}/product-content", response_model=SourceResponse)
+def generate_product_content(source_id: UUID, payload: ProductContentRequest) -> SourceRecord:
+    """Task 10: selling points and three content angles for a READY product Source."""
+    source = repository.get(source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+    if source.type != SourceType.PRODUCT or source.status != SourceStatus.READY:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="준비가 완료된 상품 Source만 콘텐츠를 만들 수 있습니다.",
+        )
+    if source.metadata.get("product_content") and not payload.refresh:
+        return source
+    facts = ProductFacts.model_validate(source.metadata["product"])
+    try:
+        content = product_content_generator.generate(facts, notes=payload.notes)
+    except ContentGenerationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    metadata = dict(source.metadata)
+    metadata["product_content"] = content.model_dump(mode="json")
+    return repository.save(
+        source.model_copy(update={"metadata": metadata, "updated_at": datetime.now(timezone.utc)})
+    )
+
+
 @router.post("/{source_id}/prepare", response_model=SourceResponse)
 def prepare_source(source_id: UUID) -> SourceRecord:
     source = repository.get(source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
-    if source.type != SourceType.YOUTUBE:
+    if source.type not in {SourceType.YOUTUBE, SourceType.PRODUCT}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only YouTube Sources can be prepared in Task 03.",
+            detail="Only YouTube and Product Sources can be prepared.",
         )
     if source.status == SourceStatus.READY:
         return source
@@ -218,8 +257,11 @@ def prepare_source(source_id: UUID) -> SourceRecord:
     repository.save(preparing)
 
     try:
-        prepared = youtube_provider.prepare(preparing.url or "")
-    except (VideoSourceProviderError, AcquisitionError) as exc:
+        if source.type == SourceType.PRODUCT:
+            prepared = prepare_product(preparing.url or "")
+        else:
+            prepared = youtube_provider.prepare(preparing.url or "")
+    except (VideoSourceProviderError, AcquisitionError, ProductSourceError) as exc:
         failed_metadata = dict(preparing.metadata)
         failed_metadata["processing_error"] = str(exc)
         failed = preparing.model_copy(
