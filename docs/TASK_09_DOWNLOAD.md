@@ -46,4 +46,16 @@ Task 09 adds the state handling on top; the Cloud Run check for this task is tha
 
 ## Validation result
 
-Implemented on 2026-09-30. Cloud Run checks are recorded below once run.
+Implemented on 2026-09-30 (backend 114 tests, frontend 16 tests).
+
+Cloud Run check on 2026-09-30, about three minutes after the revision went live, using existing render jobs:
+
+| Job | Storage | Result |
+| --- | --- | --- |
+| `3171148c` (Top 1 candidate, rendered 01:54 UTC) | GCS | `artifact_state=ready`, `download_expires_at=2026-10-01T01:54Z`, download and preview URLs present, `/file` → `307` to the signed URL |
+| `cc2ddd7e` (manual range, rendered 2026-09-29 07:08 UTC) | GCS | `ready` with `download_expires_at=2026-09-30T07:08Z`; still inside its 24-hour window at check time, so the link is correctly kept until then |
+| `03dfc541` (rendered before Cloud Storage was configured) | local disk of a since-replaced instance | `artifact_state=unavailable`, links `null`, `/file` → `410` "쇼츠 영상이 보관 기간이 지나 삭제되었습니다. 다시 만들어 주세요." |
+
+The `expired` branch is covered by unit tests on both sides and will apply to `cc2ddd7e` after 07:08 UTC; the bucket lifecycle rule then removes the object a day after upload, at which point the same job reports `unavailable`.
+
+Task 09 is complete. The MVP1 YouTube path (URL → transcript → candidates → AI Score Top 3 → captioned 9:16 render → preview → download, plus the manual-range shortcut) is delivered end to end. Task 10 (Product/Affiliate flow) may begin.

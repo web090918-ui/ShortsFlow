@@ -221,7 +221,7 @@ Implementation status:
 
 ## Task 09 — Download UX
 
-Status: Implemented — Cloud Run state check pending
+Status: Complete — Cloud Run reported `ready` for fresh renders and `unavailable` with a `410` for a removed artifact on 2026-09-30
 
 - Provide a clear download action for the completed render.
 - Handle unavailable, expired, and failed artifacts with useful UI states.
