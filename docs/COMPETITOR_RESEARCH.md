@@ -2,7 +2,7 @@
 
 ## Purpose and evidence rules
 
-This document records competitor behavior observed or documented on 2026-09-27 while investigating a production-safe YouTube acquisition path for ShortsFlow. It is product and architecture research, not permission to copy private implementations or add features outside the MVP1 backlog.
+This document records competitor behavior observed or documented on 2026-09-27 (FikaClip added 2026-09-30) while investigating a production-safe YouTube acquisition path for ShortsFlow. It is product and architecture research, not permission to copy private implementations or add features outside the MVP1 backlog.
 
 Evidence is classified as follows:
 
@@ -89,6 +89,20 @@ References:
 Reference:
 
 - <https://www.2short.ai/>
+
+### FikaClip (fikad.boo)
+
+Added 2026-09-30 from the public landing page only; no documentation, API, or network observation was reviewed.
+
+- Korean-market URL-to-Shorts product: "내 영상을 클릭 한 번에 바이럴 숏폼으로 만들어보세요." The flow is three steps: paste a link, let the AI produce short-form clips, then publish to YouTube, TikTok, and Instagram at once.
+- **Confirmed (marketing claims)**: highlight detection tuned to the first 10 seconds, context analysis of tone, timing, and emotional arc, AI motion captions with style recommendations, trend-based template learning, automatic reframe by subject type, silence removal, TTS voices, thumbnail generation, multiple aspect ratios, and automatic English subtitles for global distribution. Claims 370,000,000 cumulative views, 700,000 generated Shorts, and a 3x average view increase for users. A free trial ("무료체험") is offered.
+- **Inference**: like the other products it separates link submission from long-running processing and renders on a server; the publishing step implies channel connection (an MVP2/MVP3 concern for ShortsFlow).
+- **Unknown**: pricing and credit model, how YouTube media is acquired, upload and file limits, private or unlisted link handling, and whether the ranking is generic or channel-personalized.
+- **Implication for ShortsFlow**: FikaClip bundles most of the features that the MVP1 exclusions list defers (auto reframe, TTS, multi-platform publishing, trend templates). It confirms the market expects the caption template step (Task 08) and a Top-N recommendation with reasons (Task 07), and it is the closest Korean-language reference for caption styling and copy. It does not change the MVP1 order.
+
+References:
+
+- <https://fikad.boo/>
 
 ## EasyCut black-box observation
 
