@@ -510,23 +510,25 @@ export function SourceInput() {
     <section className="source-panel" aria-labelledby="source-heading">
       <div className="source-heading">
         <div>
-          <p className="section-label">ONE SOURCE TO SHORT</p>
-          <h2 id="source-heading">쇼츠 만들기</h2>
+          <p className="section-label">LET’S MAKE A SHORT</p>
+          <h2 id="source-heading">어떤 영상으로 만들까요?</h2>
         </div>
-        <div className="mode-switch" aria-label="Source 입력 방식">
+        <div className="mode-switch" aria-label="영상 입력 방식">
           <button
             className={mode === "url" ? "active" : ""}
             type="button"
+            aria-pressed={mode === "url"}
             onClick={() => setMode("url")}
           >
-            URL
+            YouTube
           </button>
           <button
             className={mode === "upload" ? "active" : ""}
             type="button"
+            aria-pressed={mode === "upload"}
             onClick={() => setMode("upload")}
           >
-            Upload
+            파일 업로드
           </button>
         </div>
       </div>
@@ -545,6 +547,7 @@ export function SourceInput() {
       </ol>
 
       <form onSubmit={handleSubmit}>
+        <p className="form-intro">{mode === "url" ? "쇼츠로 만들 YouTube 영상 링크를 붙여 넣으세요." : "내 기기에 있는 영상 파일로 쇼츠를 만들어보세요."}</p>
         {mode === "url" ? (
           <label className="field">
             <span>YouTube URL</span>
@@ -552,7 +555,7 @@ export function SourceInput() {
               type="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://"
+              placeholder="https://www.youtube.com/watch?v=..."
               required
             />
           </label>
@@ -569,9 +572,10 @@ export function SourceInput() {
 
         <button className="submit-button" type="submit" disabled={isSubmitting}>
           {isSubmitting
-            ? uploadStep ?? (mode === "upload" ? "업로드 중..." : "YouTube Source 처리 중...")
-            : "Source 생성"}
+            ? uploadStep ?? (mode === "upload" ? "업로드 중..." : "영상 정보 불러오는 중...")
+            : "영상 불러오기"}
         </button>
+        <p className="input-footnote">다음 단계에서 구간과 자막 스타일을 선택할 수 있어요.</p>
       </form>
 
       {error ? (
@@ -719,7 +723,7 @@ export function SourceInput() {
                         className={`template-preview ${template.previewClassName}`}
                         aria-hidden="true"
                       >
-                        <i>SHORTSFLOW</i>
+                        <i>CUTPICK</i>
                         <b>핵심 장면을 한눈에</b>
                       </span>
                       <strong>{template.name}</strong>

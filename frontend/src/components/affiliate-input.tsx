@@ -127,7 +127,7 @@ export function AffiliateInput() {
       <div className="source-heading">
         <div>
           <p className="section-label">AFFILIATE SHORTS</p>
-          <h2 id="affiliate-heading">상품·여행 링크로 쇼츠 만들기</h2>
+          <h2 id="affiliate-heading">어떤 상품을 소개할까요?</h2>
         </div>
       </div>
 
@@ -154,6 +154,7 @@ export function AffiliateInput() {
       </ul>
 
       <form onSubmit={handleSubmit}>
+        <p className="form-intro">쿠팡 파트너스 링크를 넣으면 상품 정보를 먼저 확인할 수 있어요.</p>
         <label className="field">
           <span>어필리에이트 링크</span>
           <input
@@ -170,6 +171,7 @@ export function AffiliateInput() {
         <button className="submit-button" type="submit" disabled={isSubmitting}>
           {isSubmitting ? "상품 정보 불러오는 중..." : "상품 정보 불러오기"}
         </button>
+        <p className="input-footnote">상품을 확인한 뒤, 소개할 콘텐츠 앵글을 선택하세요.</p>
       </form>
 
       {error ? (

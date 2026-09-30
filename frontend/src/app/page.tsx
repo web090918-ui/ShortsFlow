@@ -1,92 +1,68 @@
 import Link from "next/link";
-
 import { SiteNav } from "@/components/site-nav";
+import { ShortPreview } from "@/components/short-preview";
 
-const howItWorks = [
-  {
-    title: "소스 하나만 주세요",
-    body: "YouTube 링크, 내 영상 파일, 또는 쿠팡 파트너스 상품 링크. 어디서 시작하든 결과는 같은 9:16 쇼츠입니다.",
-  },
-  {
-    title: "AI가 고르고, 내가 결정합니다",
-    body: "자막을 분석해 15~60초 후보를 만들고 AI Score로 Top 3를 추천합니다. 상품 링크는 셀링 포인트와 앵글 3개를 제안합니다. 최종 선택은 항상 사용자에게 있습니다.",
-  },
-  {
-    title: "자막까지 얹어 바로 다운로드",
-    body: "선택한 구간을 1080x1920으로 잘라 자막 템플릿을 얹고, 미리보기 후 MP4로 내려받습니다. 상품 쇼츠는 내레이션과 가격 카드가 자동으로 들어갑니다.",
-  },
+const steps = [
+  { title: "링크 하나, 또는 내 영상", body: "YouTube 영상과 내 파일, 쿠팡 파트너스 상품 링크 중 원하는 소스로 시작하세요.", detail: "01 / IMPORT" },
+  { title: "AI가 추천하고, 내가 선택", body: "영상의 추천 구간 Top 3 또는 상품의 콘텐츠 앵글을 확인하고 마음에 드는 것을 고르세요.", detail: "02 / PICK" },
+  { title: "세로 쇼츠로 완성", body: "스타일을 정하고 완성된 쇼츠를 확인하세요. 미리보기부터 MP4 다운로드까지 한곳에서.", detail: "03 / EXPORT" },
 ];
 
 export default function Home() {
   return (
-    <main className="landing">
-      <div className="landing-shell">
-        <SiteNav current="home" />
-
-        <section className="landing-hero">
-          <p className="eyebrow">SHORTSFLOW</p>
-          <h1>하나의 Source에서 Shorts를 시작하세요.</h1>
-          <p className="intro">
-            긴 영상에서 어떤 구간을 쇼츠로 만들지 고민하는 시간, 상품 링크 하나로 홍보 영상을
-            만드는 수고를 줄입니다. ShortsFlow는 소스를 받아 후보를 추천하고, 선택한 구간을
-            세로 쇼츠로 렌더링해 다운로드까지 이어 주는 크리에이터용 도구입니다.
-          </p>
-        </section>
-
-        <section className="entry-cards" aria-label="시작하기">
-          <Link href="/video" className="entry-card">
-            <p className="section-label">VIDEO</p>
-            <h2>영상으로 만들기</h2>
-            <p>
-              YouTube URL 또는 영상 파일 → 구간 선택 → AI Score Top 3 → 자막 템플릿 렌더 →
-              다운로드. 원하는 구간이 정해져 있으면 그 구간 그대로 만들 수도 있습니다.
-            </p>
-            <span className="entry-cta">영상으로 시작 →</span>
-          </Link>
-          <Link href="/affiliate" className="entry-card">
-            <p className="section-label">AFFILIATE</p>
-            <h2>상품·여행 링크로 만들기</h2>
-            <p>
-              쿠팡 파트너스 링크 → 상품 정보 확인 → 콘텐츠 앵글 3개 → 내레이션·가격 카드·고지
-              문구가 들어간 상품 쇼츠. 아고다와 트립닷컴은 준비 중입니다.
-            </p>
-            <span className="entry-cta">링크로 시작 →</span>
-          </Link>
-        </section>
-
-        <section className="how-it-works" aria-labelledby="how-heading">
-          <h2 id="how-heading">어떻게 동작하나요</h2>
-          <ol>
-            {howItWorks.map((item, index) => (
-              <li key={item.title}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="landing-notes" aria-label="이용 안내">
-          <div>
-            <h3>지원 소스</h3>
-            <p>YouTube 공개 영상, MP4·MOV·MKV 등 영상 파일, 쿠팡 파트너스 링크. 아고다·트립닷컴 예정.</p>
-          </div>
-          <div>
-            <h3>권리와 고지</h3>
-            <p>
-              영상은 본인이 소유했거나 이용 허가를 받은 것만 처리합니다. 상품 쇼츠에는 쿠팡 파트너스
-              활동 고지 문구가 자동으로 들어갑니다.
-            </p>
-          </div>
-          <div>
-            <h3>출력</h3>
-            <p>1080x1920 MP4, 자막 템플릿 3종(Clean Caption, Bold Highlight, Minimal), 다운로드 링크는 24시간 유효.</p>
-          </div>
-        </section>
-      </div>
-    </main>
+    <>
+      <SiteNav current="home" />
+      <main className="landing" id="main-content">
+        <div className="landing-shell">
+          <section className="landing-hero">
+            <div className="hero-copy">
+              <p className="eyebrow"><span className="status-dot" /> YOUR NEXT SHORT STARTS HERE</p>
+              <h1>좋은 순간을 골라,<br /><span>쇼츠로 완성.</span></h1>
+              <p className="intro">긴 영상도, 상품 링크도.<br />AI의 추천에 내 선택을 더해 세로 쇼츠로 만드세요.</p>
+              <div className="hero-actions"><a className="primary-link" href="#start">내 쇼츠 만들기 <span aria-hidden="true">↗</span></a><a className="text-link" href="#how-it-works">어떻게 만드나요 <span aria-hidden="true">↓</span></a></div>
+              <div className="hero-facts"><span>AI 추천 구간</span><span>자막 스타일 3종</span><span>MP4 다운로드</span></div>
+            </div>
+            <div className="hero-showcase" aria-label="영상과 상품 쇼츠의 디자인 예시. 실제 생성 결과와 다를 수 있습니다.">
+              <div className="showcase-grid" />
+              <div className="showcase-label"><span className="status-dot" /> FROM SOURCE TO SHORT</div>
+              <div className="showcase-video"><ShortPreview /></div>
+              <div className="showcase-product"><ShortPreview variant="product" /></div>
+              <div className="showcase-note"><span aria-hidden="true">✦</span><div><strong>가능성을 고르는 건 AI,<br />마지막 선택은 나.</strong><small>화면 구성 예시 · 실제 결과와 다를 수 있어요</small></div></div>
+            </div>
+          </section>
+          <section className="start-section" id="start" aria-labelledby="start-heading">
+            <div className="section-heading"><div><p className="eyebrow">MAKE YOUR PICK</p><h2 id="start-heading">무엇으로 시작할까요?</h2></div><p>소스에 맞는 작업 공간으로 바로 시작하세요.</p></div>
+            <div className="entry-cards">
+              <Link href="/video" className="entry-card video-entry">
+                <div className="entry-top"><span className="entry-icon" aria-hidden="true">▷</span><span className="entry-number">01 / VIDEO</span></div>
+                <h3>영상에서 쇼츠로</h3><p>긴 영상 속 놓치기 아까운 장면.<br />AI 추천으로 찾거나 직접 구간을 골라보세요.</p>
+                <div className="source-chips"><span>YouTube</span><span>영상 업로드</span></div>
+                <div className="entry-cta">영상으로 시작하기 <span aria-hidden="true">↗</span></div>
+              </Link>
+              <Link href="/affiliate" className="entry-card affiliate-entry">
+                <div className="entry-top"><span className="entry-icon" aria-hidden="true">↗</span><span className="entry-number">02 / AFFILIATE</span></div>
+                <h3>상품 링크에서 쇼츠로</h3><p>소개하고 싶은 상품의 매력을 짧게.<br />콘텐츠 앵글부터 내레이션까지 한 흐름으로.</p>
+                <div className="source-chips"><span>쿠팡 파트너스</span><span className="planned-chip">여행 링크 · 준비 중</span></div>
+                <div className="entry-cta">상품 링크로 시작하기 <span aria-hidden="true">↗</span></div>
+              </Link>
+            </div>
+          </section>
+          <section className="how-it-works" id="how-it-works" aria-labelledby="how-heading">
+            <div className="section-heading"><div><p className="eyebrow">LESS EDITING. MORE CREATING.</p><h2 id="how-heading">복잡한 편집 대신, 세 번의 선택.</h2></div><span className="section-aside">소스 → 선택 → 완성</span></div>
+            <ol>{steps.map((step) => <li key={step.detail}><span>{step.detail}</span><h3>{step.title}</h3><p>{step.body}</p></li>)}</ol>
+          </section>
+          <section className="sources-section" aria-labelledby="sources-heading">
+            <div><p className="eyebrow">YOUR SOURCE, YOUR STORY</p><h2 id="sources-heading">시작은 다양하게.<br />결과는 하나의 쇼츠로.</h2><p>이용 권한이 있는 영상과 상품 정보로 시작하세요.</p></div>
+            <ul className="source-directory">
+              <li><span className="source-letter youtube-letter" aria-hidden="true">▶</span><div><strong>YouTube</strong><small>공개 영상 링크</small></div><span className="availability">지원</span></li>
+              <li><span className="source-letter" aria-hidden="true">↑</span><div><strong>내 영상 파일</strong><small>MP4 · MOV · MKV 등</small></div><span className="availability">지원</span></li>
+              <li><span className="source-letter coupang-letter" aria-hidden="true">C</span><div><strong>쿠팡 파트너스</strong><small>상품 링크로 시작</small></div><span className="availability">지원</span></li>
+              <li className="planned-source"><span className="source-letter" aria-hidden="true">↗</span><div><strong>아고다 · 트립닷컴</strong><small>여행 어필리에이트 링크</small></div><span className="availability planned">준비 중</span></li>
+            </ul>
+          </section>
+          <footer className="site-footer"><Link href="/" className="footer-brand">cutpick.</Link><p>좋은 소스에서, 나다운 쇼츠로.</p><span>영상 이용 권한을 확인해 주세요.<br />상품 쇼츠에는 파트너스 활동 고지가 포함됩니다.</span></footer>
+        </div>
+      </main>
+    </>
   );
 }

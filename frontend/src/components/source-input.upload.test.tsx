@@ -61,10 +61,10 @@ describe("SourceInput upload flow", () => {
       );
 
     render(<SourceInput />);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
+    await user.click(screen.getByRole("button", { name: "파일 업로드" }));
     const file = new File([new Uint8Array(5)], "clip.mp4", { type: "video/mp4" });
     await user.upload(screen.getByLabelText("영상 파일"), file);
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
 
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
     expect(screen.getByText("clip.mp4")).toBeTruthy();
@@ -121,12 +121,12 @@ describe("SourceInput upload flow", () => {
       );
 
     render(<SourceInput />);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
+    await user.click(screen.getByRole("button", { name: "파일 업로드" }));
     await user.upload(
       screen.getByLabelText("영상 파일"),
       new File([new Uint8Array(5)], "talk.mp4", { type: "video/mp4" }),
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
 
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));

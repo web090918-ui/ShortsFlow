@@ -38,7 +38,7 @@ describe("SourceInput", () => {
       screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
 
     expect(await screen.findByText("YOUTUBE")).toBeTruthy();
     expect(screen.getByText("READY")).toBeTruthy();
@@ -58,8 +58,8 @@ describe("SourceInput", () => {
     const user = userEvent.setup();
 
     render(<SourceInput />);
-    await user.click(screen.getByRole("button", { name: "Upload" }));
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "파일 업로드" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
       "업로드할 영상 파일을 선택해 주세요.",
@@ -85,7 +85,7 @@ describe("SourceInput", () => {
       screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
     expect(await screen.findByText("Cached video")).toBeTruthy();
     firstRender.unmount();
 
@@ -94,7 +94,7 @@ describe("SourceInput", () => {
       screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
 
     expect(await screen.findByText("Cached video")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -194,7 +194,7 @@ describe("SourceInput", () => {
       screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
 
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
     expect(screen.getByText("선택 15:00")).toBeTruthy();
@@ -291,7 +291,7 @@ describe("SourceInput", () => {
       screen.getByLabelText("YouTube URL"),
       "https://youtube.com/watch?v=source123",
     );
-    await user.click(screen.getByRole("button", { name: "Source 생성" }));
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
 
     // 15 minutes is too long for a direct Short; the button says so until the range shrinks.
