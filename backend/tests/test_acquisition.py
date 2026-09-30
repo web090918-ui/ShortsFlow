@@ -22,6 +22,8 @@ class FakeApify:
 
     def __call__(self, method, path, *, params=None, body=None):
         self.requests.append((method, path, body))
+        if method == "POST" and path.endswith("/abort"):
+            return {"data": {"status": "ABORTING"}}
         if method == "POST" and path.endswith("/runs"):
             return {"data": {"id": "run-1", "defaultDatasetId": "dataset-1", "status": "READY"}}
         if path.startswith("/v2/actor-runs/"):
@@ -90,6 +92,22 @@ def test_titan_provider_reports_failed_item_without_retry(monkeypatch, tmp_path)
         provider.acquire("https://youtu.be/abc", destination=tmp_path / "input.mp4")
 
     assert excinfo.value.retryable is False
+
+
+def test_titan_client_aborts_the_run_when_waiting_times_out(monkeypatch, tmp_path):
+    fake = FakeApify(items=[], run_statuses=["RUNNING"] * 50)
+    monkeypatch.setattr(acquisition.time, "sleep", lambda seconds: None)
+    clock = iter([0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0] + [100.0] * 20)
+    monkeypatch.setattr(acquisition.time, "monotonic", lambda: next(clock))
+    client = ApifyTitanClient("token", poll_interval_seconds=0)
+    monkeypatch.setattr(client, "_request", fake)
+    provider = ApifyTitanProvider(client, run_timeout_seconds=30)
+
+    with pytest.raises(AcquisitionError, match="시간이 초과"):
+        provider.acquire("https://youtu.be/abc", destination=tmp_path / "input.mp4")
+
+    abort_calls = [r for r in fake.requests if r[0] == "POST" and r[1].endswith("/abort")]
+    assert abort_calls == [("POST", "/v2/actor-runs/run-1/abort", None)]
 
 
 def test_titan_provider_reports_actor_failure_as_retryable(monkeypatch, tmp_path):

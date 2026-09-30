@@ -224,6 +224,12 @@ class ApifyTitanClient:
                 "영상 확보 서비스가 올바르지 않은 응답을 반환했습니다."
             ) from exc
 
+    def _abort(self, run_id: str) -> None:
+        try:
+            self._request("POST", f"/v2/actor-runs/{run_id}/abort")
+        except AcquisitionError as exc:
+            logger.warning("Could not abort Apify run %s: %s", run_id, exc)
+
     def run(
         self,
         actor_input: dict[str, Any],
@@ -243,26 +249,32 @@ class ApifyTitanClient:
 
         low, high = progress_range
         deadline = time.monotonic() + timeout_seconds
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise AcquisitionError("영상 확보 작업 시간이 초과되었습니다.")
-            payload = self._request(
-                "GET",
-                f"/v2/actor-runs/{run['id']}",
-                params={"waitForFinish": str(int(min(60, max(1, remaining))))},
-            )
-            finished = payload.get("data") if isinstance(payload, dict) else None
-            if not isinstance(finished, dict):
-                raise AcquisitionError("영상 확보 작업 상태를 확인하지 못했습니다.")
-            status = str(finished.get("status") or "")
-            if status == "SUCCEEDED":
-                break
-            if status in self.TERMINAL_RUN_STATUSES:
-                raise AcquisitionError("영상 확보 서비스가 요청을 처리하지 못했습니다.")
-            elapsed_ratio = 1 - remaining / timeout_seconds
-            _report(progress, low + round((high - low) * elapsed_ratio))
-            time.sleep(min(self._poll_interval_seconds, max(0.0, remaining)))
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AcquisitionError("영상 확보 작업 시간이 초과되었습니다.")
+                payload = self._request(
+                    "GET",
+                    f"/v2/actor-runs/{run['id']}",
+                    params={"waitForFinish": str(int(min(60, max(1, remaining))))},
+                )
+                finished = payload.get("data") if isinstance(payload, dict) else None
+                if not isinstance(finished, dict):
+                    raise AcquisitionError("영상 확보 작업 상태를 확인하지 못했습니다.")
+                status = str(finished.get("status") or "")
+                if status == "SUCCEEDED":
+                    break
+                if status in self.TERMINAL_RUN_STATUSES:
+                    raise AcquisitionError("영상 확보 서비스가 요청을 처리하지 못했습니다.")
+                elapsed_ratio = 1 - remaining / timeout_seconds
+                _report(progress, low + round((high - low) * elapsed_ratio))
+                time.sleep(min(self._poll_interval_seconds, max(0.0, remaining)))
+        except AcquisitionError:
+            # Do not leave an abandoned run consuming the account's actor memory;
+            # a queue of zombie runs would starve the retries that follow.
+            self._abort(str(run["id"]))
+            raise
 
         dataset_id = finished.get("defaultDatasetId") or run.get("defaultDatasetId")
         if not isinstance(dataset_id, str) or not dataset_id:
