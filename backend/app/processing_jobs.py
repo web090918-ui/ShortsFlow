@@ -394,6 +394,7 @@ def _transcript_processor_from_settings(
         stt_provider = OpenAIWhisperProvider(
             OpenAI(
                 api_key=settings.openai_api_key.get_secret_value(),
+                project=settings.openai_project,
                 timeout=600,
                 max_retries=0,
             ),
@@ -433,6 +434,7 @@ def _candidate_ranker_from_settings(settings: Settings) -> CandidateRanker:
     return OpenAIRanker(
         OpenAI(
             api_key=settings.openai_api_key.get_secret_value(),
+            project=settings.openai_project,
             timeout=180,
             max_retries=1,
         ),

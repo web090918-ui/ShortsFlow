@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:3000"
     openai_api_key: SecretStr | None = None
+    # Optional OpenAI project id (sent as the OpenAI-Project header). Needed when the
+    # key is organization-scoped and the default project lacks model access.
+    openai_project: str | None = None
     openai_stt_model: str = "whisper-1"
     # Task 07 Generic AI Ranking (channel-agnostic AI Score and Top 3)
     openai_ranking_model: str = "gpt-4.1-mini"

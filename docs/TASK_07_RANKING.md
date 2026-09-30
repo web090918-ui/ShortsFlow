@@ -44,6 +44,7 @@ Candidates are taken in score order, skipping any that overlaps an already-picke
 
 ```text
 SHORTSFLOW_OPENAI_API_KEY=<server-only secret, already configured for Whisper>
+SHORTSFLOW_OPENAI_PROJECT=<optional OpenAI project id; only effective with an organization-scoped key>
 SHORTSFLOW_OPENAI_RANKING_MODEL=gpt-4.1-mini
 SHORTSFLOW_RANKING_REASON_LANGUAGE=ko
 SHORTSFLOW_RANKING_TOP_COUNT=3
