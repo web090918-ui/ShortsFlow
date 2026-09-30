@@ -40,21 +40,19 @@ def test_create_product_source_without_remote_fetch() -> None:
     assert response.json()["metadata"] == {"hostname": "shop.example.com"}
 
 
-def test_create_upload_source() -> None:
+def test_create_upload_source_registers_metadata_and_upload_target() -> None:
     response = client.post(
         "/sources/upload",
-        files={"file": ("clip.mp4", b"video-bytes", "video/mp4")},
+        json={"filename": "clip.mp4", "content_type": "video/mp4", "size_bytes": 11},
     )
 
     assert response.status_code == 201
     source = response.json()
     assert source["type"] == "UPLOAD"
     assert source["url"] is None
-    assert source["metadata"] == {
-        "filename": "clip.mp4",
-        "content_type": "video/mp4",
-        "size_bytes": 11,
-    }
+    assert source["metadata"]["filename"] == "clip.mp4"
+    assert source["metadata"]["size_bytes"] == 11
+    assert source["upload"]["mode"] in {"direct", "signed_put"}
 
 
 def test_rejects_non_video_youtube_url() -> None:

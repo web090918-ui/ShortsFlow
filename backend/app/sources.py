@@ -5,10 +5,17 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+import tempfile
+
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field, HttpUrl
 
-from app.acquisition import AcquisitionError, titan_provider_from_settings
+from app.acquisition import (
+    AcquisitionError,
+    titan_provider_from_settings,
+    upload_source_url,
+)
+from app.shorts_pipeline import ArtifactStorage, _storage_from_settings
 from app.product_content import (
     ContentGenerationError,
     ProductContentGenerator,
@@ -58,7 +65,7 @@ class SourceRepository(Protocol):
 
 
 class InMemorySourceRepository:
-    """Task 02 storage adapter. Replace it when persistent storage is selected."""
+    """Local-development adapter; Cloud Run uses Firestore so instances share Sources."""
 
     def __init__(self) -> None:
         self._sources: dict[UUID, SourceRecord] = {}
@@ -69,6 +76,32 @@ class InMemorySourceRepository:
 
     def get(self, source_id: UUID) -> SourceRecord | None:
         return self._sources.get(source_id)
+
+
+class FirestoreSourceRepository:
+    def __init__(self, client: Any, collection: str = "sources") -> None:
+        self._collection = client.collection(collection)
+
+    def save(self, source: SourceRecord) -> SourceRecord:
+        self._collection.document(str(source.id)).set(source.model_dump(mode="json"))
+        return source
+
+    def get(self, source_id: UUID) -> SourceRecord | None:
+        snapshot = self._collection.document(str(source_id)).get()
+        if not snapshot.exists:
+            return None
+        return SourceRecord.model_validate(snapshot.to_dict())
+
+
+def _repository_from_settings() -> SourceRepository:
+    settings = get_settings()
+    if settings.job_repository_backend == "memory":
+        return InMemorySourceRepository()
+    from google.cloud import firestore
+
+    return FirestoreSourceRepository(
+        firestore.Client(project=settings.gcp_project_id, database=settings.firestore_database)
+    )
 
 
 YOUTUBE_HOSTS = {"youtube.com", "youtu.be"}
@@ -129,7 +162,9 @@ def _new_source(
     )
 
 
-repository: SourceRepository = InMemorySourceRepository()
+repository: SourceRepository = _repository_from_settings()
+upload_storage: ArtifactStorage = _storage_from_settings(get_settings())
+MAX_UPLOAD_BYTES = get_settings().shorts_max_source_bytes
 
 
 def _youtube_provider_from_settings() -> VideoSourceProvider:
@@ -159,27 +194,43 @@ def create_url_source(payload: SourceUrlRequest, prepare: bool = False) -> Sourc
     return source
 
 
+class UploadSourceRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(default="video/mp4", max_length=100)
+    size_bytes: int = Field(gt=0)
+    duration_seconds: float | None = Field(default=None, gt=0)
+
+
+class UploadSourceResponse(SourceResponse):
+    upload: dict[str, Any]
+
+
+def _upload_key(source_id: UUID, extension: str) -> str:
+    return f"uploads/{source_id}{extension or '.mp4'}"
+
+
 @router.post(
     "/upload",
-    response_model=SourceResponse,
+    response_model=UploadSourceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_upload_source(file: UploadFile = File(...)) -> SourceResponse:
-    filename = Path(file.filename or "").name
-    extension = Path(filename).suffix.lower()
-    content_type = file.content_type or "application/octet-stream"
+def create_upload_source(payload: UploadSourceRequest) -> UploadSourceResponse:
+    """Register an upload and tell the browser where to send the bytes.
 
+    With Cloud Storage the browser PUTs straight to a signed URL, which keeps large
+    files away from the Cloud Run request limit. Locally the API receives the file.
+    """
+    filename = Path(payload.filename).name
+    extension = Path(filename).suffix.lower()
+    content_type = payload.content_type or "application/octet-stream"
     if not filename or (
         not content_type.startswith("video/") and extension not in VIDEO_EXTENSIONS
     ):
+        raise HTTPException(status_code=422, detail="Upload a supported video file.")
+    if payload.size_bytes > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=422,
-            detail="Upload a supported video file.",
-        )
-    if file.size == 0:
-        raise HTTPException(
-            status_code=422,
-            detail="The uploaded video file is empty.",
+            detail=f"업로드 파일은 최대 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB까지 가능합니다.",
         )
 
     source = _new_source(
@@ -188,11 +239,89 @@ async def create_upload_source(file: UploadFile = File(...)) -> SourceResponse:
         metadata={
             "filename": filename,
             "content_type": content_type,
-            "size_bytes": file.size,
+            "size_bytes": payload.size_bytes,
+            "upload": {
+                "filename": filename,
+                "content_type": content_type,
+                "size_bytes": payload.size_bytes,
+                "duration_seconds": payload.duration_seconds,
+            },
         },
     )
-    await file.close()
-    return repository.save(source)
+    key = _upload_key(source.id, extension)
+    source = source.model_copy(
+        update={
+            "processing_reference": {
+                "provider": "upload",
+                "storage_key": key,
+                "source_url": upload_source_url(key),
+            }
+        }
+    )
+    repository.save(source)
+    signed = upload_storage.upload_url(key, content_type=content_type)
+    upload = (
+        {"mode": "signed_put", "url": signed, "headers": {"Content-Type": content_type}}
+        if signed
+        else {"mode": "direct", "url": f"/sources/{source.id}/content"}
+    )
+    return UploadSourceResponse(**source.model_dump(exclude={"processing_reference"}), upload=upload)
+
+
+@router.put("/{source_id}/content", response_model=SourceResponse)
+async def receive_upload_content(source_id: UUID, request: Request) -> SourceResponse:
+    """Local-development fallback: the API stores the file itself."""
+    source = repository.get(source_id)
+    if source is None or source.type != SourceType.UPLOAD:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+    key = (source.processing_reference or {}).get("storage_key")
+    if not isinstance(key, str):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Upload target missing.")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(key).suffix) as handle:
+        written = 0
+        async for chunk in request.stream():
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                handle.close()
+                Path(handle.name).unlink(missing_ok=True)
+                raise HTTPException(status_code=422, detail="업로드 파일이 너무 큽니다.")
+            handle.write(chunk)
+    if written == 0:
+        Path(handle.name).unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="The uploaded video file is empty.")
+    upload_storage.store(Path(handle.name), key=key, filename=Path(key).name)
+    return _finalize_upload(source)
+
+
+@router.post("/{source_id}/uploaded", response_model=SourceResponse)
+def confirm_upload(source_id: UUID) -> SourceResponse:
+    """Mark an upload READY once the object exists in storage."""
+    source = repository.get(source_id)
+    if source is None or source.type != SourceType.UPLOAD:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
+    if source.status == SourceStatus.READY:
+        return source
+    key = (source.processing_reference or {}).get("storage_key")
+    if not isinstance(key, str) or not upload_storage.exists(key):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="업로드한 파일을 아직 찾을 수 없습니다. 업로드가 끝난 뒤 다시 시도해 주세요.",
+        )
+    return _finalize_upload(source)
+
+
+def _finalize_upload(source: SourceRecord) -> SourceRecord:
+    metadata = dict(source.metadata)
+    metadata["media"] = {"provider": "upload"}
+    return repository.save(
+        source.model_copy(
+            update={
+                "status": SourceStatus.READY,
+                "metadata": metadata,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
+    )
 
 
 @router.get("/{source_id}", response_model=SourceResponse)

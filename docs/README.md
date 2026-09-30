@@ -14,3 +14,4 @@ ShortsFlow product and delivery decisions are maintained here:
 - [Task 07 ranking](TASK_07_RANKING.md) records the generic AI Score criteria, the Top 3 selection rule, and the ranking provider boundary.
 - [Task 08 preview and render](TASK_08_RENDER.md) records candidate-based rendering, the ASS caption templates, inline preview URLs, and the Top 3 UI.
 - [Task 09 download UX](TASK_09_DOWNLOAD.md) records the artifact states (ready, expired, unavailable, failed), the retry actions, and the end-to-end acceptance evidence.
+- [Task 11 upload sources](TASK_11_UPLOAD.md) records direct-to-storage uploads, the upload acquisition route, and the bucket CORS setup.

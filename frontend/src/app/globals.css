@@ -853,3 +853,7 @@ h2 {
 .angle-script .angle-cta {
   color: var(--accent);
 }
+
+.upload-metadata {
+  grid-template-columns: 1fr;
+}

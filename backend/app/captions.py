@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
-from app.downloads import RenderTemplate
+from app.templates import RenderTemplate
 
 
 PLAY_RES_X = 1080

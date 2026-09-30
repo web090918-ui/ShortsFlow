@@ -21,6 +21,8 @@ from app.shorts_pipeline import (
 )
 from app.acquisition import (
     AcquisitionPendingError,
+    RoutingAcquirer,
+    UploadAcquirer,
     titan_acquirer_from_settings,
     titan_provider_from_settings,
 )
@@ -36,7 +38,7 @@ from app.products import ProductFacts
 from app.tts import OpenAISpeechSynthesizer
 from app.video_processing import FfmpegVideoProcessor
 from app.ranking import CandidateRanker, HeuristicRanker, OpenAIRanker
-from app.sources import SourceStatus, repository as source_repository
+from app.sources import SourceStatus, SourceType, repository as source_repository
 from app.transcripts import (
     FfmpegAudioExtractor,
     OpenAIWhisperProvider,
@@ -72,7 +74,8 @@ class ProcessingStep(str, Enum):
 
 class CreateProcessingJobRequest(BaseModel):
     source_id: UUID
-    source_url: HttpUrl
+    # Required for YouTube; omitted for an uploaded Source, whose URL is resolved server-side.
+    source_url: HttpUrl | None = None
     start_seconds: float = Field(ge=0)
     end_seconds: float = Field(gt=0)
     rights_confirmed: bool = False
@@ -425,7 +428,7 @@ def _authenticator_from_settings(settings: Settings) -> WorkerAuthenticator:
 
 
 def _transcript_processor_from_settings(
-    settings: Settings, media_cache: SourceMediaRepository
+    settings: Settings, media_cache: SourceMediaRepository, storage: ArtifactStorage
 ) -> TranscriptProcessor | None:
     titan = titan_provider_from_settings(settings)
     acquirer = titan_acquirer_from_settings(settings, media_cache)
@@ -446,7 +449,8 @@ def _transcript_processor_from_settings(
         )
     return TranscriptProcessor(
         TitanCaptionProvider(titan),
-        audio_acquirer=ProviderAudioAcquirer(acquirer),
+        # Uploaded sources come from storage; YouTube sources from the cached provider.
+        audio_acquirer=ProviderAudioAcquirer(RoutingAcquirer(acquirer, UploadAcquirer(storage))),
         audio_extractor=FfmpegAudioExtractor(),
         stt_provider=stt_provider,
     )
@@ -457,8 +461,10 @@ repository: ProcessingJobRepository = _repository_from_settings(settings)
 dispatcher: TaskDispatcher = _dispatcher_from_settings(settings)
 worker_authenticator: WorkerAuthenticator = _authenticator_from_settings(settings)
 source_media_repository: SourceMediaRepository = source_media_repository_from_settings(settings)
-transcript_processor = _transcript_processor_from_settings(settings, source_media_repository)
 short_pipeline: ShortPipeline = short_pipeline_from_settings(settings, source_media_repository)
+transcript_processor = _transcript_processor_from_settings(
+    settings, source_media_repository, short_pipeline.storage
+)
 candidate_generator: CandidateGenerator = HeuristicCandidateGenerator(
     min_seconds=settings.candidate_min_seconds,
     max_seconds=settings.candidate_max_seconds,
@@ -739,6 +745,30 @@ def enqueue_job(
     return repository.save(job.model_copy(update={"task_name": task_name}))
 
 
+def _resolve_job_source_url(payload: CreateProcessingJobRequest) -> str:
+    """YouTube jobs carry their URL; upload jobs resolve it from the READY Source."""
+    if payload.source_url is not None:
+        if not _is_youtube_url(payload.source_url):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="YouTube 영상 URL을 입력해 주세요.",
+            )
+        return str(payload.source_url)
+    source = source_repository.get(payload.source_id)
+    reference = (source.processing_reference or {}) if source is not None else {}
+    if (
+        source is None
+        or source.type != SourceType.UPLOAD
+        or source.status != SourceStatus.READY
+        or not isinstance(reference.get("source_url"), str)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="YouTube URL을 입력하거나 업로드가 완료된 영상 Source를 선택해 주세요.",
+        )
+    return str(reference["source_url"])
+
+
 @router.post(
     "/processing-jobs",
     response_model=ProcessingJobResponse,
@@ -748,11 +778,7 @@ def create_processing_job(
     payload: CreateProcessingJobRequest,
     background_tasks: BackgroundTasks,
 ) -> ProcessingJobRecord:
-    if not _is_youtube_url(payload.source_url):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="YouTube 영상 URL을 입력해 주세요.",
-        )
+    source_url = _resolve_job_source_url(payload)
     if not payload.rights_confirmed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -769,7 +795,7 @@ def create_processing_job(
     job = ProcessingJobRecord(
         id=uuid4(),
         source_id=payload.source_id,
-        source_url=str(payload.source_url),
+        source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.TRANSCRIPT,
         progress=0,

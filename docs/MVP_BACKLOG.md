@@ -255,6 +255,21 @@ Implementation status (2026-09-30):
 - Reuse render, preview, and download capabilities where appropriate.
 - Do not implement affiliate conversion tracking.
 
+## Task 11 — Upload Source Processing
+
+Status: Implemented — Cloud Run validation pending
+
+Added on 2026-09-30 so the `UPLOAD` Source type completes the same flow as a YouTube URL: upload a file, pick a range, get the AI Score Top 3, render and download.
+
+- The browser reads the duration, registers the upload (`POST /sources/upload`, JSON), PUTs the file straight to a signed Cloud Storage URL, and confirms with `POST /sources/{id}/uploaded`. Locally the API receives the file.
+- `RoutingAcquirer` sends `upload://` job URLs to `UploadAcquirer`, which copies the object from `ArtifactStorage`; transcript skips captions and uses Whisper; candidates, ranking, render, preview, and download are unchanged.
+- `SourceRepository` gained a Firestore adapter so Sources survive across Cloud Run instances.
+- The bucket needs CORS for the site origin. See [Task 11](TASK_11_UPLOAD.md).
+
+## Task 12 — Publish to YouTube (requested; changes the MVP1 exclusion on automatic publishing)
+
+Not started. Requires channel connection with Google OAuth, the `youtube.upload` scope, storing refresh tokens, and uploading the finished MP4 with title, description (affiliate link and disclosure), and Shorts-compatible settings. The scope is sensitive, so an unverified app works only for test users until Google verifies it.
+
 ## Deferred to MVP2
 
 - Channel connection

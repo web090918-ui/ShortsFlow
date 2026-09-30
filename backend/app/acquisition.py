@@ -769,6 +769,81 @@ class CachedTitanAcquirer:
         return self._download(ready, destination, progress)
 
 
+UPLOAD_SCHEME = "upload://"
+
+
+def upload_source_url(storage_key: str) -> str:
+    """Synthetic job URL for an uploaded source: ``upload://uploads/<id>.mp4``."""
+    return f"{UPLOAD_SCHEME}{storage_key}"
+
+
+def is_upload_url(url: str) -> bool:
+    return url.startswith(UPLOAD_SCHEME)
+
+
+class UploadStorage(Protocol):
+    def exists(self, key: str) -> bool: ...
+
+    def fetch_to(self, key: str, destination: Path) -> None: ...
+
+
+class UploadAcquirer:
+    """Serves uploaded files from the artifact storage as the acquisition source."""
+
+    name = "upload"
+
+    def __init__(self, storage: UploadStorage) -> None:
+        self._storage = storage
+
+    def acquire(
+        self,
+        url: str,
+        *,
+        destination: Path,
+        progress: ProgressCallback | None = None,
+    ) -> AcquiredVideo:
+        if not is_upload_url(url):
+            raise AcquisitionError("업로드 소스 주소가 올바르지 않습니다.", retryable=False)
+        key = url[len(UPLOAD_SCHEME):]
+        _report(progress, 5)
+        if not self._storage.exists(key):
+            raise AcquisitionError(
+                "업로드한 영상을 더 이상 찾을 수 없습니다. 파일을 다시 업로드해 주세요.",
+                retryable=False,
+            )
+        try:
+            self._storage.fetch_to(key, destination)
+        except FileNotFoundError as exc:
+            raise AcquisitionError(
+                "업로드한 영상을 더 이상 찾을 수 없습니다. 파일을 다시 업로드해 주세요.",
+                retryable=False,
+            ) from exc
+        except Exception as exc:
+            raise AcquisitionError("업로드한 영상을 불러오지 못했습니다.") from exc
+        _report(progress, 100)
+        return AcquiredVideo(path=destination, provider=self.name)
+
+
+class RoutingAcquirer:
+    """Dispatches by URL scheme: uploads to storage, everything else to the provider."""
+
+    def __init__(self, default: VideoAcquisitionProvider, upload: UploadAcquirer) -> None:
+        self._default = default
+        self._upload = upload
+        self.name = default.name
+
+    def acquire(
+        self,
+        url: str,
+        *,
+        destination: Path,
+        progress: ProgressCallback | None = None,
+    ) -> AcquiredVideo:
+        if is_upload_url(url):
+            return self._upload.acquire(url, destination=destination, progress=progress)
+        return self._default.acquire(url, destination=destination, progress=progress)
+
+
 def titan_client_from_settings(settings: Settings) -> ApifyTitanClient | None:
     if settings.apify_api_token is None:
         return None

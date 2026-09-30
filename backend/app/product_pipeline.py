@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from app.acquisition import AcquisitionError, download_to_file
 from app.captions import CaptionCue, build_product_ass
-from app.downloads import RenderTemplate
+from app.templates import RenderTemplate
 from app.product_content import ContentAngle, DISCLOSURE
 from app.products import ProductFacts
 from app.shorts_pipeline import (

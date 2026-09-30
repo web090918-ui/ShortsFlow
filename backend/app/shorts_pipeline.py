@@ -19,13 +19,15 @@ from pydantic import BaseModel
 from app.acquisition import (
     AcquisitionError,
     AcquisitionPendingError,
+    RoutingAcquirer,
+    UploadAcquirer,
     VideoAcquisitionProvider,
     YtDlpProvider,
     titan_acquirer_from_settings,
 )
 from app.captions import CaptionCue, build_ass, select_cues
 from app.config import Settings
-from app.downloads import RenderTemplate
+from app.templates import RenderTemplate
 from app.source_media import SourceMediaRepository
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
 
@@ -77,6 +79,14 @@ class ArtifactStorage(Protocol):
         """Whether the stored artifact is still there (lifecycle rules may remove it)."""
         ...
 
+    def upload_url(self, key: str, *, content_type: str) -> str | None:
+        """A URL the browser can PUT a file to, or ``None`` when the API must receive it."""
+        ...
+
+    def fetch_to(self, key: str, destination: Path) -> None:
+        """Copy a stored object to a local path for processing."""
+        ...
+
 
 class LocalArtifactStorage:
     """Keeps rendered Shorts on the local disk; the API serves them by job id."""
@@ -84,8 +94,22 @@ class LocalArtifactStorage:
     def __init__(self, root: Path) -> None:
         self._root = root
 
+    @property
+    def root(self) -> Path:
+        return self._root
+
     def exists(self, key: str) -> bool:
         return (self._root / key).is_file()
+
+    def upload_url(self, key: str, *, content_type: str) -> str | None:
+        return None
+
+    def fetch_to(self, key: str, destination: Path) -> None:
+        source = self._root / key
+        if not source.is_file():
+            raise FileNotFoundError(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
 
     def store(self, file_path: Path, *, key: str, filename: str) -> StoredArtifact:
         destination = self._root / key
@@ -113,6 +137,34 @@ class GcsArtifactStorage:
         except Exception as exc:  # network or permission trouble: report unavailable
             logger.warning("Could not check artifact %s: %s", key, exc)
             return False
+
+    def upload_url(self, key: str, *, content_type: str) -> str | None:
+        blob = self._bucket.blob(key)
+        options: dict[str, Any] = {
+            "version": "v4",
+            "expiration": timedelta(hours=1),
+            "method": "PUT",
+            "content_type": content_type,
+        }
+        try:
+            return str(blob.generate_signed_url(**options))
+        except (AttributeError, TypeError, ValueError):
+            import google.auth
+            from google.auth.transport import requests as google_requests
+
+            credentials, _ = google.auth.default()
+            credentials.refresh(google_requests.Request())
+            return str(
+                blob.generate_signed_url(
+                    **options,
+                    service_account_email=credentials.service_account_email,
+                    access_token=credentials.token,
+                )
+            )
+
+    def fetch_to(self, key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self._bucket.blob(key).download_to_filename(str(destination))
 
     def _signed_url(self, blob: Any, filename: str, *, inline: bool = False) -> str:
         disposition = "inline" if inline else f'attachment; filename="{filename}"'
@@ -365,8 +417,10 @@ def _storage_from_settings(settings: Settings) -> ArtifactStorage:
 def short_pipeline_from_settings(
     settings: Settings, media_cache: SourceMediaRepository
 ) -> ShortPipeline:
-    return ShortPipeline(
+    storage = _storage_from_settings(settings)
+    # Uploaded sources live in the same storage; everything else goes to the provider.
+    provider = RoutingAcquirer(
         _acquisition_provider_from_settings(settings, media_cache),
-        FfmpegVideoProcessor(),
-        _storage_from_settings(settings),
+        UploadAcquirer(storage),
     )
+    return ShortPipeline(provider, FfmpegVideoProcessor(), storage)

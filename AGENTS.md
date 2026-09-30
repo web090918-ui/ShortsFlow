@@ -39,6 +39,8 @@ Do not attempt to complete the YouTube and Product flows simultaneously. Deliver
 
 Complete the YouTube URL to downloadable Short flow end-to-end before implementing the Product/Affiliate flow.
 
+Task 11 — Upload Source Processing was added after Task 10 so `UPLOAD` Sources run the same range → Top 3 → render → download flow. Task 12 — Publish to YouTube was requested by the product owner on 2026-09-30 and, once started, supersedes the "automatic publishing" exclusion below for a manual, user-triggered upload of a finished Short to the creator's own connected channel only.
+
 Task 05B — Manual-range Short (user-entered start/end to 9:16 MP4) was added after Task 05 to reach the downloadable-Short promise without AI. It reuses the Task 04 job infrastructure and must keep acquisition (`VideoAcquisitionProvider`), editing (`VideoProcessor`), and storage (`ArtifactStorage`) behind their small boundaries so providers can be swapped.
 
 ## Product rules

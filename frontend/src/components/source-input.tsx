@@ -9,6 +9,8 @@ import { ProductStudio } from "@/components/product-studio";
 import type { ProductContent, ProductFacts } from "@/components/product-studio";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
+import { currentDurationReader, putUpload } from "@/lib/upload";
+import type { UploadTarget } from "@/lib/upload";
 
 type InputMode = "url" | "upload";
 type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
@@ -26,8 +28,16 @@ type Source = {
     };
     product?: ProductFacts;
     product_content?: ProductContent;
+    upload?: {
+      filename: string;
+      content_type: string;
+      size_bytes: number;
+      duration_seconds: number | null;
+    };
   };
 };
+
+type UploadSource = Source & { upload: UploadTarget };
 
 type RankedCandidate = {
   candidate_id: string;
@@ -185,7 +195,11 @@ export function SourceInput() {
   const [isStartingRender, setIsStartingRender] = useState(false);
   const [lastCandidate, setLastCandidate] = useState<RankedCandidate | null>(null);
 
-  const sourceDuration = source?.metadata?.youtube?.duration_seconds ?? null;
+  const sourceDuration =
+    source?.metadata?.youtube?.duration_seconds ??
+    source?.metadata?.upload?.duration_seconds ??
+    null;
+  const [uploadStep, setUploadStep] = useState<string | null>(null);
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
   const topCandidates = analysisJob?.result?.ranking?.top_3 ?? [];
@@ -243,7 +257,9 @@ export function SourceInput() {
   }, [renderJob]);
 
   function resetForSource(createdSource: Source) {
-    const duration = createdSource.metadata?.youtube?.duration_seconds;
+    const duration =
+      createdSource.metadata?.youtube?.duration_seconds ??
+      createdSource.metadata?.upload?.duration_seconds;
     setSource(createdSource);
     setRangeStart(0);
     setRangeEnd(
@@ -278,25 +294,20 @@ export function SourceInput() {
 
     setIsSubmitting(true);
     try {
-      let response: Response;
       if (mode === "url") {
-        response = await fetch(`${API_URL}/sources?prepare=true`, {
+        const response = await fetch(`${API_URL}/sources?prepare=true`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: requestedUrl }),
         });
+        const createdSource = await readJsonResponse<Source>(response);
+        cacheSource(requestedUrl, createdSource);
+        resetForSource(createdSource);
       } else {
-        const formData = new FormData();
-        formData.append("file", file as File);
-        response = await fetch(`${API_URL}/sources/upload`, {
-          method: "POST",
-          body: formData,
-        });
+        resetForSource(await uploadFile(file as File));
       }
-      const createdSource = await readJsonResponse<Source>(response);
-      if (mode === "url") cacheSource(requestedUrl, createdSource);
-      resetForSource(createdSource);
     } catch (submissionError) {
+      setUploadStep(null);
       setError(
         submissionError instanceof Error
           ? submissionError.message
@@ -305,6 +316,32 @@ export function SourceInput() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function uploadFile(selected: File): Promise<Source> {
+    setUploadStep("영상 길이 확인 중...");
+    const duration = await currentDurationReader()(selected);
+    setUploadStep("업로드 준비 중...");
+    const registered = await readJsonResponse<UploadSource>(
+      await fetch(`${API_URL}/sources/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selected.name,
+          content_type: selected.type || "video/mp4",
+          size_bytes: selected.size,
+          duration_seconds: duration,
+        }),
+      }),
+    );
+    setUploadStep(`업로드 중... (${Math.round(selected.size / 1024 / 1024)}MB)`);
+    await putUpload(registered.upload, selected);
+    setUploadStep("업로드 확인 중...");
+    const ready = await readJsonResponse<Source>(
+      await fetch(`${API_URL}/sources/${registered.id}/uploaded`, { method: "POST" }),
+    );
+    setUploadStep(null);
+    return ready;
   }
 
   async function handleAnalyze() {
@@ -319,7 +356,7 @@ export function SourceInput() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source_id: source.id,
-          source_url: url.trim(),
+          source_url: source.type === "UPLOAD" ? undefined : url.trim(),
           start_seconds: rangeStart,
           end_seconds: rangeEnd,
           rights_confirmed: true,
@@ -438,7 +475,9 @@ export function SourceInput() {
         )}
 
         <button className="submit-button" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "YouTube Source 처리 중..." : "Source 생성"}
+          {isSubmitting
+            ? uploadStep ?? (mode === "upload" ? "업로드 중..." : "YouTube Source 처리 중...")
+            : "Source 생성"}
         </button>
       </form>
 
@@ -454,6 +493,21 @@ export function SourceInput() {
             <span>{source.type}</span>
             <strong>{source.status}</strong>
           </div>
+          {source.metadata?.upload ? (
+            <div className="source-metadata upload-metadata">
+              <div>
+                <h3>{source.metadata.upload.filename}</h3>
+                <p>
+                  {[
+                    `${Math.max(1, Math.round(source.metadata.upload.size_bytes / 1024 / 1024))}MB`,
+                    formatDuration(source.metadata.upload.duration_seconds),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+            </div>
+          ) : null}
           {source.metadata?.youtube ? (
             <div className="source-metadata">
               {source.metadata.youtube.thumbnail_url ? (
@@ -489,7 +543,7 @@ export function SourceInput() {
               }
             />
           ) : null}
-          {source.type === "YOUTUBE" &&
+          {(source.type === "YOUTUBE" || source.type === "UPLOAD") &&
           source.status === "READY" &&
           typeof sourceDuration === "number" ? (
             <section className="range-picker" aria-labelledby="range-heading">

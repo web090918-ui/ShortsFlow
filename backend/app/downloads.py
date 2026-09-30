@@ -38,10 +38,7 @@ class DownloadStatus(str, Enum):
     FAILED = "FAILED"
 
 
-class RenderTemplate(str, Enum):
-    CLEAN_CAPTION = "CLEAN_CAPTION"
-    BOLD_HIGHLIGHT = "BOLD_HIGHLIGHT"
-    MINIMAL = "MINIMAL"
+from app.templates import RenderTemplate  # noqa: E402  (re-exported for callers)
 
 
 class RangeDownloadRequest(BaseModel):

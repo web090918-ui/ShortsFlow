@@ -13,6 +13,7 @@ from app.acquisition import (
     ApifyTitanProvider,
     SubtitlesUnavailableError,
     VideoAcquisitionProvider,
+    is_upload_url,
 )
 
 
@@ -173,6 +174,9 @@ class TitanCaptionProvider:
         self, source_url: str, *, language: str | None = None
     ) -> TranscriptResult:
         requested = (language or "ko").split("-", 1)[0]
+        if is_upload_url(source_url):
+            # Uploaded files carry no caption track; speech-to-text is the only path.
+            raise CaptionsUnavailableError("업로드 영상은 자막이 없어 음성 인식을 사용합니다.")
         try:
             text = self._provider.fetch_subtitles(source_url, language=requested)
         except SubtitlesUnavailableError as exc:
