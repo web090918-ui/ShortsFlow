@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -58,7 +58,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
   const topbarTitle = { projects: "내 작업실", video: "영상 쇼츠 만들기", affiliate: "글·사진으로 만들기", settings: "계정 · 제작 설정" }[section];
   return <div className={styles.workspace}>
     <aside className={styles.sidebar}>
-      <Link href="/my" className={styles.brand} aria-label="Cutpick 회원 작업실"><span className={styles.symbol} aria-hidden="true"><i /><i /></span>cutpick.</Link>
+      <Link href="/my" className={styles.brand} aria-label="Cutpick 회원 작업실"><span className={styles.symbol} aria-hidden="true"><i /><i /></span><span>cutpick<span className={styles.brandDot}>.</span></span></Link>
       <span className={styles.label}>MY WORKSPACE</span>
       <nav aria-label="회원 메뉴">
         <Link href="/my" aria-current={section === "projects" ? "page" : undefined}><span aria-hidden="true">▦</span> 내 프로젝트</Link>
