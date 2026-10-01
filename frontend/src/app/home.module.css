@@ -23,7 +23,7 @@
 .header :global(.auth-menu a),.header :global(.auth-user),.header :global(.auth-logout) { color:var(--ink); font-size:15px; font-weight:700; }
 .header :global(.auth-login),.header :global(.auth-logout) { background:transparent; border:2px solid var(--ink); padding:9px 13px; }
 .header :global(.auth-menu .credit-badge),.header :global(.credit-badge strong) { color:var(--red) !important; background:transparent; border:0; padding:0; }
-.header :global(.auth-logout) { font-size:12px; font-weight:400; border:0; padding:6px; }
+.header :global(.auth-menu .auth-logout) { font-size:12px; font-weight:400; border:0; padding:6px; }
 .header :global(.auth-user img) { border-radius:0; }
 .skip { position:absolute; left:16px; top:-100px; padding:12px; background:var(--ink); z-index:20; }
 .skip:focus { top:10px; }
