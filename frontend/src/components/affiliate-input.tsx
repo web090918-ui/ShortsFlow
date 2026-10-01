@@ -242,7 +242,7 @@ export function AffiliateInput() {
         : source?.type;
 
   return (
-    <section className="source-panel" aria-labelledby="affiliate-heading">
+    <section className="source-panel affiliate-panel" aria-labelledby="affiliate-heading">
       <div className="source-heading">
         <div>
           <p className="section-label">TEXT · PHOTO SHORTS</p>
@@ -264,19 +264,18 @@ export function AffiliateInput() {
       </ol>
 
       <div className="mode-switch" aria-label="입력 방식">
-        <button type="button" className={mode === "manual" ? "active" : ""} onClick={() => setMode("manual")}>
+        <button type="button" aria-pressed={mode === "manual"} className={mode === "manual" ? "active" : ""} onClick={() => { setMode("manual"); setError(null); }}>
           직접 입력
         </button>
-        <button type="button" className={mode === "link" ? "active" : ""} onClick={() => setMode("link")}>
+        <button type="button" aria-pressed={mode === "link"} className={mode === "link" ? "active" : ""} onClick={() => { setMode("link"); setError(null); }}>
           어필리에이트 링크
         </button>
       </div>
 
       {mode === "manual" ? (
-        <form className="source-entry-form manual-product-form" onSubmit={handleManualSubmit}>
+        <form className="manual-product-form" onSubmit={handleManualSubmit}>
           <p className="form-intro">
-            소개할 상품, 장소, 소식… 제목과 사진만 있으면 됩니다. AI가 대본과 제목·설명을 추천하고, 내레이션이 들어간 세로
-            영상으로 만들어 드려요.
+            제목과 사진 1장 이상을 넣어 주세요. 가격·설명·링크는 선택 사항입니다.
           </p>
           <label className="field">
             <span>제목</span>
@@ -327,7 +326,7 @@ export function AffiliateInput() {
           </label>
 
           <fieldset className="picture-field">
-            <legend>사진 (최대 {MAX_PICTURES}장)</legend>
+            <legend>사진 <span className="picture-count">{pictures.length}/{MAX_PICTURES}장</span></legend>
             <div className="picture-list">
               {pictures.map((picture, index) => (
                 <figure key={picture.id} className="picture-item">
@@ -350,12 +349,13 @@ export function AffiliateInput() {
             <div className="picture-url-row">
               <input
                 type="url"
+                spellCheck={false}
                 value={pictureUrl}
                 onChange={(event) => setPictureUrl(event.target.value)}
                 placeholder="또는 이미지 주소(https://...)를 붙여 넣고 추가"
                 aria-label="이미지 주소"
               />
-              <button type="button" className="secondary-button submit-button" onClick={addPictureUrl} disabled={!pictureUrl.trim()}>
+              <button type="button" className="secondary-button submit-button" onClick={addPictureUrl} disabled={!pictureUrl.trim() || pictures.length >= MAX_PICTURES}>
                 추가
               </button>
             </div>
@@ -379,7 +379,7 @@ export function AffiliateInput() {
           <p className="input-footnote">다음 단계에서 AI가 소개 방향 3가지와 제목·설명을 제안합니다.</p>
         </form>
       ) : (
-        <form className="source-entry-form" onSubmit={handleLinkSubmit}>
+        <form className="source-entry-form affiliate-link-form" onSubmit={handleLinkSubmit}>
           <p className="form-intro">쿠팡 파트너스 링크를 넣으면 상품명·가격·이미지를 자동으로 채웁니다.</p>
           <ul className="provider-list" aria-label="지원 공급자">
             {AFFILIATE_PROVIDERS.map((item) => (
