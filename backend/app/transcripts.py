@@ -32,10 +32,19 @@ class CaptionsUnavailableError(TranscriptProcessingError):
     """The source has no caption track the caption provider can return."""
 
 
+class TranscriptWord(BaseModel):
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(gt=0)
+    text: str = Field(min_length=1)
+
+
 class TranscriptSegment(BaseModel):
     start_seconds: float = Field(ge=0)
     end_seconds: float = Field(gt=0)
     text: str = Field(min_length=1)
+    # Per-word timing when the provider gives it (json3 segs, Whisper word granularity);
+    # karaoke-style caption templates use it to highlight the spoken word.
+    words: list[TranscriptWord] | None = None
 
 
 class TranscriptResult(BaseModel):
@@ -79,6 +88,35 @@ def _clean_text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _attach_whisper_words(segments: list[TranscriptSegment], raw_words: Any) -> None:
+    """Whisper returns words at the top level; give each segment the words inside it."""
+    if not isinstance(raw_words, list):
+        return
+    words: list[TranscriptWord] = []
+    for raw in raw_words:
+        if not isinstance(raw, dict):
+            continue
+        start, end, text = raw.get("start"), raw.get("end"), _clean_text(raw.get("word"))
+        if (
+            isinstance(start, (int, float))
+            and isinstance(end, (int, float))
+            and start >= 0
+            and end > start
+            and text
+        ):
+            words.append(
+                TranscriptWord(start_seconds=float(start), end_seconds=float(end), text=text)
+            )
+    for segment in segments:
+        inside = [
+            word
+            for word in words
+            if word.start_seconds >= segment.start_seconds - 0.05
+            and word.start_seconds < segment.end_seconds
+        ]
+        segment.words = inside if len(inside) > 1 else None
+
+
 _TIMESTAMP = re.compile(r"(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})")
 
 
@@ -102,12 +140,12 @@ def _parse_json3(payload: dict[str, Any]) -> list[TranscriptSegment]:
             continue
         start_ms = event.get("tStartMs")
         duration_ms = event.get("dDurationMs")
-        text = "".join(
-            seg.get("utf8", "")
+        segs = [
+            seg
             for seg in event.get("segs") or []
             if isinstance(seg, dict) and isinstance(seg.get("utf8"), str)
-        )
-        text = " ".join(text.split())
+        ]
+        text = " ".join("".join(seg["utf8"] for seg in segs).split())
         if (
             not isinstance(start_ms, (int, float))
             or not isinstance(duration_ms, (int, float))
@@ -115,14 +153,38 @@ def _parse_json3(payload: dict[str, Any]) -> list[TranscriptSegment]:
             or not text
         ):
             continue
+        start = start_ms / 1000
+        end = (start_ms + duration_ms) / 1000
         segments.append(
             TranscriptSegment(
-                start_seconds=start_ms / 1000,
-                end_seconds=(start_ms + duration_ms) / 1000,
+                start_seconds=start,
+                end_seconds=end,
                 text=text,
+                words=_json3_words(segs, start_seconds=start, end_seconds=end),
             )
         )
     return segments
+
+
+def _json3_words(
+    segs: list[dict[str, Any]], *, start_seconds: float, end_seconds: float
+) -> list[TranscriptWord] | None:
+    """YouTube auto-captions time each word as a seg with ``tOffsetMs``."""
+    timed: list[tuple[float, str]] = []
+    for seg in segs:
+        word = " ".join(str(seg["utf8"]).split())
+        offset = seg.get("tOffsetMs", 0)
+        if not word or not isinstance(offset, (int, float)):
+            continue
+        timed.append((start_seconds + offset / 1000, word))
+    if len(timed) < 2:
+        return None
+    words: list[TranscriptWord] = []
+    for index, (start, word) in enumerate(timed):
+        end = timed[index + 1][0] if index + 1 < len(timed) else end_seconds
+        if end > start:
+            words.append(TranscriptWord(start_seconds=start, end_seconds=end, text=word))
+    return words or None
 
 
 def _parse_cue_text(text: str) -> list[TranscriptSegment]:
@@ -267,7 +329,7 @@ class OpenAIWhisperProvider:
                     "file": audio,
                     "model": self._model,
                     "response_format": "verbose_json",
-                    "timestamp_granularities": ["segment"],
+                    "timestamp_granularities": ["segment", "word"],
                 }
                 if language is not None:
                     request["language"] = language.split("-", 1)[0]
@@ -308,6 +370,7 @@ class OpenAIWhisperProvider:
             )
         if not segments:
             raise TranscriptProcessingError("음성에서 텍스트를 인식하지 못했습니다.")
+        _attach_whisper_words(segments, payload.get("words"))
         return TranscriptResult(
             provider="openai_whisper",
             language=payload.get("language")
@@ -350,11 +413,24 @@ class TranscriptProcessor:
             end = segment.end_seconds + offset
             if end <= start_seconds or start >= end_seconds:
                 continue
+            words = None
+            if segment.words:
+                words = [
+                    TranscriptWord(
+                        start_seconds=max(word.start_seconds + offset, start_seconds),
+                        end_seconds=min(word.end_seconds + offset, end_seconds),
+                        text=word.text,
+                    )
+                    for word in segment.words
+                    if word.end_seconds + offset > start_seconds
+                    and word.start_seconds + offset < end_seconds
+                ] or None
             selected.append(
                 TranscriptSegment(
                     start_seconds=max(start, start_seconds),
                     end_seconds=min(end, end_seconds),
                     text=segment.text,
+                    words=words,
                 )
             )
         if not selected:

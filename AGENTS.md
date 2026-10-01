@@ -53,7 +53,7 @@ Task 05B — Manual-range Short (user-entered start/end to 9:16 MP4) was added a
 - Use the selected range as a 480p analysis proxy. Reacquire only the final selected candidate at output quality when rendering is implemented.
 - In the manual-range Short flow, the acquisition provider only obtains the source file; FFmpeg owns trimming and the 9:16 conversion. Never let a download provider edit video.
 - Apify Titan is the only external YouTube provider (metadata, captions, media) as of 2026-09-29. Tunelio was retired and must not be re-added without an explicit decision. Keep every Titan call behind the existing boundaries in `app/acquisition.py` so the provider can change later.
-- Carry one of the three MVP render preferences (`CLEAN_CAPTION`, `BOLD_HIGHLIGHT`, or `MINIMAL`) without implementing template-specific rendering before Task 08.
+- Caption templates are ASS style presets in `backend/app/captions.py` (`RenderTemplate` ids, served by `GET /templates`); frame layouts are `RenderLayout.FILL` (center crop) or `FIT` (whole frame over a blurred background). Add a template by adding a style there; keep template logic out of `video_processing.py`.
 - Prefer direct, readable code over speculative abstractions.
 - Preserve a path to later phases without implementing them early.
 

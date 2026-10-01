@@ -59,14 +59,17 @@ class StubShortPipeline:
         report,
         captions=None,
         template=None,
+        layout=None,
     ):
         self.calls.append(
             {
+                "layout": layout,
                 "job_id": job_id,
                 "url": source_url,
                 "start": start_seconds,
                 "end": end_seconds,
                 "captions": [cue.text for cue in captions] if captions else None,
+                "raw_captions": captions,
                 "template": template,
             }
         )
@@ -186,7 +189,9 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "start": 135,
             "end": 185,
             "captions": None,
+            "raw_captions": None,
             "template": None,
+            "layout": "FILL",
         }
     ]
 
@@ -335,6 +340,7 @@ def test_creates_short_from_ranked_candidate_with_captions(
     call = pipeline.calls[0]
     assert call["start"] == 100 and call["end"] == 155
     assert call["template"] == "BOLD_HIGHLIGHT"
+    assert call["layout"] == "FILL"
     # Only cues overlapping the candidate reach the renderer.
     assert call["captions"] == ["이전 문장", "후보 안 첫 문장", "후보 안 둘째 문장"]
 
@@ -494,3 +500,68 @@ def test_file_download_requires_completed_job() -> None:
 def test_unknown_short_job_returns_404() -> None:
     assert client.get(f"/shorts/{uuid4()}").status_code == 404
     assert client.get(f"/shorts/{uuid4()}/file").status_code == 404
+
+
+def test_candidate_render_carries_layout_and_word_timings(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+    analysis.layout_id = "FIT"
+    analysis.result["transcript"]["segments"][1]["words"] = [
+        {"start_seconds": 101, "end_seconds": 105, "text": "후보"},
+        {"start_seconds": 105, "end_seconds": 110, "text": "안"},
+    ]
+    isolated_jobs.save(analysis)
+
+    created = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+        },
+    ).json()
+    assert created["layout_id"] == "FIT"
+
+    assert _run_worker(created["id"]).status_code == 200
+    call = pipeline.calls[0]
+    assert call["layout"] == "FIT"
+    assert call["captions"][1] == "후보 안 첫 문장"
+    assert [w.text for w in call["raw_captions"][1].words] == ["후보", "안"]
+    assert call["raw_captions"][0].words is None
+
+
+def test_layout_can_be_overridden_per_render_and_set_on_manual_ranges(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+
+    override = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+            "layout_id": "FIT",
+        },
+    ).json()
+    manual = client.post(
+        "/shorts",
+        json={
+            "youtube_url": "https://www.youtube.com/watch?v=abc123",
+            "start_seconds": 10,
+            "end_seconds": 40,
+            "rights_confirmed": True,
+            "template_id": "NEON_GLOW",
+            "layout_id": "FIT",
+        },
+    ).json()
+
+    assert override["layout_id"] == "FIT"
+    assert manual["layout_id"] == "FIT" and manual["template_id"] == "NEON_GLOW"
+    assert _run_worker(manual["id"]).status_code == 200
+    assert pipeline.calls[0]["layout"] == "FIT"

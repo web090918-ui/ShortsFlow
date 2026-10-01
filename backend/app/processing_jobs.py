@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.config import Settings, get_settings
 from app.downloads import MAX_RANGE_SECONDS, RenderTemplate
+from app.templates import RenderLayout
 from app.shorts_pipeline import (
     ArtifactStorage,
     ShortPipeline,
@@ -82,6 +83,7 @@ class CreateProcessingJobRequest(BaseModel):
     end_seconds: float = Field(gt=0)
     rights_confirmed: bool = False
     template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    layout_id: RenderLayout = RenderLayout.FILL
     transcript_language: str = Field(
         default="ko",
         pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",
@@ -99,6 +101,7 @@ class ProcessingJobResponse(BaseModel):
     end_seconds: float
     duration_seconds: float
     template_id: RenderTemplate
+    layout_id: RenderLayout = RenderLayout.FILL
     transcript_language: str = "ko"
     attempt_count: int = Field(ge=0)
     stage: str | None = None
@@ -714,6 +717,7 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             report=report,
             captions=captions,
             template=job.template_id if captions else None,
+            layout=job.layout_id,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
@@ -859,6 +863,7 @@ def create_processing_job(
         end_seconds=payload.end_seconds,
         duration_seconds=duration,
         template_id=payload.template_id,
+        layout_id=payload.layout_id,
         transcript_language=payload.transcript_language,
         attempt_count=0,
         error_message=None,

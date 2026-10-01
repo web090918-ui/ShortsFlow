@@ -10,6 +10,7 @@ from app.downloads import router as downloads_router
 from app.me import router as me_router
 from app.logging_config import configure_logging
 from app.processing_jobs import router as processing_jobs_router
+from app.render_options import router as render_options_router
 from app.shorts import router as shorts_router
 from app.sources import router as sources_router
 
@@ -31,6 +32,7 @@ app.include_router(processing_jobs_router)
 app.include_router(shorts_router)
 app.include_router(auth_router)
 app.include_router(me_router)
+app.include_router(render_options_router)
 
 
 @app.get("/health")

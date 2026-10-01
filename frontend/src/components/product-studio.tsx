@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
+import { TemplatePicker } from "@/components/template-picker";
 import { creditBudget, creditCost } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
-
-type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
+import { useRenderOptions } from "@/lib/render-options-context";
 
 export type ProductFacts = {
   provider: string;
@@ -47,11 +47,6 @@ type Props = {
 };
 
 const POLL_INTERVAL_MS = 1500;
-const TEMPLATES: Array<{ id: TemplateId; name: string }> = [
-  { id: "CLEAN_CAPTION", name: "Clean Caption" },
-  { id: "BOLD_HIGHLIGHT", name: "Bold Highlight" },
-  { id: "MINIMAL", name: "Minimal" },
-];
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json();
@@ -70,7 +65,8 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
   const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<TemplateId>("BOLD_HIGHLIGHT");
+  const [templateId, setTemplateId] = useState("BOLD_HIGHLIGHT");
+  const renderOptions = useRenderOptions();
   const [ctaUrl, setCtaUrl] = useState("");
   const [termsConfirmed, setTermsConfirmed] = useState(false);
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
@@ -255,22 +251,13 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
             })}
           </section>
 
-          <fieldset className="template-picker">
-            <legend>자막 템플릿</legend>
-            <div className="template-options">
-              {TEMPLATES.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  className="template-card"
-                  aria-pressed={templateId === template.id}
-                  onClick={() => setTemplateId(template.id)}
-                >
-                  <strong>{template.name}</strong>
-                </button>
-              ))}
-            </div>
-          </fieldset>
+          <TemplatePicker
+            templates={renderOptions.templates}
+            value={templateId}
+            onChange={setTemplateId}
+            imageUrl={product.image_url}
+            description="상품 이미지 위에 얹었을 때의 느낌이에요. 말하는 문장이 이 스타일로 들어갑니다."
+          />
 
           <label className="field">
             <span>파트너스 단축 링크 (선택, 예: https://link.coupang.com/a/...)</span>

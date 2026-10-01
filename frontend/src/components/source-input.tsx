@@ -9,11 +9,13 @@ import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
-import { currentDurationReader, putUpload } from "@/lib/upload";
+import { LayoutPicker, TemplatePicker } from "@/components/template-picker";
+import { useRenderOptions } from "@/lib/render-options-context";
+import type { FrameLayout } from "@/lib/render-options";
+import { currentDurationReader, currentFrameCapturer, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
 
 type InputMode = "url" | "upload";
-type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
 
 type Source = {
   id: string;
@@ -70,31 +72,6 @@ const MAX_RANGE_SECONDS = 60 * 60;
 const POLL_INTERVAL_MS = 1500;
 const SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const SOURCE_CACHE_PREFIX = "shortsflow:source:";
-const TEMPLATES: Array<{
-  id: TemplateId;
-  name: string;
-  description: string;
-  previewClassName: string;
-}> = [
-  {
-    id: "CLEAN_CAPTION",
-    name: "Clean Caption",
-    description: "읽기 쉬운 기본 자막",
-    previewClassName: "template-clean",
-  },
-  {
-    id: "BOLD_HIGHLIGHT",
-    name: "Bold Highlight",
-    description: "핵심 단어를 강하게 강조",
-    previewClassName: "template-bold",
-  },
-  {
-    id: "MINIMAL",
-    name: "Minimal",
-    description: "화면을 가리지 않는 최소 자막",
-    previewClassName: "template-minimal",
-  },
-];
 const ANALYSIS_STEP_LABELS: Record<AnalysisJob["step"], string> = {
   PIPELINE_BOOTSTRAP: "준비 중",
   TRANSCRIPT: "영상을 듣고 받아 적는 중",
@@ -209,7 +186,11 @@ export function SourceInput() {
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(0);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
-  const [templateId, setTemplateId] = useState<TemplateId>("CLEAN_CAPTION");
+  const [templateId, setTemplateId] = useState("CLEAN_CAPTION");
+  const [layoutId, setLayoutId] = useState<FrameLayout["id"]>("FILL");
+  // One frame of the chosen file, shown inside the template previews.
+  const [sampleFrame, setSampleFrame] = useState<string | null>(null);
+  const renderOptions = useRenderOptions();
   const [transcriptLanguage, setTranscriptLanguage] = useState("ko");
   const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
@@ -224,6 +205,7 @@ export function SourceInput() {
     source?.metadata?.youtube?.duration_seconds ??
     source?.metadata?.upload?.duration_seconds ??
     null;
+  const sampleImageUrl = source?.metadata?.youtube?.thumbnail_url ?? sampleFrame;
   const [uploadStep, setUploadStep] = useState<string | null>(null);
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
@@ -323,6 +305,7 @@ export function SourceInput() {
           start_seconds: rangeStart,
           end_seconds: rangeEnd,
           template_id: templateId,
+          layout_id: layoutId,
           rights_confirmed: true,
         }),
       });
@@ -403,6 +386,15 @@ export function SourceInput() {
     }
   }
 
+  function handleFileChange(selected: File | null) {
+    setFile(selected);
+    setSampleFrame(null);
+    if (!selected) return;
+    currentFrameCapturer()(selected)
+      .then((frame) => setSampleFrame(frame))
+      .catch(() => setSampleFrame(null));
+  }
+
   async function uploadFile(selected: File): Promise<Source> {
     setUploadStep("영상 길이 확인 중...");
     const duration = await currentDurationReader()(selected);
@@ -446,6 +438,7 @@ export function SourceInput() {
           end_seconds: rangeEnd,
           rights_confirmed: true,
           template_id: templateId,
+          layout_id: layoutId,
           transcript_language: transcriptLanguage,
         }),
       });
@@ -587,7 +580,7 @@ export function SourceInput() {
             <input
               type="file"
               accept="video/*,.mkv"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
             />
           </label>
         )}
@@ -732,31 +725,20 @@ export function SourceInput() {
                 </select>
               </label>
 
-              <fieldset className="template-picker">
-                <legend>자막 템플릿</legend>
-                <p>선택한 스타일로 자막을 얹어 렌더링합니다.</p>
-                <div className="template-options">
-                  {TEMPLATES.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className="template-card"
-                      aria-pressed={templateId === template.id}
-                      onClick={() => setTemplateId(template.id)}
-                    >
-                      <span
-                        className={`template-preview ${template.previewClassName}`}
-                        aria-hidden="true"
-                      >
-                        <i>CUTPICK</i>
-                        <b>핵심 장면을 한눈에</b>
-                      </span>
-                      <strong>{template.name}</strong>
-                      <small>{template.description}</small>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
+              <LayoutPicker
+                layouts={renderOptions.layouts}
+                value={layoutId}
+                onChange={setLayoutId}
+                imageUrl={sampleImageUrl}
+              />
+
+              <TemplatePicker
+                templates={renderOptions.templates}
+                value={templateId}
+                onChange={setTemplateId}
+                layout={layoutId}
+                imageUrl={sampleImageUrl}
+              />
 
               <label className="rights-confirmation">
                 <input

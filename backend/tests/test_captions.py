@@ -55,9 +55,9 @@ def test_build_ass_uses_clip_relative_times_and_template_style() -> None:
     assert ",-1,0,0,0,100,100,0,0,3,16,0,2,90,90,520,1" in document
     dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
     assert dialogues == [
-        "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,앞부분 자막",
-        "Dialogue: 0,0:00:01.00,0:00:04.50,Default,,0,0,0,,안녕하세요 태그 여러분 둘째 줄",
-        "Dialogue: 0,0:00:18.00,0:00:20.00,Default,,0,0,0,,끝부분 자막",
+        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,앞부분 자막",
+        "Dialogue: 1,0:00:01.00,0:00:04.50,Default,,0,0,0,,안녕하세요 태그 여러분 둘째 줄",
+        "Dialogue: 1,0:00:18.00,0:00:20.00,Default,,0,0,0,,끝부분 자막",
     ]
 
 
@@ -73,7 +73,7 @@ def test_templates_differ_only_in_style_values() -> None:
         for template in RenderTemplate
     }
 
-    assert len(set(styles.values())) == 3
+    assert len(set(styles.values())) == len(RenderTemplate)
     assert ",64,&H00FFFFFF," in styles[RenderTemplate.CLEAN_CAPTION]
     assert ",48,&H00FFFFFF," in styles[RenderTemplate.MINIMAL]
     assert styles[RenderTemplate.MINIMAL].endswith(",1,2,0,2,90,90,180,1")
@@ -86,4 +86,109 @@ def test_build_ass_with_long_clip_formats_hours() -> None:
         cues, template=RenderTemplate.CLEAN_CAPTION, clip_start_seconds=0, clip_end_seconds=3800
     )
 
-    assert "Dialogue: 0,1:01:40.00,1:01:45.00,Default,,0,0,0,,한 시간 뒤" in document
+    assert "Dialogue: 1,1:01:40.00,1:01:45.00,Default,,0,0,0,,한 시간 뒤" in document
+
+
+def test_fit_layout_moves_captions_below_the_source_picture() -> None:
+    from app.templates import RenderLayout
+
+    document = build_ass(
+        _cues(),
+        template=RenderTemplate.IMPACT_YELLOW,
+        clip_start_seconds=100,
+        clip_end_seconds=120,
+        layout=RenderLayout.FIT,
+    )
+    style = next(line for line in document.splitlines() if line.startswith("Style:"))
+
+    # Bottom-centre (2) with MarginV 440 sits in the blurred band under a 1080x607 picture
+    # instead of the template's own middle-of-frame alignment.
+    assert style.endswith(",2,90,90,440,1")
+    assert "Style: Default,NanumSquareRound,86," in style
+
+
+def test_karaoke_template_emits_one_event_per_word_with_the_spoken_word_coloured() -> None:
+    from app.captions import CaptionWord
+
+    cue = CaptionCue(
+        start_seconds=10.0,
+        end_seconds=13.0,
+        text="오늘 핵심 장면",
+        words=[
+            CaptionWord(start_seconds=10.0, end_seconds=11.0, text="오늘"),
+            CaptionWord(start_seconds=11.0, end_seconds=12.0, text="핵심"),
+            CaptionWord(start_seconds=12.0, end_seconds=13.0, text="장면"),
+        ],
+    )
+
+    document = build_ass(
+        [cue], template=RenderTemplate.IMPACT_YELLOW, clip_start_seconds=10, clip_end_seconds=20
+    )
+    dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
+
+    assert dialogues == [
+        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H0000E6FF}오늘{\\r} 핵심 장면",
+        "Dialogue: 1,0:00:01.00,0:00:02.00,Default,,0,0,0,,오늘 {\\1c&H0000E6FF}핵심{\\r} 장면",
+        "Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0,0,0,,오늘 핵심 {\\1c&H0000E6FF}장면{\\r}",
+    ]
+
+
+def test_karaoke_template_without_word_timings_falls_back_to_whole_cue() -> None:
+    document = build_ass(
+        _cues(), template=RenderTemplate.KARAOKE_POP, clip_start_seconds=100, clip_end_seconds=120
+    )
+    dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
+
+    assert len(dialogues) == 3
+    assert dialogues[0].endswith(",,앞부분 자막")
+
+
+def test_neon_template_applies_blur_to_every_event() -> None:
+    document = build_ass(
+        _cues(), template=RenderTemplate.NEON_GLOW, clip_start_seconds=100, clip_end_seconds=120
+    )
+
+    for line in document.splitlines():
+        if line.startswith("Dialogue:"):
+            assert ",,{\\blur6}" in line
+
+
+def test_select_cues_clamps_word_timings_to_the_clip() -> None:
+    from app.captions import CaptionWord
+
+    cue = CaptionCue(
+        start_seconds=98.0,
+        end_seconds=103.0,
+        text="하나 둘 셋",
+        words=[
+            CaptionWord(start_seconds=98.0, end_seconds=99.5, text="하나"),
+            CaptionWord(start_seconds=99.5, end_seconds=101.0, text="둘"),
+            CaptionWord(start_seconds=101.0, end_seconds=103.0, text="셋"),
+        ],
+    )
+
+    [selected] = select_cues([cue], start_seconds=100, end_seconds=120)
+
+    assert selected.words is not None
+    assert [(w.text, w.start_seconds, w.end_seconds) for w in selected.words] == [
+        ("둘", 100.0, 101.0),
+        ("셋", 101.0, 103.0),
+    ]
+
+
+
+def test_news_bar_draws_a_full_width_band_under_each_cue() -> None:
+    document = build_ass(
+        _cues(), template=RenderTemplate.NEWS_BAR, clip_start_seconds=100, clip_end_seconds=120
+    )
+    dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
+
+    bars = [line for line in dialogues if r"\p1}" in line]
+    texts = [line for line in dialogues if r"\p1}" not in line]
+    assert len(bars) == len(texts) == 3
+    # Band: layer 0, full PlayResX width, centred on the text (MarginV 240, font 58).
+    assert bars[0].startswith(
+        r"Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\an7\pos(0,1586)\1c&H202020&"
+    )
+    assert "m 0 0 l 1080 0 l 1080 130 l 0 130" in bars[0]
+    assert texts[0].startswith("Dialogue: 1,0:00:00.00,0:00:01.00,")

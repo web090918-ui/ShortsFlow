@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setDurationReaderForTests } from "@/lib/upload";
+import { setDurationReaderForTests, setFrameCapturerForTests } from "@/lib/upload";
 
 import { SourceInput } from "./source-input";
 
@@ -16,11 +16,13 @@ function jsonResponse(body: unknown, status = 200) {
 describe("SourceInput upload flow", () => {
   beforeEach(() => {
     setDurationReaderForTests(async () => 125);
+    setFrameCapturerForTests(async () => "data:image/jpeg;base64,ZnJhbWU=");
   });
 
   afterEach(() => {
     cleanup();
     setDurationReaderForTests(null);
+    setFrameCapturerForTests(null);
     vi.restoreAllMocks();
   });
 
@@ -69,6 +71,10 @@ describe("SourceInput upload flow", () => {
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
     expect(screen.getByText("clip.mp4")).toBeTruthy();
     expect(screen.getByText("선택 2:05")).toBeTruthy();
+
+    // Template previews show a frame captured from the chosen file.
+    const frame = document.querySelector<HTMLElement>(".template-options .caption-sample-frame");
+    expect(frame?.style.backgroundImage).toContain("data:image/jpeg;base64,ZnJhbWU=");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,

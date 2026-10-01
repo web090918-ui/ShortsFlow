@@ -20,6 +20,7 @@ from app.auth import UserRecord, credits, require_user
 from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
+from app.templates import RenderLayout
 from app.processing_jobs import (
     ProcessingJobRecord,
     ProcessingJobStatus,
@@ -56,6 +57,8 @@ class CreateShortRequest(BaseModel):
     end_seconds: float | None = Field(default=None, gt=0)
     rights_confirmed: bool = False
     template_id: RenderTemplate | None = None
+    # None keeps the layout chosen for the analysis job (or FILL for a manual range).
+    layout_id: RenderLayout | None = None
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -89,6 +92,7 @@ class ShortJobResponse(BaseModel):
     end_seconds: float
     duration_seconds: float
     template_id: RenderTemplate
+    layout_id: RenderLayout = RenderLayout.FILL
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -173,6 +177,7 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         end_seconds=job.end_seconds,
         duration_seconds=job.duration_seconds,
         template_id=job.template_id,
+        layout_id=job.layout_id,
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
@@ -283,8 +288,8 @@ def _unprocessable(detail: str) -> HTTPException:
 
 def _resolve_candidate(
     payload: CreateShortRequest,
-) -> tuple[str, float, float, RenderTemplate, UUID, dict[str, Any]]:
-    """Derive URL, range, template, and captions from a completed analysis job."""
+) -> tuple[str, float, float, RenderTemplate, RenderLayout, UUID, dict[str, Any]]:
+    """Derive URL, range, template, layout, and captions from a completed analysis job."""
     analysis = jobs.repository.get(payload.processing_job_id)  # type: ignore[arg-type]
     if analysis is None or analysis.step == ProcessingStep.SHORT_RENDER:
         raise HTTPException(
@@ -322,14 +327,16 @@ def _resolve_candidate(
         text = clean_caption_text(str(segment.get("text") or ""))
         if not text:
             continue
-        captions.append(
-            {
-                "start_seconds": segment["start_seconds"],
-                "end_seconds": segment["end_seconds"],
-                "text": text,
-            }
-        )
+        cue: dict[str, Any] = {
+            "start_seconds": segment["start_seconds"],
+            "end_seconds": segment["end_seconds"],
+            "text": text,
+        }
+        if isinstance(segment.get("words"), list):
+            cue["words"] = segment["words"]
+        captions.append(cue)
     template = payload.template_id or analysis.template_id
+    layout = payload.layout_id or analysis.layout_id
     render_input = {
         "processing_job_id": str(analysis.id),
         "candidate_id": candidate["id"],
@@ -341,6 +348,7 @@ def _resolve_candidate(
         float(candidate["start_seconds"]),
         float(candidate["end_seconds"]),
         template,
+        layout,
         analysis.source_id,
         render_input,
     )
@@ -358,7 +366,9 @@ def create_short(
 
     render_input: dict[str, Any] | None = None
     if payload.processing_job_id is not None:
-        source_url, start, end, template, source_id, render_input = _resolve_candidate(payload)
+        source_url, start, end, template, layout, source_id, render_input = _resolve_candidate(
+            payload
+        )
     else:
         assert payload.start_seconds is not None and payload.end_seconds is not None
         if payload.youtube_url is not None:
@@ -379,6 +389,7 @@ def create_short(
             source_url = str(reference["source_url"])
         start, end = payload.start_seconds, payload.end_seconds
         template = payload.template_id or RenderTemplate.CLEAN_CAPTION
+        layout = payload.layout_id or RenderLayout.FILL
         source_id = payload.source_id or uuid4()
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)
@@ -422,6 +433,7 @@ def create_short(
         end_seconds=end,
         duration_seconds=duration,
         template_id=template,
+        layout_id=layout,
         attempt_count=0,
         error_message=None,
         result=None,

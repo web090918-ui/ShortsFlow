@@ -111,3 +111,26 @@ def test_ffmpeg_failure_is_wrapped(monkeypatch, tmp_path: Path) -> None:
         FfmpegVideoProcessor().trim(
             tmp_path / "a.mp4", tmp_path / "b.mp4", start_seconds=0, end_seconds=1
         )
+
+
+def test_fit_layout_keeps_the_whole_frame_over_a_blurred_background(
+    fake_tools, tmp_path: Path
+) -> None:
+    from app.templates import RenderLayout
+
+    FfmpegVideoProcessor().trim_to_vertical(
+        tmp_path / "input.mp4",
+        tmp_path / "output.mp4",
+        start_seconds=0,
+        end_seconds=10,
+        subtitles_path=tmp_path / "captions.ass",
+        layout=RenderLayout.FIT,
+    )
+
+    video_filter = fake_tools[0][fake_tools[0].index("-vf") + 1]
+    assert video_filter.startswith("split[bg][fg];")
+    assert "boxblur=" in video_filter
+    assert "[fg]scale=1080:1920:force_original_aspect_ratio=decrease" in video_filter
+    assert "[bgs][fgs]overlay=(W-w)/2:(H-h)/2" in video_filter
+    # Captions are burnt onto the composed frame, so their 1080x1920 positions hold.
+    assert video_filter.index("overlay=") < video_filter.index(",subtitles=filename=")

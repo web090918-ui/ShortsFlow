@@ -27,7 +27,7 @@ from app.acquisition import (
 )
 from app.captions import CaptionCue, build_ass, select_cues
 from app.config import Settings
-from app.templates import RenderTemplate
+from app.templates import RenderLayout, RenderTemplate
 from app.source_media import SourceMediaRepository
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
 
@@ -215,6 +215,7 @@ class ShortArtifact(BaseModel):
     local_path: str | None
     expires_at: datetime | None
     template_id: str | None = None
+    layout_id: str = RenderLayout.FILL.value
     captions_applied: int = 0
     source_title: str | None
     source_duration_seconds: float
@@ -255,6 +256,7 @@ class ShortPipeline:
         report: ProgressReporter,
         captions: list[CaptionCue] | None = None,
         template: RenderTemplate | None = None,
+        layout: RenderLayout = RenderLayout.FILL,
     ) -> ShortArtifact:
         try:
             return self._run(
@@ -262,6 +264,7 @@ class ShortPipeline:
                 source_url=source_url,
                 captions=captions,
                 template=template,
+                layout=layout,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -296,6 +299,7 @@ class ShortPipeline:
         report: ProgressReporter,
         captions: list[CaptionCue] | None,
         template: RenderTemplate | None,
+        layout: RenderLayout,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -336,6 +340,7 @@ class ShortPipeline:
                             template=template,
                             clip_start_seconds=start_seconds,
                             clip_end_seconds=clip_end,
+                            layout=layout,
                         ),
                         encoding="utf-8",
                     )
@@ -346,6 +351,7 @@ class ShortPipeline:
                 start_seconds=start_seconds,
                 end_seconds=clip_end,
                 subtitles_path=subtitles_path,
+                layout=layout,
             )
             output_bytes = output_path.stat().st_size
 
@@ -371,6 +377,7 @@ class ShortPipeline:
             local_path=str(stored.local_path) if stored.local_path else None,
             expires_at=stored.expires_at,
             template_id=template.value if template is not None else None,
+            layout_id=layout.value,
             captions_applied=captions_applied,
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,

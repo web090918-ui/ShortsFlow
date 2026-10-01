@@ -5,6 +5,7 @@ import pytest
 from app.acquisition import AcquiredVideo, AcquisitionError
 from app.captions import CaptionCue
 from app.downloads import RenderTemplate
+from app.templates import RenderLayout
 from app.shorts_pipeline import (
     LocalArtifactStorage,
     ShortErrorCode,
@@ -51,7 +52,14 @@ class StubProcessor:
         raise AssertionError("pipeline should use the single-pass render")
 
     def trim_to_vertical(
-        self, input_path, output_path, *, start_seconds, end_seconds, subtitles_path=None
+        self,
+        input_path,
+        output_path,
+        *,
+        start_seconds,
+        end_seconds,
+        subtitles_path=None,
+        layout=None,
     ):
         if self.fail:
             raise VideoProcessingError("boom")
@@ -59,6 +67,7 @@ class StubProcessor:
             {
                 "start": start_seconds,
                 "end": end_seconds,
+                "layout": layout,
                 "subtitles": subtitles_path.read_text(encoding="utf-8")
                 if subtitles_path is not None
                 else None,
@@ -113,7 +122,9 @@ def test_pipeline_acquires_renders_stores_and_cleans_up() -> None:
     assert artifact.output_bytes == len(b"short")
     assert artifact.captions_applied == 0
     assert artifact.template_id is None
-    assert processor.calls == [{"start": 10.0, "end": 40.0, "subtitles": None}]
+    assert processor.calls == [
+        {"start": 10.0, "end": 40.0, "layout": RenderLayout.FILL, "subtitles": None}
+    ]
     assert [stage for stage, _ in stages][:1] == [ShortStage.DOWNLOADING]
     assert ShortStage.PROCESSING in {stage for stage, _ in stages}
     assert ShortStage.UPLOADING in {stage for stage, _ in stages}
@@ -146,8 +157,8 @@ def test_pipeline_burns_template_captions_for_the_clip_range() -> None:
     ass = processor.calls[0]["subtitles"]
     assert ass is not None
     assert "Style: Default,NanumGothic,48," in ass
-    assert "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,앞부분" in ass
-    assert "Dialogue: 0,0:00:02.00,0:00:10.00,Default,,0,0,0,,본문 자막" in ass
+    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default,,0,0,0,,앞부분" in ass
+    assert "Dialogue: 1,0:00:02.00,0:00:10.00,Default,,0,0,0,,본문 자막" in ass
     assert "범위 밖" not in ass
 
 

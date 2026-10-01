@@ -330,6 +330,103 @@ def test_openai_whisper_requests_segment_timestamps(tmp_path) -> None:
     assert client.audio.transcriptions.kwargs["model"] == "whisper-1"
     assert client.audio.transcriptions.kwargs["response_format"] == "verbose_json"
     assert client.audio.transcriptions.kwargs["timestamp_granularities"] == [
-        "segment"
+        "segment",
+        "word",
     ]
     assert client.audio.transcriptions.kwargs["language"] == "ko"
+
+
+def test_json3_word_offsets_become_word_timings() -> None:
+    payload = {
+        "events": [
+            {
+                "tStartMs": 1000,
+                "dDurationMs": 3000,
+                "segs": [
+                    {"utf8": "오늘", "tOffsetMs": 0},
+                    {"utf8": " 핵심", "tOffsetMs": 900},
+                    {"utf8": " 장면", "tOffsetMs": 2100},
+                ],
+            },
+            {"tStartMs": 5000, "dDurationMs": 1000, "segs": [{"utf8": "한 덩어리"}]},
+        ]
+    }
+
+    result = TitanCaptionProvider(TitanStub(text=json.dumps(payload))).fetch(
+        "https://youtu.be/abc", language="ko"
+    )
+
+    first, second = result.segments
+    assert first.text == "오늘 핵심 장면"
+    assert [(w.text, w.start_seconds, w.end_seconds) for w in first.words or []] == [
+        ("오늘", 1.0, 1.9),
+        ("핵심", 1.9, 3.1),
+        ("장면", 3.1, 4.0),
+    ]
+    assert second.words is None
+
+
+class FakeTranscriptionResponseWithWords(FakeTranscriptionResponse):
+    def model_dump(self):
+        return {
+            "language": "korean",
+            "segments": [
+                {"start": 0.0, "end": 2.0, "text": "안녕하세요 여러분"},
+                {"start": 2.0, "end": 4.0, "text": "반갑습니다"},
+            ],
+            "words": [
+                {"word": "안녕하세요", "start": 0.0, "end": 1.1},
+                {"word": "여러분", "start": 1.1, "end": 2.0},
+                {"word": "반갑습니다", "start": 2.0, "end": 3.5},
+            ],
+        }
+
+
+def test_openai_whisper_attaches_words_to_their_segments(tmp_path) -> None:
+    audio_path = tmp_path / "audio.mp3"
+    audio_path.write_bytes(b"audio")
+    client = FakeOpenAI()
+    client.audio.transcriptions.create = lambda **kwargs: FakeTranscriptionResponseWithWords()
+
+    result = OpenAIWhisperProvider(client).transcribe(audio_path, language="ko")
+
+    first, second = result.segments
+    assert [w.text for w in first.words or []] == ["안녕하세요", "여러분"]
+    # A single word is not worth a karaoke pass; the segment keeps whole-cue timing.
+    assert second.words is None
+
+
+def test_select_range_shifts_and_clamps_word_timings() -> None:
+    from app.transcripts import TranscriptProcessor, TranscriptResult, TranscriptWord
+
+    transcript = TranscriptResult(
+        provider="openai_whisper",
+        language="ko",
+        is_generated=True,
+        source_start_seconds=0,
+        source_end_seconds=4,
+        segments=[
+            TranscriptSegment(
+                start_seconds=0,
+                end_seconds=4,
+                text="하나 둘 셋",
+                words=[
+                    TranscriptWord(start_seconds=0, end_seconds=1, text="하나"),
+                    TranscriptWord(start_seconds=1, end_seconds=2.5, text="둘"),
+                    TranscriptWord(start_seconds=2.5, end_seconds=4, text="셋"),
+                ],
+            )
+        ],
+        full_text="하나 둘 셋",
+    )
+
+    selected = TranscriptProcessor._select_range(
+        transcript, start_seconds=100, end_seconds=102, relative=True
+    )
+
+    [segment] = selected.segments
+    assert (segment.start_seconds, segment.end_seconds) == (100, 102)
+    assert [(w.text, w.start_seconds, w.end_seconds) for w in segment.words or []] == [
+        ("하나", 100, 101),
+        ("둘", 101, 102),
+    ]

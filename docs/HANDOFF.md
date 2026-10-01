@@ -1,4 +1,4 @@
-# Handoff (2026-09-30)
+# Handoff (2026-10-01)
 
 Where the project stands, what is waiting on the owner, and what comes next. Read this first when continuing from another machine.
 
@@ -7,7 +7,8 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 - `main` is the only branch; every change is pushed. Cloud Run (`shortflow`, asia-northeast3) redeploys the backend from `main` via Cloud Build; Vercel redeploys the frontend at www.cutpick.com.
 - Tasks 01-09, 05B, and 11 are complete and validated on Cloud Run. Task 10 (Coupang Partners product Shorts) is implemented and locally verified with real FFmpeg; its Cloud Run run (OpenAI TTS `gpt-4o-mini-tts`, angle generation) has not been exercised yet.
 - Pages: `/` intro with two entry cards, `/video` (YouTube URL or upload → range → AI Score Top 3 or "이 구간 그대로 만들기" → preview/download), `/affiliate` (Coupang Partners link → product facts → three angles → narrated Short; Agoda and Trip.com marked 준비 중). A landing/workspace redesign landed in commit `54c4291`.
-- Tests at the last run: backend 141 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 18 (`vitest`), lint and `next build` clean.
+- Caption templates and frame layouts (Task 13, 2026-10-01): nine templates (two karaoke-style with per-word highlight from json3/Whisper word timings) and a `FIT` layout (whole source frame over a blurred background) so a source's own subtitles are no longer cropped. `GET /templates` serves the catalog; the picker shows each style on the viewer's own frame. See [Task 13](TASK_13_CAPTION_TEMPLATES.md).
+- Tests at the last run: backend 167 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 28 (`vitest`), lint and `next build` clean.
 
 ## Waiting on the owner (no code change needed)
 

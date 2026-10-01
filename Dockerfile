@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y ffmpeg fonts-nanum fontconfig \
+    && apt-get install --no-install-recommends -y ffmpeg fonts-nanum fonts-nanum-extra fontconfig \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { API_URL } from "@/config";
+import { templateName } from "@/lib/render-options";
+import { useRenderOptions } from "@/lib/render-options-context";
 import { formatTimecode } from "@/lib/timecode";
 
 export type ArtifactState = "pending" | "ready" | "expired" | "unavailable" | "failed";
@@ -14,7 +16,8 @@ export type RenderJob = {
   start_seconds: number;
   end_seconds: number;
   duration_seconds: number;
-  template_id: "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
+  template_id: string;
+  layout_id?: "FILL" | "FIT";
   candidate_id: string | null;
   download_url: string | null;
   preview_url: string | null;
@@ -66,6 +69,7 @@ type Props = {
 
 export function RenderResult({ job, onRetry, retryDisabled = false }: Props) {
   const [now, setNow] = useState(() => Date.now());
+  const renderOptions = useRenderOptions();
 
   useEffect(() => {
     if (job.status !== "completed") return;
@@ -91,7 +95,8 @@ export function RenderResult({ job, onRetry, retryDisabled = false }: Props) {
       <progress max={100} value={job.progress} />
       <p className="shorts-status-range">
         {formatTimecode(job.start_seconds)} – {formatTimecode(job.end_seconds)} ·{" "}
-        {formatTimecode(job.duration_seconds)} · {job.template_id}
+        {formatTimecode(job.duration_seconds)} · {templateName(renderOptions, job.template_id)}
+        {job.layout_id === "FIT" ? " · 원본 그대로" : ""}
         {job.status === "completed" && job.captions_applied > 0
           ? ` · 자막 ${job.captions_applied}개`
           : ""}

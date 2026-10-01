@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "./design.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { RenderOptionsProvider } from "@/lib/render-options-context";
 
 export const metadata: Metadata = {
   title: { default: "컷픽 Cutpick | 영상과 상품 링크로 쇼츠 만들기", template: "%s | 컷픽 Cutpick" },
@@ -13,7 +14,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="ko">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <RenderOptionsProvider>{children}</RenderOptionsProvider>
+        </AuthProvider>
       </body>
     </html>
   );
