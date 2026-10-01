@@ -62,7 +62,8 @@ describe("source playback", () => {
   it("controls YouTube playback and handles embedding failures without blocking range inputs", async () => {
     vi.useFakeTimers();
     let options: ConstructorParameters<YouTubeAPI["Player"]>[1];
-    const player = { getCurrentTime: vi.fn(() => 30), getPlayerState: vi.fn(() => 2), loadVideoById: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn() };
+    const player = { getCurrentTime: vi.fn(() => 30), getPlayerState: vi.fn(() => 2), loadVideoById: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(),
+      mute: vi.fn(), destroy: vi.fn() };
     vi.mocked(loadYouTubeAPI).mockResolvedValue({ Player: class {
       constructor(_element: HTMLElement, supplied: typeof options) { options = supplied; return player; }
     } as YouTubeAPI["Player"] });
