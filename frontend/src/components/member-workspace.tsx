@@ -49,8 +49,6 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
       <span className={styles.label}>MY WORKSPACE</span>
       <nav aria-label="회원 메뉴">
         <Link href="/my" aria-current={!settings ? "page" : undefined}><span aria-hidden="true">▦</span> 내 프로젝트</Link>
-        <Link href="/video"><span aria-hidden="true">▷</span> 영상 쇼츠 만들기</Link>
-        <Link href="/affiliate"><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
       </nav>
       <div className={styles.sidebarBottom}>
         <Link className={styles.balance} href="/my#credit-heading"><span>남은 크레딧</span><strong>{loading ? "…" : status.credits ?? "—"}<small> C</small></strong><span>사용 내역 확인 →</span></Link>
@@ -59,7 +57,15 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
       </div>
     </aside>
     <div className={styles.body}>
-      <header className={styles.topbar}><span>{settings ? "계정 · 제작 설정" : "내 작업실"}</span><Link href="/my#credit-heading">크레딧 <strong>{status.credits ?? "—"}</strong></Link><Link href="/my/settings" aria-label="계정 설정">계정 설정</Link></header>
+      <header className={styles.topbar}>
+        <span>{settings ? "계정 · 제작 설정" : "내 작업실"}</span>
+        <nav className={styles.topbarActions} aria-label="새 쇼츠 만들기">
+          <Link href="/video" className={styles.topAction}><span aria-hidden="true">▷</span> 영상 쇼츠 만들기</Link>
+          <Link href="/affiliate" className={`${styles.topAction} ${styles.topActionSecondary}`}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
+        </nav>
+        <Link href="/my#credit-heading" className={styles.topbarCredits}>크레딧 <strong>{status.credits ?? "—"}</strong></Link>
+        <Link href="/my/settings" aria-label="계정 설정">계정 설정</Link>
+      </header>
       <main className={styles.content} id="main-content">
         {loading ? <p role="status">로그인 상태를 확인하는 중...</p> : !status.user ? <section className={styles.panel}>
           <h1>나만의 쇼츠 작업실</h1><p>로그인하고 프로젝트와 크레딧, 제작 설정을 관리하세요.</p>
