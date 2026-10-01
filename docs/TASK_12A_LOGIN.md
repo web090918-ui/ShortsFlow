@@ -50,3 +50,12 @@ Implemented on 2026-10-01 (backend 148 tests, frontend 21 tests).
 Cloud Run configuration completed on 2026-10-01: `/auth/status` on the service and through `https://www.cutpick.com/api/auth/status` (Vercel `API_PROXY_TARGET` applied) returns `auth_required=true, login_available=true`; `POST /sources` without a session returns `401`; `/auth/google/start` redirects to `accounts.google.com` with the `https://www.cutpick.com/api/auth/google/callback` redirect URI and the configured client id. The first deploy attempt failed because the shell split the command and the revision started in google mode without secrets; the code now logs and fails closed instead of exiting (commit "keep serving when Google sign-in is misconfigured").
 
 Browser check on 2026-10-01: the owner signed in and `https://www.cutpick.com/api/auth/status` returned the user (id, email, name, picture), confirming the callback, user upsert, and cookie. The page still showed the login button because the Vercel project still carried `NEXT_PUBLIC_API_URL`, so the bundle called Cloud Run directly and the first-party cookie was not sent. `frontend/src/config.ts` now uses `/api` in every non-test build regardless of that variable. The remaining browser steps (create a Short, see it under 내 작업, sign out) are recorded once the redeploy is live.
+
+## 내 프로젝트 (2026-10-01)
+
+"내 작업" became **내 프로젝트**: one card per source video (thumbnail, 완료됨/진행 중/실패
+badge, duration, title, shorts count, date) at `/my`, and `/my/{source_id}` lists the Shorts
+and AI analyses made from that video with a "이 영상으로 쇼츠 더 만들기" link. Backend:
+`GET /me/projects` groups the user's jobs by `source_id` (title/thumbnail from the Source's
+metadata, else the URL) and `GET /me/projects/{source_id}` returns the project plus its work
+items. `GET /me/jobs` stays for the flat list.

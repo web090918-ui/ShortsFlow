@@ -200,3 +200,50 @@ def test_my_jobs_lists_only_the_signed_in_users_work(google_auth, monkeypatch) -
     assert items[1]["short"]["id"] == mine["id"]
     assert items[1]["short"]["artifact_state"] == "pending"
     client.cookies.clear()
+
+
+def test_my_projects_groups_work_by_source_video(google_auth, monkeypatch) -> None:
+    import app.sources as sources_module
+    from app.sources import InMemorySourceRepository
+
+    repository = InMemoryProcessingJobRepository()
+    monkeypatch.setattr(jobs_module, "repository", repository)
+    monkeypatch.setattr(jobs_module, "dispatcher", StubDispatcher())
+    monkeypatch.setattr(jobs_module, "candidate_ranker", HeuristicRanker())
+    monkeypatch.setattr(sources_module, "repository", InMemorySourceRepository())
+    monkeypatch.setattr(jobs_module, "source_repository", sources_module.repository)
+
+    _login("/")
+    # Two manual Shorts from the same video: both land in one project.
+    first = client.post(
+        "/shorts",
+        json={"youtube_url": "https://youtu.be/abc12345678", "start_seconds": 0, "end_seconds": 10, "rights_confirmed": True},
+    ).json()
+    second_source = uuid4()
+    client.post(
+        "/processing-jobs",
+        json={
+            "source_id": str(second_source),
+            "source_url": "https://youtu.be/zzz12345678",
+            "start_seconds": 0,
+            "end_seconds": 120,
+            "rights_confirmed": True,
+        },
+    )
+
+    projects = client.get("/me/projects").json()["items"]
+    assert len(projects) == 2
+    newest = projects[0]
+    assert newest["source_id"] == str(second_source)
+    assert newest["status"] == "processing" and newest["analyses_count"] == 1 and newest["shorts_count"] == 0
+    older = projects[1]
+    assert older["source_url"] == "https://youtu.be/abc12345678"
+    assert older["title"] == "https://youtu.be/abc12345678"  # no Source metadata: the URL stands in
+
+    detail = client.get(f"/me/projects/{older['source_id']}").json()
+    assert detail["project"]["source_id"] == older["source_id"]
+    assert [item["kind"] for item in detail["items"]] == ["short"]
+    assert detail["items"][0]["short"]["id"] == first["id"]
+    assert client.get(f"/me/projects/{uuid4()}").status_code == 404
+    client.cookies.clear()
+    assert client.get("/me/projects").status_code == 401

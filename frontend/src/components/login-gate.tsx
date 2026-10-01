@@ -37,7 +37,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
           </p>
         ) : null}
         <p className="range-help">
-          만든 쇼츠와 분석 결과는 계정에 저장되어 ‘내 작업’에서 다시 볼 수 있습니다. Google 계정으로
+          만든 쇼츠와 분석 결과는 계정에 저장되어 ‘내 프로젝트’에서 영상별로 다시 볼 수 있습니다. Google 계정으로
           로그인하면 바로 이어서 진행됩니다.
         </p>
         {status.login_available ? (

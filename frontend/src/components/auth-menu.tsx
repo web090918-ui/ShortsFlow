@@ -17,8 +17,8 @@ export function AuthMenu() {
     const label = status.user.name ?? status.user.email ?? "내 계정";
     return (
       <div className="auth-menu">
-        <Link href="/my" className={pathname === "/my" ? "active" : ""}>
-          내 작업
+        <Link href="/my" className={pathname.startsWith("/my") ? "active" : ""}>
+          내 프로젝트
         </Link>
         {typeof status.credits === "number" ? (
           <Link
