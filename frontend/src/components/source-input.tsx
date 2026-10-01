@@ -704,6 +704,7 @@ export function SourceInput() {
           source.status === "READY" &&
           typeof sourceDuration === "number" ? (
             <section className="range-picker" aria-labelledby="range-heading">
+              <div className="source-range-workspace">
               <SourcePlayer
                 key={source.id}
                 {...playbackSource}
@@ -712,14 +713,13 @@ export function SourceInput() {
                 onStart={updateRangeStart}
                 onEnd={updateRangeEnd}
               />
+              <div className="source-range-controls">
               <div className="range-heading-row">
                 <div>
                   <h3 id="range-heading">분석할 영상 구간</h3>
                   <p>
-                    AI 추천은 <strong>이 구간 안에서만</strong> 15~60초 후보를 찾아 AI Score로
-                    Top 3를 고릅니다. 넓게 잡을수록 선택지가 많아지고, 크레딧은 구간의 분 수만큼
-                    차감됩니다 (최대 60분). 원하는 장면을 이미 알면 좁게 잡고 ‘이 구간 그대로
-                    만들기’를 쓰세요.
+                    영상을 보며 시작·종료를 조정하세요. AI는 <strong>선택한 구간 안에서</strong> Top 3를 추천합니다.
+                    분석은 최대 60분이며, 선택한 분 수만큼 크레딧이 차감됩니다.
                   </p>
                 </div>
                 <strong>
@@ -778,6 +778,8 @@ export function SourceInput() {
                 {rangeTooLong ? " · 최대 60분을 초과했습니다." : ""}
                 {costHint(authStatus, rangeDuration)}
               </p>
+              </div>
+              </div>
 
               <section className="language-card" aria-labelledby="language-heading">
                 <h4 id="language-heading">언어 선택</h4>

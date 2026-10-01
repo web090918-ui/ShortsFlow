@@ -42,8 +42,10 @@ describe("source playback", () => {
     expect(props.onEnd).toHaveBeenCalledWith(25);
     view.rerender(<SourcePlayer {...props} start={20} />);
     expect(video.currentTime).toBe(20);
+    expect(play).toHaveBeenCalledOnce();
     view.rerender(<SourcePlayer {...props} start={20} end={50} />);
     expect(video.currentTime).toBe(50);
+    play.mockClear();
     await user.click(screen.getByRole("button", { name: "선택 구간 재생" }));
     expect(video.currentTime).toBe(20);
     expect(play).toHaveBeenCalledOnce();
@@ -58,7 +60,7 @@ describe("source playback", () => {
   it("controls YouTube playback and handles embedding failures without blocking range inputs", async () => {
     vi.useFakeTimers();
     let options: ConstructorParameters<YouTubeAPI["Player"]>[1];
-    const player = { getCurrentTime: vi.fn(() => 30), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn() };
+    const player = { getCurrentTime: vi.fn(() => 30), getPlayerState: vi.fn(() => 2), loadVideoById: vi.fn(), seekTo: vi.fn(), playVideo: vi.fn(), pauseVideo: vi.fn(), destroy: vi.fn() };
     vi.mocked(loadYouTubeAPI).mockResolvedValue({ Player: class {
       constructor(_element: HTMLElement, supplied: typeof options) { options = supplied; return player; }
     } as YouTubeAPI["Player"] });
@@ -75,8 +77,13 @@ describe("source playback", () => {
     player.getCurrentTime.mockReturnValue(60);
     act(() => { vi.advanceTimersByTime(250); });
     expect(player.pauseVideo).toHaveBeenCalledOnce();
+    player.getPlayerState.mockReturnValue(-1);
     view.rerender(<SourcePlayer {...props} start={15} />);
-    expect(player.seekTo).toHaveBeenLastCalledWith(15, true);
+    expect(player.loadVideoById).toHaveBeenLastCalledWith({ videoId: "M7lc1UVf-VE", startSeconds: 15 });
+    act(() => { options.events.onAutoplayBlocked(); });
+    expect(screen.getByRole("status").textContent).toContain("브라우저가 재생을 제한");
+    act(() => { options.events.onStateChange({ data: 1 }); });
+    expect(screen.queryByRole("status")).toBeNull();
     act(() => { options.events.onError(); });
     expect(screen.getByRole("status").textContent).toContain("외부 재생");
     expect((screen.getByRole("button", { name: "선택 구간 재생" }) as HTMLButtonElement).disabled).toBe(true);

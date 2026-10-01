@@ -13,6 +13,15 @@ type Props = {
   onEnd: (seconds: number) => void;
 };
 
+function playYouTubeFrom(player: YouTubePlayer, videoId: string, seconds: number) {
+  if ([-1, 5].includes(player.getPlayerState())) {
+    player.loadVideoById({ videoId, startSeconds: seconds });
+  } else {
+    player.seekTo(seconds, true);
+    player.playVideo();
+  }
+}
+
 /** Mount with a source key so a new source always gets a fresh player. */
 export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -20,9 +29,11 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
   const youtube = useRef<YouTubePlayer | null>(null);
   const stopAt = useRef<number | null>(null);
   const previousRange = useRef({ start, end });
+  const pendingStart = useRef(false);
   const [ready, setReady] = useState(false);
   const [current, setCurrent] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [playbackNotice, setPlaybackNotice] = useState<string | null>(null);
   const videoId = youtubeUrl ? youtubeVideoId(youtubeUrl) : null;
 
   useEffect(() => {
@@ -52,7 +63,11 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
           onReady: ({ target }) => {
             if (cancelled) return;
             youtube.current = target;
-            if (previousRange.current.start > 0) {
+            if (pendingStart.current) {
+              pendingStart.current = false;
+              stopAt.current = previousRange.current.end;
+              playYouTubeFrom(target, videoId, previousRange.current.start);
+            } else if (previousRange.current.start > 0) {
               target.seekTo(previousRange.current.start, true);
               target.pauseVideo();
             }
@@ -72,6 +87,12 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
             setReady(false);
             setError("YouTube에서 이 영상의 외부 재생을 허용하지 않거나 영상을 불러올 수 없습니다. 원본 링크에서 확인 후 아래 시간을 직접 입력해 주세요.");
           },
+          onAutoplayBlocked: () => {
+            if (!cancelled) setPlaybackNotice("브라우저가 재생을 제한했습니다. ‘선택 구간 재생’ 또는 영상의 재생 버튼을 눌러 주세요.");
+          },
+          onStateChange: ({ data }) => {
+            if (!cancelled && data === 1) setPlaybackNotice(null);
+          },
         },
       });
     }).catch(() => {
@@ -90,24 +111,25 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
     const previous = previousRange.current;
     previousRange.current = { start, end };
     if (previous.start === start && previous.end === end) return;
-    stopAt.current = null;
-    const time = previous.start !== start ? start : end;
+    const startChanged = previous.start !== start;
+    stopAt.current = startChanged ? end : null;
+    const time = startChanged ? start : end;
+    pendingStart.current = startChanged && !youtube.current && Boolean(videoId);
     if (youtube.current) {
-      youtube.current.pauseVideo();
-      youtube.current.seekTo(time, true);
+      if (startChanged && videoId) playYouTubeFrom(youtube.current, videoId, time);
+      else { youtube.current.pauseVideo(); youtube.current.seekTo(time, true); }
     }
     if (video.current && video.current.readyState >= 1) {
-      video.current.pause();
       video.current.currentTime = time;
+      if (startChanged) {
+        void video.current.play().catch(() => setPlaybackNotice("‘선택 구간 재생’을 눌러 영상을 확인해 주세요."));
+      } else video.current.pause();
     }
-  }, [start, end]);
+  }, [start, end, videoId]);
 
   function playRange() {
     stopAt.current = end;
-    if (youtube.current) {
-      youtube.current.seekTo(start, true);
-      youtube.current.playVideo();
-    }
+    if (youtube.current && videoId) playYouTubeFrom(youtube.current, videoId, start);
     if (video.current) {
       video.current.currentTime = start;
       void video.current.play().catch(() => {
@@ -143,13 +165,14 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
         />
       ) : videoId ? <div ref={host} className="source-player-youtube" /> : <p>원본 영상을 불러오면 여기에서 재생할 수 있습니다.</p>}
       {error ? <p className="range-error" role="status">{error}</p> : null}
+      {playbackNotice ? <p className="source-player-help" role="status">{playbackNotice}</p> : null}
       <div className="source-player-actions">
         <span>현재 <strong>{formatTimecode(current)}</strong></span>
         <button type="button" disabled={!ready || Math.floor(current) >= end} onClick={() => onStart(readCurrent())}>현재 시간을 시작으로</button>
         <button type="button" disabled={!ready || Math.floor(current) <= start} onClick={() => onEnd(readCurrent())}>현재 시간을 종료로</button>
         <button type="button" disabled={!ready || end <= start} onClick={playRange}>선택 구간 재생</button>
       </div>
-      <p className="source-player-help">영상을 보며 시작·종료를 지정하세요. 아래 구간을 바꾸면 해당 시점으로 이동합니다.</p>
+      <p className="source-player-help">시작점을 바꾸면 해당 시점부터 재생합니다. 종료점을 바꾸면 마지막 장면으로 이동합니다.</p>
     </section>
   );
 }
