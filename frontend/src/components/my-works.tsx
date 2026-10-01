@@ -76,10 +76,10 @@ function describeSource(url: string) {
 }
 
 const ANALYSIS_LABELS: Record<AnalysisSummary["status"], string> = {
-  QUEUED: "대기 중",
+  QUEUED: "차례를 기다리는 중",
   PROCESSING: "분석 중",
-  COMPLETED: "분석 완료",
-  FAILED: "분석 실패",
+  COMPLETED: "추천 준비 완료!",
+  FAILED: "앗, 분석에 문제가 생겼어요",
 };
 
 export function MyWorks() {

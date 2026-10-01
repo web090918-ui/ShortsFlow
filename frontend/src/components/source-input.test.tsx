@@ -300,7 +300,7 @@ describe("SourceInput", () => {
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
     await user.click(screen.getByRole("button", { name: "이 구간 그대로 만들기" }));
 
-    expect(await screen.findByText("대기 중")).toBeTruthy();
+    expect(await screen.findByText("차례를 기다리는 중")).toBeTruthy();
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://localhost:8000/shorts",

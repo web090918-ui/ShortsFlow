@@ -25,12 +25,12 @@ export type RenderJob = {
 };
 
 export const RENDER_STATUS_LABELS: Record<RenderJob["status"], string> = {
-  queued: "대기 중",
-  downloading: "원본 영상 확보 중",
-  processing: "구간 자르기 · 자막 · 9:16 변환 중",
-  uploading: "완성 파일 저장 중",
-  completed: "완료",
-  failed: "실패",
+  queued: "차례를 기다리는 중",
+  downloading: "원본 영상을 가져오는 중",
+  processing: "쇼츠로 재미나게 만드는 중",
+  uploading: "거의 다 됐어요, 마무리 중",
+  completed: "완성!",
+  failed: "앗, 문제가 생겼어요",
 };
 
 export function resolveApiUrl(url: string) {
@@ -81,9 +81,9 @@ export function RenderResult({ job, onRetry, retryDisabled = false }: Props) {
       <div>
         <span>
           {state === "expired"
-            ? "다운로드 링크 만료"
+            ? "다운로드 링크가 만료됐어요"
             : state === "unavailable"
-              ? "파일 보관 기간 종료"
+              ? "파일 보관 기간이 끝났어요"
               : RENDER_STATUS_LABELS[job.status]}
         </span>
         <strong>{job.progress}%</strong>

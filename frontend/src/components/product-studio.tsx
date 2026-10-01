@@ -203,7 +203,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
         onClick={() => generateContent(Boolean(content))}
         disabled={isGenerating}
       >
-        {isGenerating ? "앵글 만드는 중..." : content ? "앵글 다시 만들기" : "콘텐츠 앵글 만들기"}
+        {isGenerating ? "AI가 아이디어를 짜는 중..." : content ? "앵글 다시 만들기" : "콘텐츠 앵글 만들기"}
       </button>
 
       {error ? (
@@ -304,7 +304,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
             onClick={startRender}
             disabled={!selectedAngle || !termsConfirmed || isStartingRender || renderActive}
           >
-            {isStartingRender ? "작업 등록 중..." : renderActive ? "렌더링 중..." : "상품 쇼츠 만들기"}
+            {isStartingRender ? "시작하는 중..." : renderActive ? "재미나게 만드는 중..." : "상품 쇼츠 만들기"}
           </button>
           {productCost !== null ? (
             <p className="range-help">

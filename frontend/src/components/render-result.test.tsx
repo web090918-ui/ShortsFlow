@@ -49,7 +49,7 @@ describe("RenderResult", () => {
       />,
     );
 
-    expect(screen.getByText("다운로드 링크 만료")).toBeTruthy();
+    expect(screen.getByText("다운로드 링크가 만료됐어요")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
     await user.click(screen.getByRole("button", { name: "다시 만들기" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -64,7 +64,7 @@ describe("RenderResult", () => {
     expect(effectiveArtifactState(expired, Date.now())).toBe("expired");
 
     render(<RenderResult job={expired} onRetry={() => {}} />);
-    expect(screen.getByText("다운로드 링크 만료")).toBeTruthy();
+    expect(screen.getByText("다운로드 링크가 만료됐어요")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
   });
 
@@ -76,7 +76,7 @@ describe("RenderResult", () => {
       />,
     );
 
-    expect(screen.getByText("파일 보관 기간 종료")).toBeTruthy();
+    expect(screen.getByText("파일 보관 기간이 끝났어요")).toBeTruthy();
     expect(screen.getByRole("button", { name: "다시 만들기" })).toBeTruthy();
   });
 

@@ -97,9 +97,9 @@ const TEMPLATES: Array<{
 ];
 const ANALYSIS_STEP_LABELS: Record<AnalysisJob["step"], string> = {
   PIPELINE_BOOTSTRAP: "준비 중",
-  TRANSCRIPT: "자막·음성 분석 중",
-  CANDIDATE: "후보 구간 만드는 중",
-  RANKING: "AI Score 매기는 중",
+  TRANSCRIPT: "영상을 듣고 받아 적는 중",
+  CANDIDATE: "눈에 띄는 장면을 찾는 중",
+  RANKING: "AI가 베스트를 고르는 중",
   SHORT_RENDER: "렌더링 중",
 };
 
@@ -786,9 +786,9 @@ export function SourceInput() {
                 }
               >
                 {isStartingAnalysis
-                  ? "분석 시작 중..."
+                  ? "AI를 깨우는 중..."
                   : analysisActive
-                    ? "분석 중..."
+                    ? "AI가 고르는 중..."
                     : "AI 추천 구간 찾기"}
               </button>
 
@@ -810,9 +810,9 @@ export function SourceInput() {
                 }
               >
                 {isStartingDirect
-                  ? "작업 등록 중..."
+                  ? "시작하는 중..."
                   : directActive
-                    ? "렌더링 중..."
+                    ? "재미나게 만드는 중..."
                     : rangeDuration > MAX_DIRECT_CLIP_SECONDS
                       ? `이 구간 그대로 만들기 (${MAX_DIRECT_CLIP_SECONDS}초 이하만)`
                       : "이 구간 그대로 만들기"}
@@ -831,9 +831,9 @@ export function SourceInput() {
                   <div>
                     <span>
                       {analysisJob.status === "COMPLETED"
-                        ? "분석 완료"
+                        ? "추천 준비 완료!"
                         : analysisJob.status === "FAILED"
-                          ? "분석 실패"
+                          ? "앗, 분석에 문제가 생겼어요"
                           : ANALYSIS_STEP_LABELS[analysisJob.step]}
                     </span>
                     <strong>{analysisJob.progress}%</strong>
@@ -887,7 +887,7 @@ export function SourceInput() {
                           disabled={isStartingRender || renderActive}
                         >
                           {isSelected && renderActive
-                            ? "렌더링 중..."
+                            ? "재미나게 만드는 중..."
                             : "이 구간으로 쇼츠 만들기"}
                         </button>
                       </article>

@@ -132,7 +132,7 @@ describe("SourceInput upload flow", () => {
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
     await user.click(screen.getByRole("button", { name: "AI 추천 구간 찾기" }));
 
-    expect(await screen.findByText("자막·음성 분석 중")).toBeTruthy();
+    expect(await screen.findByText("영상을 듣고 받아 적는 중")).toBeTruthy();
     const analysisCall = fetchMock.mock.calls[3];
     expect(analysisCall[0]).toBe("http://localhost:8000/processing-jobs");
     const body = JSON.parse((analysisCall[1] as RequestInit).body as string);
