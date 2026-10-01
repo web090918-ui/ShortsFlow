@@ -45,4 +45,8 @@ Google Cloud console (project `aza-ceo`): OAuth consent screen (External, Testin
 
 ## Validation result
 
-Implemented on 2026-10-01. Cloud Run check 2 is recorded below once the OAuth client and secrets are configured.
+Implemented on 2026-10-01 (backend 148 tests, frontend 21 tests).
+
+Cloud Run configuration completed on 2026-10-01: `/auth/status` on the service and through `https://www.cutpick.com/api/auth/status` (Vercel `API_PROXY_TARGET` applied) returns `auth_required=true, login_available=true`; `POST /sources` without a session returns `401`; `/auth/google/start` redirects to `accounts.google.com` with the `https://www.cutpick.com/api/auth/google/callback` redirect URI and the configured client id. The first deploy attempt failed because the shell split the command and the revision started in google mode without secrets; the code now logs and fails closed instead of exiting (commit "keep serving when Google sign-in is misconfigured").
+
+Browser check (sign in on www.cutpick.com, create a Short, see it under 내 작업, sign out) is performed by the owner and recorded here once done.
