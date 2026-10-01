@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import tempfile
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.acquisition import (
@@ -15,6 +15,7 @@ from app.acquisition import (
     titan_provider_from_settings,
     upload_source_url,
 )
+from app.auth import UserRecord, require_user
 from app.shorts_pipeline import ArtifactStorage, _storage_from_settings
 from app.product_content import (
     ContentGenerationError,
@@ -148,11 +149,12 @@ def _new_source(
     *,
     url: str | None,
     metadata: dict[str, Any],
+    user_id: UUID | None = None,
 ) -> SourceRecord:
     now = datetime.now(timezone.utc)
     return SourceRecord(
         id=uuid4(),
-        user_id=None,
+        user_id=user_id,
         type=source_type,
         url=url,
         status=SourceStatus.CREATED,
@@ -181,12 +183,17 @@ router = APIRouter(prefix="/sources", tags=["sources"])
 
 
 @router.post("", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
-def create_url_source(payload: SourceUrlRequest, prepare: bool = False) -> SourceResponse:
+def create_url_source(
+    payload: SourceUrlRequest,
+    prepare: bool = False,
+    user: UserRecord | None = Depends(require_user),
+) -> SourceResponse:
     source_type = classify_source_url(payload.url)
     source = _new_source(
         source_type,
         url=str(payload.url),
         metadata={"hostname": _hostname(payload.url)},
+        user_id=user.id if user else None,
     )
     repository.save(source)
     if prepare and source.type in {SourceType.YOUTUBE, SourceType.PRODUCT}:
@@ -214,7 +221,9 @@ def _upload_key(source_id: UUID, extension: str) -> str:
     response_model=UploadSourceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_upload_source(payload: UploadSourceRequest) -> UploadSourceResponse:
+def create_upload_source(
+    payload: UploadSourceRequest, user: UserRecord | None = Depends(require_user)
+) -> UploadSourceResponse:
     """Register an upload and tell the browser where to send the bytes.
 
     With Cloud Storage the browser PUTs straight to a signed URL, which keeps large
@@ -236,6 +245,7 @@ def create_upload_source(payload: UploadSourceRequest) -> UploadSourceResponse:
     source = _new_source(
         SourceType.UPLOAD,
         url=None,
+        user_id=user.id if user else None,
         metadata={
             "filename": filename,
             "content_type": content_type,

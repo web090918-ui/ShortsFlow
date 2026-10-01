@@ -10,6 +10,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    env: {
+      // Tests assert on absolute API URLs; production uses the /api proxy path.
+      NEXT_PUBLIC_API_URL: "http://localhost:8000",
+    },
   },
 });
-

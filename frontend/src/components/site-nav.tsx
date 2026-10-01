@@ -1,6 +1,8 @@
 import Link from "next/link";
 
-type Props = { current?: "home" | "video" | "affiliate" };
+import { AuthMenu } from "@/components/auth-menu";
+
+type Props = { current?: "home" | "video" | "affiliate" | "my" };
 
 export function SiteNav({ current = "home" }: Props) {
   return (
@@ -15,7 +17,10 @@ export function SiteNav({ current = "home" }: Props) {
           <Link href="/video" aria-current={current === "video" ? "page" : undefined} className={current === "video" ? "active" : ""}>영상 쇼츠</Link>
           <Link href="/affiliate" aria-current={current === "affiliate" ? "page" : undefined} className={current === "affiliate" ? "active" : ""}>어필리에이트 쇼츠</Link>
         </div>
-        <Link className="nav-start" href="/#start">쇼츠 만들기 <span aria-hidden="true">↗</span></Link>
+        <div className="site-nav-right">
+          <AuthMenu />
+          <Link className="nav-start" href="/#start">쇼츠 만들기 <span aria-hidden="true">↗</span></Link>
+        </div>
       </nav>
     </header>
   );

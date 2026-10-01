@@ -11,7 +11,8 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 
 ## Waiting on the owner (no code change needed)
 
-1. **Vercel `NEXT_PUBLIC_API_URL`** must be `https://shortflow-268642207702.asia-northeast3.run.app` for Production, then redeploy. The live bundle still calls the retired `shortsflow-api.vercel.app`, which is why the site shows "YouTube가 현재 서버 요청을 제한했습니다". Delete or disable that old Vercel backend project afterwards.
+1. **Vercel environment**: set `API_PROXY_TARGET=https://shortflow-268642207702.asia-northeast3.run.app` for Production (the site now proxies `/api/*` to it), remove `NEXT_PUBLIC_API_URL`, and redeploy. Until then the live bundle calls the retired `shortsflow-api.vercel.app`, which is why the site shows "YouTube가 현재 서버 요청을 제한했습니다". Delete or disable that old Vercel backend project afterwards.
+1b. **Login (Task 12A) on Cloud Run**: create the OAuth consent screen and Web client (redirect URIs `https://www.cutpick.com/api/auth/google/callback`, `http://localhost:3000/api/auth/google/callback`), store the client secret and a random session secret in Secret Manager, then set `SHORTSFLOW_AUTH_MODE=google`, `SHORTSFLOW_GOOGLE_OAUTH_CLIENT_ID`, `SHORTSFLOW_GOOGLE_OAUTH_CLIENT_SECRET`, `SHORTSFLOW_SESSION_SECRET`, `SHORTSFLOW_APP_PUBLIC_ORIGIN=https://www.cutpick.com`. Until `auth_mode=google` is set the site works without login and nothing is saved per account.
 2. **Bucket CORS** for browser uploads on `/video`: `gcloud storage buckets update gs://shortsflow-shorts-aza-ceo --cors-file=cors.json` with the rule in [Task 11](TASK_11_UPLOAD.md).
 3. **OpenAI model access** for Task 10: if `/affiliate` rendering fails with HTTP 403, allow `gpt-4o-mini-tts` (and keep `gpt-4.1-mini`) in project `proj_InkVn5EtOT2q8LKO2v8bFE9X`. Ranking uses the same project via `SHORTSFLOW_OPENAI_PROJECT`.
 4. **Cloud Run settings** can return to defaults now that acquisition is resumable: `SHORTSFLOW_PROCESSING_LEASE_SECONDS=600`, `SHORTSFLOW_APIFY_RUN_TIMEOUT_SECONDS=480`, `--timeout=900`; keep `SHORTSFLOW_APIFY_TITAN_QUALITY=720`.
@@ -19,7 +20,7 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 
 ## Agreed next order
 
-1. Task 12A — Google sign-in, session cookie, `user_id` on Sources and jobs, "내 작업" list, creation endpoints require login.
+1. Task 12A — implemented 2026-10-01 (Google sign-in, session cookie, `user_id` on Sources and jobs, `/my` work history, login enforced in google mode); production check pending the OAuth client.
 2. Task 12B — connect the creator's YouTube channel (incremental `youtube.upload` consent) and publish a finished Short with title, description (affiliate link and disclosure), and privacy; test users only until Google verification.
 3. Task 10 Cloud Run validation (angles and TTS) once model access is confirmed; then Agoda and Trip.com providers behind `ProductSourceProvider` (their public pages are expected to block servers like Coupang's, so plan on partner links or APIs).
 

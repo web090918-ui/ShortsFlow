@@ -270,7 +270,15 @@ Added on 2026-09-30 so the `UPLOAD` Source type completes the same flow as a You
 
 The home page is now one four-step wizard (소스 → 구간·옵션 → 추천 → 결과) instead of two panels. Step 1 takes a YouTube URL, a Coupang Partners link, or a file upload; step 2 offers "AI 추천 구간 찾기" and, for ranges of 180 seconds or less, "이 구간 그대로 만들기" (the former manual panel); step 3 shows the AI Score Top 3 or the three product angles; step 4 shows the preview, download, and artifact states. `POST /shorts` also accepts a manual range on an uploaded Source (`source_id` without `youtube_url`).
 
-## Task 12 — Publish to YouTube (requested; changes the MVP1 exclusion on automatic publishing)
+## Task 12A — Google Sign-in and Work History
+
+Status: Implemented — Cloud Run validation pending the OAuth client and secrets
+
+- Google OAuth only; the API exchanges the code, verifies the ID token, upserts `users`, and sets an HttpOnly `sf_session` cookie. The frontend calls the API through a same-origin `/api` rewrite so the cookie is first-party.
+- `Source.user_id` and the new `ProcessingJob.user_id` record the owner; `GET /me/jobs` and the `/my` page list the account's analyses and Shorts newest first.
+- `SHORTSFLOW_AUTH_MODE=google` requires login on every creation endpoint; `disabled` keeps local development open. See [Task 12A](TASK_12A_LOGIN.md).
+
+## Task 12B — Publish to YouTube (requested; changes the MVP1 exclusion on automatic publishing)
 
 Not started. Requires channel connection with Google OAuth, the `youtube.upload` scope, storing refresh tokens, and uploading the finished MP4 with title, description (affiliate link and disclosure), and Shorts-compatible settings. The scope is sensitive, so an unverified app works only for test users until Google verifies it.
 

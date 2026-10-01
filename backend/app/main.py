@@ -4,8 +4,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth import router as auth_router
 from app.config import get_settings
 from app.downloads import router as downloads_router
+from app.me import router as me_router
 from app.logging_config import configure_logging
 from app.processing_jobs import router as processing_jobs_router
 from app.shorts import router as shorts_router
@@ -27,6 +29,8 @@ app.include_router(sources_router)
 app.include_router(downloads_router)
 app.include_router(processing_jobs_router)
 app.include_router(shorts_router)
+app.include_router(auth_router)
+app.include_router(me_router)
 
 
 @app.get("/health")

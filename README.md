@@ -110,6 +110,8 @@ Source endpoints:
 - `GET /shorts/{job_id}/file` — download the rendered 9:16 MP4 (`?inline=true` for playback) or redirect to its signed URL
 - `POST /sources/{source_id}/product-content` — selling points and three content angles for a READY product Source
 - `POST /shorts/product` — render a narrated product Short from a product Source and one angle
+- `GET /auth/google/start`, `GET /auth/google/callback`, `GET /auth/status`, `GET /auth/me`, `POST /auth/logout` — Google sign-in and session (Task 12A)
+- `GET /me/jobs` — the signed-in account's analyses and Shorts, newest first
 
 Environment variables use the `SHORTSFLOW_` prefix:
 
@@ -133,7 +135,7 @@ Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are d
 
 Current deployed entry points are `https://www.cutpick.com` for the frontend and `https://shortflow-268642207702.asia-northeast3.run.app` for the Cloud Run backend. Secret values are stored outside the repository.
 
-The frontend reads its API base from `NEXT_PUBLIC_API_URL` at build time, so the Vercel project's Production environment variable must be the Cloud Run URL above and the site must be redeployed after changing it. On 2026-09-30 the deployed bundle still pointed at the retired Vercel backend `shortsflow-api.vercel.app` (yt-dlp, no Titan, no Cloud Tasks), which produced "YouTube가 현재 서버 요청을 제한했습니다" for every YouTube URL even though Cloud Run worked; the fix is the environment variable, not code. Cloud Run's `SHORTSFLOW_FRONTEND_ORIGIN` already allows `https://www.cutpick.com`.
+Since Task 12A the frontend calls the API through a same-origin `/api/*` rewrite (see `frontend/next.config.ts`), so the Vercel project needs `API_PROXY_TARGET=https://shortflow-268642207702.asia-northeast3.run.app` and a redeploy; `NEXT_PUBLIC_API_URL` is no longer used in production and should be removed. Before this change the deployed bundle pointed at the retired Vercel backend `shortsflow-api.vercel.app` (yt-dlp, no Titan), which produced "YouTube가 현재 서버 요청을 제한했습니다" for every YouTube URL even though Cloud Run worked. Cloud Run's `SHORTSFLOW_FRONTEND_ORIGIN` still allows `https://www.cutpick.com` for any direct calls.
 
 ## Validation
 

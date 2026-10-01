@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 from app import processing_jobs as jobs
+from app.auth import UserRecord, require_user
 from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
@@ -207,7 +208,9 @@ class CreateProductShortRequest(BaseModel):
 
 @router.post("/product", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_product_short(
-    payload: CreateProductShortRequest, background_tasks: BackgroundTasks
+    payload: CreateProductShortRequest,
+    background_tasks: BackgroundTasks,
+    user: UserRecord | None = Depends(require_user),
 ) -> ShortJobResponse:
     if not payload.terms_confirmed:
         raise _unprocessable("쿠팡 파트너스 약관에 따라 상품 정보와 이미지를 사용함을 확인해야 합니다.")
@@ -242,6 +245,7 @@ def create_product_short(
     job = ProcessingJobRecord(
         id=uuid4(),
         source_id=source.id,
+        user_id=user.id if user else None,
         source_url=source.url or facts.product_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.PRODUCT_RENDER,
@@ -338,7 +342,9 @@ def _resolve_candidate(
 
 @router.post("", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_short(
-    payload: CreateShortRequest, background_tasks: BackgroundTasks
+    payload: CreateShortRequest,
+    background_tasks: BackgroundTasks,
+    user: UserRecord | None = Depends(require_user),
 ) -> ShortJobResponse:
     settings = get_settings()
     if not payload.rights_confirmed:
@@ -391,6 +397,7 @@ def create_short(
     job = ProcessingJobRecord(
         id=uuid4(),
         source_id=source_id,
+        user_id=user.id if user else None,
         source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.SHORT_RENDER,

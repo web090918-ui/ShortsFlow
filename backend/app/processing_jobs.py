@@ -8,7 +8,7 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.config import Settings, get_settings
@@ -26,6 +26,7 @@ from app.acquisition import (
     titan_acquirer_from_settings,
     titan_provider_from_settings,
 )
+from app.auth import UserRecord, require_user
 from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
 from app.source_media import (
     SourceMediaRepository,
@@ -89,6 +90,7 @@ class CreateProcessingJobRequest(BaseModel):
 class ProcessingJobResponse(BaseModel):
     id: UUID
     source_id: UUID
+    user_id: UUID | None = None
     status: ProcessingJobStatus
     step: ProcessingStep
     progress: int = Field(ge=0, le=100)
@@ -132,6 +134,10 @@ class ProcessingJobRepository(Protocol):
 
     def claim(self, job_id: UUID) -> ClaimResult | None: ...
 
+    def list_for_user(self, user_id: UUID, *, limit: int = 100) -> list["ProcessingJobRecord"]:
+        """Newest first; used by the per-account work history."""
+        ...
+
 
 class InMemoryProcessingJobRepository:
     def __init__(self) -> None:
@@ -146,6 +152,12 @@ class InMemoryProcessingJobRepository:
     def get(self, job_id: UUID) -> ProcessingJobRecord | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def list_for_user(self, user_id: UUID, *, limit: int = 100) -> list[ProcessingJobRecord]:
+        with self._lock:
+            mine = [job for job in self._jobs.values() if job.user_id == user_id]
+        mine.sort(key=lambda job: job.created_at, reverse=True)
+        return mine[:limit]
 
     def claim(self, job_id: UUID) -> ClaimResult | None:
         with self._lock:
@@ -199,6 +211,15 @@ class FirestoreProcessingJobRepository:
         if not snapshot.exists:
             return None
         return self._deserialize(snapshot.to_dict())
+
+    def list_for_user(self, user_id: UUID, *, limit: int = 100) -> list[ProcessingJobRecord]:
+        from google.cloud.firestore_v1 import FieldFilter
+
+        # Equality filter only, sorted in memory, so no composite index is required.
+        query = self._collection.where(filter=FieldFilter("user_id", "==", str(user_id))).limit(500)
+        jobs = [self._deserialize(snapshot.to_dict()) for snapshot in query.stream()]
+        jobs.sort(key=lambda job: job.created_at, reverse=True)
+        return jobs[:limit]
 
     def claim(self, job_id: UUID) -> ClaimResult | None:
         from google.cloud import firestore
@@ -777,6 +798,7 @@ def _resolve_job_source_url(payload: CreateProcessingJobRequest) -> str:
 def create_processing_job(
     payload: CreateProcessingJobRequest,
     background_tasks: BackgroundTasks,
+    user: UserRecord | None = Depends(require_user),
 ) -> ProcessingJobRecord:
     source_url = _resolve_job_source_url(payload)
     if not payload.rights_confirmed:
@@ -795,6 +817,7 @@ def create_processing_job(
     job = ProcessingJobRecord(
         id=uuid4(),
         source_id=payload.source_id,
+        user_id=user.id if user else None,
         source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.TRANSCRIPT,

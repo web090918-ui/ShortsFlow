@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     worker_oidc_audience: str | None = None
     worker_service_account_email: str | None = None
     processing_max_attempts: int = 3
+    # Task 12A Google sign-in. "disabled" keeps local development open; "google"
+    # requires the OAuth client, a session secret, and a login for every creation call.
+    auth_mode: Literal["disabled", "google"] = "disabled"
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: SecretStr | None = None
+    session_secret: SecretStr | None = None
+    session_cookie_name: str = "sf_session"
+    session_ttl_seconds: int = 30 * 24 * 60 * 60
+    # Public site origin and the path the frontend proxies to this API (OAuth redirect URI).
+    app_public_origin: str = "http://localhost:3000"
+    api_public_prefix: str = "/api"
     # Worker lease and Cloud Tasks dispatch deadline. Cloud Tasks allows at most 1800 and
     # the Cloud Run request timeout must be at least this long. Raise it together with
     # SHORTSFLOW_APIFY_RUN_TIMEOUT_SECONDS when long sources must be acquired.
