@@ -24,7 +24,8 @@ the band below. That is now the default (`STAGE` layout + `HEADLINE_YELLOW`).
   analysis title, then to the candidate's `hook_text` when it is 30 characters or
   shorter (a long sentence would wrap into a block). A manual range with no title has
   no headline.
-- Keyword: a `[bracketed]` phrase if the user marked one, else the longest word (titles
+- Keyword: a `[bracketed]` phrase if the user marked one, else the whole second line of a
+  two-line title (the showcase look), else the longest word of a one-liner (titles
   with a single word get no colour). User line breaks are kept.
 - The headline is an extra `Headline` style (NanumSquareRound 84, bold, outline or box)
   drawn on layer 2 for the whole clip, centred at y=328 for `STAGE`/`FIT` and overlaid at
@@ -54,14 +55,14 @@ Listed in the picker, in this order:
 
 | id | name | look | keyword colour |
 | --- | --- | --- | --- |
-| `HEADLINE_YELLOW` | 헤드라인 옐로 | small white caption, outlined | #FFE600 |
-| `HEADLINE_RED` | 헤드라인 레드 | same | #FF3C3C |
-| `HEADLINE_LIME` | 헤드라인 라임 | same | #D7FF4F |
-| `HEADLINE_SKY` | 헤드라인 뉴스 | caption on a dark box | #4FD2FF |
-| `HEADLINE_BOX` | 헤드라인 박스 | headline itself on a dark box | #FFE600 |
-| `IMPACT_YELLOW` | 임팩트 옐로 | heavy caption, spoken word yellow (karaoke) | #FFE600 |
+| `HEADLINE_YELLOW` | 헤드라인 옐로 | small white caption, outlined | #FFD23F gold |
+| `HEADLINE_RED` | 헤드라인 레드 | same | #E8352B |
+| `HEADLINE_LIME` | 헤드라인 라임 | same | #C6F542 |
+| `HEADLINE_SKY` | 헤드라인 뉴스 | caption on a dark box | #58C7F5 |
+| `HEADLINE_BOX` | 헤드라인 박스 | headline itself on a dark box | #FFD23F |
+| `IMPACT_YELLOW` | 임팩트 옐로 | heavy caption, spoken word yellow (karaoke) | #FFD23F |
 | `KARAOKE_POP` | 카라오케 팝 | caption on a dark box, spoken word accent (karaoke) | #D7FF4F |
-| `CLEAN_CAPTION` | 클린 | original white/outline | #FFE600 |
+| `CLEAN_CAPTION` | 클린 | original white/outline | #FFD23F |
 | `BOLD_HIGHLIGHT` | 볼드 박스 | original accent on box | #D7FF4F |
 | `MINIMAL` | 미니멀 | original small caption | white |
 

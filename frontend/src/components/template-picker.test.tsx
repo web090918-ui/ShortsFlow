@@ -49,7 +49,7 @@ describe("TemplatePicker", () => {
 
     const impact = screen.getByRole("button", { name: "임팩트 옐로 템플릿" });
     const spoken = impact.querySelectorAll<HTMLElement>(".caption-sample-caption > span")[2];
-    expect(spoken.style.color).toBe("rgb(255, 230, 0)");
+    expect(spoken.style.color).toBe("rgb(255, 210, 63)");
 
     const pop = screen.getByRole("button", { name: "카라오케 팝 템플릿" });
     const popLine = pop.querySelector<HTMLElement>(".caption-sample-caption");

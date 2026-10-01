@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 
-import { headlineRuns } from "@/lib/render-options";
+import { headlineLines } from "@/lib/render-options";
 import type { CaptionTemplate, FrameLayout } from "@/lib/render-options";
 
 type LayoutId = FrameLayout["id"];
@@ -76,7 +76,7 @@ function Frame({ imageUrl, layout }: { imageUrl: string | null; layout: LayoutId
  */
 export function CaptionSample({ template, layout, imageUrl, title, showHeadline = true }: SampleProps) {
   const spoken = spokenStyle(template);
-  const accent = template.preview.headlineAccent ?? "#FFE600";
+  const accent = template.preview.headlineAccent ?? "#FFD23F";
   const position = layout === "FILL" && template.id === "IMPACT_YELLOW" ? "middle" : "bottom";
   const headlineText = (title && title.trim()) || SAMPLE_TITLE;
   return (
@@ -87,9 +87,9 @@ export function CaptionSample({ template, layout, imageUrl, title, showHeadline 
       <Frame imageUrl={imageUrl} layout={layout} />
       {showHeadline ? (
         <b className="caption-sample-headline" style={headlineStyle(template)}>
-          {headlineText.split("\n").map((line, lineIndex) => (
-            <span key={`${lineIndex}-${line}`} className="caption-sample-headline-line">
-              {headlineRuns(line).map((run, runIndex) => (
+          {headlineLines(headlineText).map((runs, lineIndex) => (
+            <span key={`line-${lineIndex}`} className="caption-sample-headline-line">
+              {runs.map((run, runIndex) => (
                 <span key={`${runIndex}-${run.text}`} style={run.accent ? { color: accent } : undefined}>
                   {run.text}
                 </span>

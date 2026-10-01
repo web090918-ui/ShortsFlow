@@ -58,13 +58,13 @@ function headline(
  */
 export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   templates: [
-    headline("HEADLINE_YELLOW", "헤드라인 옐로", "큰 제목에 노란 키워드, 아래에 작은 자막. 요즘 쇼츠의 기본형.", "#FFE600"),
-    headline("HEADLINE_RED", "헤드라인 레드", "빨간 키워드로 긴장감을 주는 제목. 다큐·이슈 영상에.", "#FF3C3C"),
-    headline("HEADLINE_LIME", "헤드라인 라임", "형광 연두 키워드. 정보·꿀팁 영상에 잘 맞아요.", "#D7FF4F"),
-    headline("HEADLINE_SKY", "헤드라인 뉴스", "하늘색 키워드와 박스 자막. 뉴스·시사 느낌.", "#4FD2FF", {
+    headline("HEADLINE_YELLOW", "헤드라인 옐로", "큰 제목에 노란 키워드, 아래에 작은 자막. 요즘 쇼츠의 기본형.", "#FFD23F"),
+    headline("HEADLINE_RED", "헤드라인 레드", "빨간 키워드로 긴장감을 주는 제목. 다큐·이슈 영상에.", "#E8352B"),
+    headline("HEADLINE_LIME", "헤드라인 라임", "연두 키워드. 정보·꿀팁 영상에 잘 맞아요.", "#C6F542"),
+    headline("HEADLINE_SKY", "헤드라인 뉴스", "하늘색 키워드와 박스 자막. 뉴스·시사 느낌.", "#58C7F5", {
       background: "#000000",
     }),
-    headline("HEADLINE_BOX", "헤드라인 박스", "제목을 검은 박스 위에 얹어 어떤 배경에서도 또렷하게.", "#FFE600", {
+    headline("HEADLINE_BOX", "헤드라인 박스", "제목을 검은 박스 위에 얹어 어떤 배경에서도 또렷하게.", "#FFD23F", {
       headlineBox: "true",
     }),
     {
@@ -73,7 +73,7 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
       description: "두꺼운 자막, 말하는 단어만 노란색으로 바뀌어요.",
       tag: "단어 강조",
       karaoke: true,
-      preview: { color: "#FFFFFF", stroke: "#000000", accent: "#FFE600", weight: "900", headlineAccent: "#FFE600" },
+      preview: { color: "#FFFFFF", stroke: "#000000", accent: "#FFD23F", weight: "900", headlineAccent: "#FFD23F" },
     },
     {
       id: "KARAOKE_POP",
@@ -89,7 +89,7 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
       description: "읽기 쉬운 기본 자막. 흰 글씨에 검은 외곽선.",
       tag: "기본",
       karaoke: false,
-      preview: { color: "#FFFFFF", stroke: "#000000", weight: "700", headlineAccent: "#FFE600" },
+      preview: { color: "#FFFFFF", stroke: "#000000", weight: "700", headlineAccent: "#FFD23F" },
     },
     {
       id: "BOLD_HIGHLIGHT",
@@ -142,27 +142,42 @@ export function templateName(options: RenderOptions, id: string | null | undefin
 }
 
 /**
- * Same rule as the backend: a `[bracketed]` phrase is the coloured keyword, otherwise
- * the longest word when the title has at least two words.
+ * Same rule as the backend: a `[bracketed]` phrase is the coloured part; otherwise the
+ * whole second line of a two-line title; otherwise the longest word of a one-liner.
  */
 export function headlineKeyword(title: string): string | null {
   const marked = /\[([^[\]]+)\]/.exec(title);
   if (marked) return marked[1].trim() || null;
+  const lines = title
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/).join(" "))
+    .filter(Boolean);
+  if (lines.length >= 2) return lines[1];
   const words = title.trim().split(/\s+/).filter((word) => word.length >= 2);
   if (words.length < 2) return null;
   return words.reduce((longest, word) => (word.length > longest.length ? word : longest), "");
 }
 
-/** Title split into plain and keyword runs for rendering with an accent colour. */
-export function headlineRuns(title: string): Array<{ text: string; accent: boolean }> {
-  const plain = title.replace(/[[\]]/g, "");
+export type HeadlineRun = { text: string; accent: boolean };
+
+/** Title split into lines of plain and keyword runs for rendering with an accent colour. */
+export function headlineLines(title: string): HeadlineRun[][] {
   const keyword = headlineKeyword(title);
-  if (!keyword) return [{ text: plain, accent: false }];
-  const at = plain.indexOf(keyword);
-  if (at < 0) return [{ text: plain, accent: false }];
-  return [
-    { text: plain.slice(0, at), accent: false },
-    { text: keyword, accent: true },
-    { text: plain.slice(at + keyword.length), accent: false },
-  ].filter((run) => run.text.length > 0);
+  const lines = title
+    .split("\n")
+    .map((line) => line.replace(/[[\]]/g, "").trim().split(/\s+/).join(" "))
+    .filter(Boolean);
+  let remaining = keyword;
+  return lines.map((line) => {
+    if (!remaining) return [{ text: line, accent: false }];
+    const at = line.indexOf(remaining);
+    if (at < 0) return [{ text: line, accent: false }];
+    const runs = [
+      { text: line.slice(0, at), accent: false },
+      { text: remaining, accent: true },
+      { text: line.slice(at + remaining.length), accent: false },
+    ].filter((run) => run.text.length > 0);
+    remaining = null;
+    return runs;
+  });
 }

@@ -79,10 +79,12 @@ class CaptionStyle:
 
 WHITE = "&H00FFFFFF"
 BLACK = "&H00000000"
-ACCENT = "&H004FFFD7"  # #D7FF4F
-YELLOW = "&H0000E6FF"  # #FFE600
-RED = "&H003C3CFF"  # #FF3C3C
-SKY = "&H00FFD24F"  # #4FD2FF
+ACCENT = "&H004FFFD7"  # #D7FF4F (brand lime, karaoke highlight)
+# Headline keyword colours sampled from current Korean Shorts showcases.
+YELLOW = "&H003FD2FF"  # #FFD23F gold
+RED = "&H002B35E8"  # #E8352B deep red
+LIME = "&H0042F5C6"  # #C6F542 yellow-green
+SKY = "&H00F5C758"  # #58C7F5 light blue
 MAGENTA = "&H00FF4FD7"  # #D74FFF
 CYAN = "&H00FFE14F"  # #4FE1FF
 
@@ -131,32 +133,32 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         name="헤드라인 옐로",
         description="큰 제목에 노란 키워드, 아래에 작은 자막. 요즘 쇼츠의 기본형.",
         accent=YELLOW,
-        accent_css="#FFE600",
+        accent_css="#FFD23F",
     ),
     RenderTemplate.HEADLINE_RED: _headline_template(
         name="헤드라인 레드",
         description="빨간 키워드로 긴장감을 주는 제목. 다큐·이슈 영상에.",
         accent=RED,
-        accent_css="#FF3C3C",
+        accent_css="#E8352B",
     ),
     RenderTemplate.HEADLINE_LIME: _headline_template(
         name="헤드라인 라임",
-        description="형광 연두 키워드. 정보·꿀팁 영상에 잘 맞아요.",
-        accent=ACCENT,
-        accent_css="#D7FF4F",
+        description="연두 키워드. 정보·꿀팁 영상에 잘 맞아요.",
+        accent=LIME,
+        accent_css="#C6F542",
     ),
     RenderTemplate.HEADLINE_SKY: _headline_template(
         name="헤드라인 뉴스",
         description="하늘색 키워드와 박스 자막. 뉴스·시사 느낌.",
         accent=SKY,
-        accent_css="#4FD2FF",
+        accent_css="#58C7F5",
         caption_box=True,
     ),
     RenderTemplate.HEADLINE_BOX: _headline_template(
         name="헤드라인 박스",
         description="제목을 검은 박스 위에 얹어 어떤 배경에서도 또렷하게.",
         accent=YELLOW,
-        accent_css="#FFE600",
+        accent_css="#FFD23F",
         box=True,
     ),
     RenderTemplate.IMPACT_YELLOW: CaptionStyle(
@@ -180,9 +182,9 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         preview={
             "color": "#FFFFFF",
             "stroke": "#000000",
-            "accent": "#FFE600",
+            "accent": "#FFD23F",
             "weight": "900",
-            "headlineAccent": "#FFE600",
+            "headlineAccent": "#FFD23F",
         },
     ),
     RenderTemplate.KARAOKE_POP: CaptionStyle(
@@ -223,7 +225,7 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         outline_width=4,
         shadow=1,
         margin_v=300,
-        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "700", "headlineAccent": "#FFE600"},
+        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "700", "headlineAccent": "#FFD23F"},
     ),
     RenderTemplate.BOLD_HIGHLIGHT: CaptionStyle(
         name="볼드 박스",
@@ -393,10 +395,18 @@ _BRACKET = re.compile(r"\[([^\[\]]+)\]")
 
 
 def headline_keyword(title: str) -> str | None:
-    """The word to colour: a ``[bracketed]`` phrase if the user marked one, else the longest word."""
+    """The part to colour.
+
+    A ``[bracketed]`` phrase if the user marked one; otherwise the whole second line of
+    a two-line title (the usual showcase look), else the longest word of a one-liner.
+    """
     marked = _BRACKET.search(title)
     if marked:
         return marked.group(1).strip() or None
+    lines = [" ".join(line.split()) for line in title.replace("\r", "").split("\n")]
+    lines = [line for line in lines if line]
+    if len(lines) >= 2:
+        return lines[1]
     words = [w for w in re.split(r"\s+", title.strip()) if len(w) >= 2]
     if len(words) < 2:
         return None

@@ -131,9 +131,9 @@ def test_karaoke_template_emits_one_event_per_word_with_the_spoken_word_coloured
     dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
 
     assert dialogues == [
-        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H0000E6FF}오늘{\\r} 핵심 장면",
-        "Dialogue: 1,0:00:01.00,0:00:02.00,Default,,0,0,0,,오늘 {\\1c&H0000E6FF}핵심{\\r} 장면",
-        "Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0,0,0,,오늘 핵심 {\\1c&H0000E6FF}장면{\\r}",
+        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H003FD2FF}오늘{\\r} 핵심 장면",
+        "Dialogue: 1,0:00:01.00,0:00:02.00,Default,,0,0,0,,오늘 {\\1c&H003FD2FF}핵심{\\r} 장면",
+        "Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0,0,0,,오늘 핵심 {\\1c&H003FD2FF}장면{\\r}",
     ]
 
 
@@ -215,18 +215,20 @@ def test_headline_is_drawn_for_the_whole_clip_with_the_keyword_coloured() -> Non
     assert "Style: Headline,NanumSquareRound,84,&H00FFFFFF," in document
     # Layer 2, full clip, centred in the band above the picture (y = 328).
     assert headline.startswith("Dialogue: 2,0:00:00.00,0:00:20.00,Headline,,0,0,0,,{\\an5\\pos(540,328)}")
-    assert headline.endswith("독립을 위해 {\\1c&H003C3CFF}목숨{\\1c&H00FFFFFF}을 건 여자")
+    assert headline.endswith("독립을 위해 {\\1c&H002B35E8}목숨{\\1c&H00FFFFFF}을 건 여자")
     # Captions still sit in the band under the picture.
     assert ",2,90,90,440,1" in next(line for line in lines if line.startswith("Style: Default"))
 
 
-def test_headline_colours_the_longest_word_when_nothing_is_marked() -> None:
+def test_headline_colours_the_second_line_or_the_longest_word_when_nothing_is_marked() -> None:
     from app.captions import headline_keyword
     from app.templates import RenderLayout
 
     assert headline_keyword("엘니뇨 현상으로 유럽과 한국 여름이 바뀌었다?") == "바뀌었다?"
     assert headline_keyword("한단어") is None
     assert headline_keyword("암표 수수료도\n이제 다 [제 겁니다]") == "제 겁니다"
+    # Two lines without brackets: the whole second line, like the showcase thumbnails.
+    assert headline_keyword("엘니뇨 현상으로\n유럽과 한국 여름이 바뀌었다?") == "유럽과 한국 여름이 바뀌었다?"
 
     document = build_ass(
         [],
@@ -238,7 +240,7 @@ def test_headline_colours_the_longest_word_when_nothing_is_marked() -> None:
     )
     headline = next(line for line in document.splitlines() if ",Headline,," in line)
     # FILL overlays the headline near the top; user line breaks become \\N.
-    assert "{\\an5\\pos(540,230)}엘니뇨 {\\1c&H0000E6FF}현상으로{\\1c&H00FFFFFF}\\N여름이 바뀌었다" in headline
+    assert "{\\an5\\pos(540,230)}엘니뇨 현상으로\\N{\\1c&H003FD2FF}여름이 바뀌었다{\\1c&H00FFFFFF}" in headline
 
 
 def test_headline_box_template_uses_an_opaque_box_style() -> None:

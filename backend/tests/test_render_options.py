@@ -20,7 +20,7 @@ def test_templates_endpoint_lists_every_template_and_layout() -> None:
     assert {layout.value for layout in RenderLayout} == {"STAGE", "FIT", "FILL"}
     impact = next(item for item in payload["templates"] if item["id"] == "IMPACT_YELLOW")
     assert impact["karaoke"] is True
-    assert impact["preview"]["accent"] == "#FFE600"
+    assert impact["preview"]["accent"] == "#FFD23F"
     assert impact["name"] == TEMPLATE_STYLES[RenderTemplate.IMPACT_YELLOW].name
     for item in payload["templates"]:
         assert item["name"] and item["description"] and item["tag"]
