@@ -75,7 +75,7 @@ export function describeCreditBudget(status: AuthStatus): string | null {
 }
 
 export function loginUrl(next: string) {
-  return `${API_URL}/auth/google/start?next=${encodeURIComponent(next)}`;
+  return `${API_URL}/auth/google/start?next=${encodeURIComponent(next === "/" ? "/my" : next)}`;
 }
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
@@ -85,6 +85,7 @@ export async function fetchAuthStatus(): Promise<AuthStatus> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  const response = await fetch(`${API_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  if (!response.ok) throw new Error("로그아웃하지 못했습니다. 다시 시도해 주세요.");
 }
 

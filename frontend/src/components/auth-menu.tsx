@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { describeCreditBudget, loginUrl, logout } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
@@ -10,6 +11,7 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const { status, loading, setStatus } = useAuthStatus();
+  const [logoutError, setLogoutError] = useState("");
 
   if (loading) return <span className="auth-menu" aria-busy="true" />;
 
@@ -41,14 +43,18 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
           type="button"
           className="auth-logout"
           onClick={async () => {
-            await logout();
-            setStatus({ ...status, user: null });
-            router.push("/");
-            router.refresh();
+            try {
+              setLogoutError("");
+              await logout();
+              setStatus({ ...status, user: null, credits: null });
+              router.push("/");
+              router.refresh();
+            } catch { setLogoutError("로그아웃하지 못했습니다. 다시 시도해 주세요."); }
           }}
         >
           {compact ? "Logout" : "로그아웃"}
         </button>
+        {logoutError ? <span role="alert">{logoutError}</span> : null}
       </div>
     );
   }

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { ProjectDetail } from "@/components/my-projects";
-import { SiteNav } from "@/components/site-nav";
 
 export const metadata: Metadata = {
   title: "프로젝트",
@@ -11,13 +10,6 @@ export const metadata: Metadata = {
 export default async function ProjectPage({ params }: { params: Promise<{ sourceId: string }> }) {
   const { sourceId } = await params;
   return (
-    <>
-      <SiteNav current="my" />
-      <main className="studio-page my-page" id="main-content">
-        <div className="studio-shell">
-          <ProjectDetail sourceId={sourceId} />
-        </div>
-      </main>
-    </>
+    <ProjectDetail sourceId={sourceId} />
   );
 }

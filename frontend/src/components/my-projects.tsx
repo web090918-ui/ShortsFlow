@@ -270,6 +270,12 @@ export function MyProjects({ onCount }: { onCount?: (count: number) => void }) {
     };
   }, [loading, status.user, onCount]);
 
+  useEffect(() => {
+    if (credits && projects && window.location.hash === "#credit-heading") {
+      document.getElementById("credit-heading")?.scrollIntoView();
+    }
+  }, [credits, projects]);
+
   if (loading) {
     return (
       <section className="source-panel" aria-busy="true">

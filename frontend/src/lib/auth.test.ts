@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { creditBudget, creditCost, describeCreditBudget, minutesRoundedUp } from "./auth";
+import { creditBudget, creditCost, describeCreditBudget, minutesRoundedUp, loginUrl } from "./auth";
 import type { AuthStatus } from "./auth";
 
 const status: AuthStatus = {
@@ -18,6 +18,12 @@ const status: AuthStatus = {
 };
 
 describe("credit helpers", () => {
+  it("opens the member workspace after homepage login and preserves active work", () => {
+    expect(new URL(loginUrl("/")).searchParams.get("next")).toBe("/my");
+    const activeWork = "/video?url=https%3A%2F%2Fyoutu.be%2FM7lc1UVf-VE";
+    expect(new URL(loginUrl(activeWork)).searchParams.get("next")).toBe(activeWork);
+    expect(new URL(loginUrl("/my/settings")).searchParams.get("next")).toBe("/my/settings");
+  });
   it("rounds source seconds up to minutes", () => {
     expect(minutesRoundedUp(1)).toBe(1);
     expect(minutesRoundedUp(60)).toBe(1);
