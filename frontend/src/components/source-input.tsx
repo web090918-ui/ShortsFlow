@@ -52,7 +52,14 @@ type RankedCandidate = {
   end_seconds: number;
   duration_seconds: number;
   hook_text: string;
+  title?: string | null;
+  description?: string | null;
 };
+
+type ShortMeta = { title: string; description: string };
+
+const MAX_SHORT_TITLE = 100;
+const MAX_SHORT_DESCRIPTION = 500;
 
 type AnalysisJob = {
   id: string;
@@ -200,6 +207,9 @@ export function SourceInput() {
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [isStartingRender, setIsStartingRender] = useState(false);
   const [lastCandidate, setLastCandidate] = useState<RankedCandidate | null>(null);
+  // Candidate chosen from the Top 3, with the AI-suggested title/description to edit.
+  const [pickedCandidate, setPickedCandidate] = useState<RankedCandidate | null>(null);
+  const [shortMeta, setShortMeta] = useState<ShortMeta>({ title: "", description: "" });
   const [directJob, setDirectJob] = useState<RenderJob | null>(null);
   const [isStartingDirect, setIsStartingDirect] = useState(false);
   const { status: authStatus } = useAuthStatus();
@@ -339,6 +349,8 @@ export function SourceInput() {
     setDirectJob(null);
     setRightsConfirmed(false);
     setTemplateId(DEFAULT_TEMPLATE_ID);
+    setPickedCandidate(null);
+    setShortMeta({ title: "", description: "" });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -459,7 +471,15 @@ export function SourceInput() {
     }
   }
 
-  async function handleRender(candidate: RankedCandidate) {
+  function pickCandidate(candidate: RankedCandidate) {
+    setPickedCandidate(candidate);
+    setShortMeta({
+      title: (candidate.title ?? title).slice(0, MAX_SHORT_TITLE),
+      description: (candidate.description ?? "").slice(0, MAX_SHORT_DESCRIPTION),
+    });
+  }
+
+  async function handleRender(candidate: RankedCandidate, meta: ShortMeta = shortMeta) {
     if (!analysisJob) return;
     setError(null);
     setRenderJob(null);
@@ -473,6 +493,8 @@ export function SourceInput() {
           processing_job_id: analysisJob.id,
           candidate_id: candidate.candidate_id,
           rights_confirmed: true,
+          ...(meta.title.trim() ? { title: meta.title.trim() } : {}),
+          ...(meta.description.trim() ? { description: meta.description.trim() } : {}),
         }),
       });
       setRenderJob(await readJsonResponse<RenderJob>(response));
@@ -854,7 +876,9 @@ export function SourceInput() {
                     <p className="range-help">추천할 후보를 찾지 못했습니다.</p>
                   ) : null}
                   {topCandidates.map((candidate) => {
-                    const isSelected = renderJob?.candidate_id === candidate.candidate_id;
+                    const isSelected =
+                      renderJob?.candidate_id === candidate.candidate_id ||
+                      (!renderJob && pickedCandidate?.candidate_id === candidate.candidate_id);
                     return (
                       <article
                         key={candidate.candidate_id}
@@ -883,16 +907,74 @@ export function SourceInput() {
                         <button
                           type="button"
                           className="submit-button"
-                          onClick={() => handleRender(candidate)}
+                          onClick={() => pickCandidate(candidate)}
                           disabled={isStartingRender || renderActive}
+                          aria-pressed={pickedCandidate?.candidate_id === candidate.candidate_id}
                         >
                           {isSelected && renderActive
                             ? "재미나게 만드는 중..."
-                            : "이 구간으로 쇼츠 만들기"}
+                            : pickedCandidate?.candidate_id === candidate.candidate_id
+                              ? "선택됨 · 아래에서 제목 확인"
+                              : "이 구간 선택"}
                         </button>
                       </article>
                     );
                   })}
+                </section>
+              ) : null}
+
+              {analysisJob?.status === "COMPLETED" && pickedCandidate ? (
+                <section className="short-meta" aria-labelledby="short-meta-heading">
+                  <h3 id="short-meta-heading">제목과 설명</h3>
+                  <p className="range-help">
+                    AI가 추천한 문구예요. 자유롭게 고쳐 쓰세요. 제목은 영상 위 헤드라인으로도
+                    들어가고, [대괄호]로 감싼 단어가 강조색이 됩니다. 설명은 나중에 업로드할 때
+                    씁니다.
+                  </p>
+                  <label className="field">
+                    <span>
+                      제목
+                      <small className="field-counter">
+                        {shortMeta.title.length} / {MAX_SHORT_TITLE}
+                      </small>
+                    </span>
+                    <textarea
+                      aria-label="쇼츠 제목 추천"
+                      rows={2}
+                      maxLength={MAX_SHORT_TITLE}
+                      value={shortMeta.title}
+                      onChange={(event) =>
+                        setShortMeta((current) => ({ ...current, title: event.target.value }))
+                      }
+                      placeholder="예: 독립을 위해 [목숨]을 건 여자"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>
+                      설명
+                      <small className="field-counter">
+                        {shortMeta.description.length} / {MAX_SHORT_DESCRIPTION}
+                      </small>
+                    </span>
+                    <textarea
+                      aria-label="쇼츠 설명 추천"
+                      rows={4}
+                      maxLength={MAX_SHORT_DESCRIPTION}
+                      value={shortMeta.description}
+                      onChange={(event) =>
+                        setShortMeta((current) => ({ ...current, description: event.target.value }))
+                      }
+                      placeholder="영상 설명과 해시태그를 적어 두면 업로드할 때 그대로 씁니다."
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="submit-button"
+                    onClick={() => handleRender(pickedCandidate)}
+                    disabled={isStartingRender || renderActive}
+                  >
+                    {renderActive ? "재미나게 만드는 중..." : "이 제목으로 쇼츠 만들기"}
+                  </button>
                 </section>
               ) : null}
 

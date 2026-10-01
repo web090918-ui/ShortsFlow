@@ -19,6 +19,7 @@ export type RenderJob = {
   template_id: string;
   layout_id?: "STAGE" | "FILL" | "FIT";
   title?: string | null;
+  description?: string | null;
   candidate_id: string | null;
   download_url: string | null;
   preview_url: string | null;

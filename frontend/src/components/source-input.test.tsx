@@ -114,6 +114,8 @@ describe("SourceInput", () => {
       end_seconds: 195,
       duration_seconds: 59,
       hook_text: "호텔 바우처 이런 거 처음 받아보네.",
+      title: "호텔 바우처, [처음] 받아봤습니다",
+      description: "호텔 바우처 받은 썰. 댓글로 경험 공유해 주세요! #여행 #쇼츠",
     };
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -227,7 +229,15 @@ describe("SourceInput", () => {
       }),
     );
 
-    await user.click(screen.getAllByRole("button", { name: "이 구간으로 쇼츠 만들기" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "이 구간 선택" })[0]);
+    // The AI-suggested title and description are prefilled and editable.
+    const titleBox = screen.getByLabelText("쇼츠 제목 추천") as HTMLTextAreaElement;
+    const descriptionBox = screen.getByLabelText("쇼츠 설명 추천") as HTMLTextAreaElement;
+    expect(titleBox.value).toBe("호텔 바우처, [처음] 받아봤습니다");
+    expect(descriptionBox.value).toBe("호텔 바우처 받은 썰. 댓글로 경험 공유해 주세요! #여행 #쇼츠");
+    await user.clear(descriptionBox);
+    await user.type(descriptionBox, "수정한 설명 #쇼츠");
+    await user.click(screen.getByRole("button", { name: "이 제목으로 쇼츠 만들기" }));
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
@@ -238,6 +248,8 @@ describe("SourceInput", () => {
           processing_job_id: "analysis-1",
           candidate_id: "cand-1",
           rights_confirmed: true,
+          title: "호텔 바우처, [처음] 받아봤습니다",
+          description: "수정한 설명 #쇼츠",
         }),
       }),
     );

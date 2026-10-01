@@ -110,7 +110,7 @@ blurred background + contain) and the sample sentence is styled from the templat
 
 ## Validation
 
-- `backend && pytest`: 174 passed (catalog, STAGE/FIT filters, headline event and
+- `backend && pytest`: 178 passed (catalog, STAGE/FIT filters, headline event and
   keyword rule, karaoke events, json3/Whisper words, layout and title passthrough).
 - Real FFmpeg in the backend image: a 1920x1080 test clip with its own bottom caption was
   rendered with every template in every layout, including headline titles with marked
@@ -118,3 +118,21 @@ blurred background + contain) and the sample sentence is styled from the templat
   as before. No libass font-fallback warnings.
 - `frontend`: lint, 28 vitest tests (new `template-picker.test.tsx`, upload test asserts the
   captured frame appears in the previews), `next build`.
+
+## Suggested title and description (same day, third pass)
+
+The owner showed EasyCut's "제목과 설명도 간편하게 입력" step and asked for the same:
+AI proposes a title and description per candidate and the user edits them before the
+Short is made.
+
+- `OpenAIRanker` now asks for `title` (headline of at most 30 characters, the key phrase
+  in `[brackets]`, optional `\n` line break) and `description` (one or two sentences
+  plus two or three hashtags) for every candidate; both are kept on `RankedCandidate`
+  and so inside `result.ranking.items`. `HeuristicRanker` derives them from the hook.
+- `POST /shorts` accepts `description` (max 500) next to `title` (max 100). For a
+  candidate render the fallback order is: request → analysis title → AI suggestion →
+  short hook (title) and request → AI suggestion (description). Both are stored in
+  `render_input` and returned on the job, ready for the YouTube publish step (Task 12B).
+- `/video`: a Top 3 card now says "이 구간 선택"; picking one opens a "제목과 설명" panel
+  prefilled with the suggestions (counters 100 / 500), and "이 제목으로 쇼츠 만들기"
+  sends the edited values. The title doubles as the on-video headline.

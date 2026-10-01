@@ -85,7 +85,7 @@ class CreateProcessingJobRequest(BaseModel):
     template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
     layout_id: RenderLayout = RenderLayout.FILL
     # Optional headline for renders made from this analysis; [brackets] mark the keyword.
-    title: str | None = Field(default=None, max_length=80)
+    title: str | None = Field(default=None, max_length=100)
     transcript_language: str = Field(
         default="ko",
         pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",

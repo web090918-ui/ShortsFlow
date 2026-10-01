@@ -630,3 +630,48 @@ def test_manual_range_carries_its_title_to_the_render(monkeypatch, isolated_jobs
     call = pipeline.calls[0]
     assert call["title"] == "첫 영유아 건강검진, 왜 받아야 할까?"
     assert call["template"] == "HEADLINE_YELLOW" and call["layout"] == "STAGE"
+
+
+def test_candidate_render_defaults_to_the_ai_suggested_title_and_description(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+    analysis.result["candidates"]["items"][0]["hook_text"] = "짧은 훅 문장"
+    analysis.result["ranking"] = {
+        "top_3": [],
+        "items": [
+            {
+                "candidate_id": "cand-a",
+                "title": "호텔 바우처, [처음] 받아봤습니다",
+                "description": "호텔 바우처 받은 썰. #여행 #쇼츠",
+            }
+        ],
+    }
+    isolated_jobs.save(analysis)
+
+    suggested = client.post(
+        "/shorts",
+        json={"processing_job_id": str(analysis.id), "candidate_id": "cand-a", "rights_confirmed": True},
+    ).json()
+    edited = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+            "title": "내가 고친 제목",
+            "description": "내가 고친 설명 #쇼츠",
+        },
+    ).json()
+
+    # The AI suggestion beats the hook fallback; the user's edit beats both.
+    assert suggested["title"] == "호텔 바우처, [처음] 받아봤습니다"
+    assert suggested["description"] == "호텔 바우처 받은 썰. #여행 #쇼츠"
+    assert edited["title"] == "내가 고친 제목"
+    assert edited["description"] == "내가 고친 설명 #쇼츠"
+
+    assert _run_worker(edited["id"]).status_code == 200
+    assert pipeline.calls[0]["title"] == "내가 고친 제목"
+    assert client.get(f"/shorts/{edited['id']}").json()["description"] == "내가 고친 설명 #쇼츠"

@@ -39,6 +39,14 @@ class RankedCandidate(BaseModel):
     end_seconds: float
     duration_seconds: float
     hook_text: str
+    # Suggested upload metadata the user can edit before rendering; the title is also
+    # the on-video headline ([brackets] mark the coloured keyword).
+    title: str | None = None
+    description: str | None = None
+
+
+MAX_TITLE_CHARS = 100
+MAX_DESCRIPTION_CHARS = 500
 
 
 class RankingResult(BaseModel):
@@ -114,6 +122,8 @@ def _finish(
             end_seconds=item.end_seconds,
             duration_seconds=item.duration_seconds,
             hook_text=item.hook_text,
+            title=scored[item.index].get("title"),
+            description=scored[item.index].get("description"),
         )
         for position, item in enumerate(ordered, start=1)
     ]
@@ -124,6 +134,28 @@ def _finish(
         items=ranked,
         top_3=select_top(ranked, candidates, count=top_count),
     )
+
+
+def _clean_text(value: Any, limit: int) -> str | None:
+    """Trim a model-suggested string; None when missing or empty."""
+    if not isinstance(value, str):
+        return None
+    lines = [" ".join(line.split()) for line in value.replace("\r", "").split("\n")]
+    cleaned = "\n".join(line for line in lines if line).strip().strip('"\u201c\u201d')
+    if not cleaned:
+        return None
+    return cleaned[:limit].rstrip()
+
+
+def suggest_title_from_hook(hook_text: str, *, limit: int = 30) -> str:
+    """Headline fallback without a model: the hook, cut at a word boundary."""
+    hook = " ".join(hook_text.split())
+    if len(hook) <= limit:
+        return hook
+    cut = hook[: limit - 1]
+    if " " in cut[limit // 2 :]:
+        cut = cut[: cut.rfind(" ")]
+    return cut.rstrip(" ,.!?") + "\u2026"
 
 
 def _clamp_score(value: Any) -> int | None:
@@ -171,8 +203,18 @@ to any creator; you know nothing about the channel or its audience:
 Score every candidate from 0 to 100 as an integer ("ai_score"). Use the full range and
 avoid ties where possible. Give one concise reason (max two sentences) in the requested
 language that a creator can act on, plus up to three short strengths and concerns.
+
+Also propose, in the requested language, upload metadata for each candidate:
+- "title": a punchy Shorts headline of at most 30 characters, no quotation marks, that
+  states the payoff or the question the clip answers. Wrap the single most important
+  word or phrase in square brackets, e.g. "독립을 위해 [목숨]을 건 여자"; it is shown in
+  a highlight colour on the video. You may split it into two lines with "\n".
+- "description": one or two sentences (at most 150 characters) inviting viewers to
+  watch or comment, followed by two or three relevant hashtags.
+
 Return JSON only, shaped as:
-{"items":[{"index":1,"ai_score":82,"reason":"...","strengths":["..."],"concerns":["..."]}]}
+{"items":[{"index":1,"ai_score":82,"reason":"...","strengths":["..."],"concerns":["..."],
+"title":"...","description":"..."}]}
 Include every candidate index exactly once."""
 
 
@@ -266,6 +308,8 @@ class OpenAIRanker:
                 "reason": reason,
                 "strengths": _string_list(raw.get("strengths")),
                 "concerns": _string_list(raw.get("concerns")),
+                "title": _clean_text(raw.get("title"), MAX_TITLE_CHARS),
+                "description": _clean_text(raw.get("description"), MAX_DESCRIPTION_CHARS),
             }
         missing = [item.index for item in candidates.items if item.index not in scored]
         if missing:
@@ -308,6 +352,10 @@ class HeuristicRanker:
                 "reason": "문장 경계와 발화 밀도 기준의 구조 점수입니다 (개발용 대체 랭커).",
                 "strengths": [],
                 "concerns": [],
+                "title": suggest_title_from_hook(item.hook_text),
+                "description": f"{item.hook_text} 이 장면, 어떻게 보셨나요? 댓글로 알려 주세요! #쇼츠 #하이라이트"[
+                    :MAX_DESCRIPTION_CHARS
+                ],
             }
         return _finish(
             scored,

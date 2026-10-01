@@ -60,8 +60,10 @@ class CreateShortRequest(BaseModel):
     # None keeps the layout chosen for the analysis job (or FILL for a manual range).
     layout_id: RenderLayout | None = None
     # Headline drawn on top of the Short; [brackets] mark the coloured keyword.
-    # None falls back to the analysis job's title, then to a short candidate hook.
-    title: str | None = Field(default=None, max_length=80)
+    # None falls back to the analysis title, the AI-suggested title, then a short hook.
+    title: str | None = Field(default=None, max_length=100)
+    # Upload description kept with the job for publishing later; None takes the AI suggestion.
+    description: str | None = Field(default=None, max_length=500)
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -97,6 +99,7 @@ class ShortJobResponse(BaseModel):
     template_id: RenderTemplate
     layout_id: RenderLayout = RenderLayout.FILL
     title: str | None = None
+    description: str | None = None
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -183,6 +186,9 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         template_id=job.template_id,
         layout_id=job.layout_id,
         title=job.title,
+        description=render_input.get("description")
+        if isinstance(render_input.get("description"), str)
+        else None,
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
@@ -342,18 +348,33 @@ def _resolve_candidate(
         captions.append(cue)
     template = payload.template_id or analysis.template_id
     layout = payload.layout_id or analysis.layout_id
-    title = _clean_title(payload.title) or _clean_title(analysis.title)
+    ranking = analysis.result.get("ranking") or {}
+    ranked = next(
+        (
+            item
+            for item in ranking.get("items", [])
+            if isinstance(item, dict) and item.get("candidate_id") == payload.candidate_id
+        ),
+        {},
+    )
+    title = (
+        _clean_title(payload.title)
+        or _clean_title(analysis.title)
+        or _clean_title(ranked.get("title"))
+    )
     if title is None:
         # A short hook reads as a headline; a long sentence would wrap into a block.
         hook = candidate.get("hook_text")
         if isinstance(hook, str) and len(hook.strip()) <= MAX_HOOK_HEADLINE_CHARS:
             title = _clean_title(hook)
+    description = _clean_title(payload.description) or _clean_title(ranked.get("description"))
     render_input = {
         "processing_job_id": str(analysis.id),
         "candidate_id": candidate["id"],
         "candidate_index": candidate.get("index"),
         "captions": captions,
         "title": title,
+        "description": description,
     }
     return (
         analysis.source_url,
@@ -412,8 +433,11 @@ def create_short(
         start, end = payload.start_seconds, payload.end_seconds
         template = payload.template_id or RenderTemplate.CLEAN_CAPTION
         layout = payload.layout_id or RenderLayout.FILL
-        if _clean_title(payload.title):
-            render_input = {"title": _clean_title(payload.title)}
+        if _clean_title(payload.title) or _clean_title(payload.description):
+            render_input = {
+                "title": _clean_title(payload.title),
+                "description": _clean_title(payload.description),
+            }
         source_id = payload.source_id or uuid4()
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)

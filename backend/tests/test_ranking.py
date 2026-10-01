@@ -219,3 +219,41 @@ def test_rankers_reject_empty_candidate_sets() -> None:
     with pytest.raises(RankingError) as excinfo:
         HeuristicRanker().rank(empty)
     assert excinfo.value.retryable is False
+
+
+def test_openai_ranker_keeps_suggested_title_and_description() -> None:
+    content = _payload(
+        {1: 80, 2: 70, 3: 60, 4: 50, 5: 40},
+        title='"독립을 위해 [목숨]을 건 여자"',
+        description="  이 장면 어떻게 보셨나요?\n\n#쇼츠 #다큐  ",
+    )
+    result = OpenAIRanker(FakeOpenAI(content), model="gpt-test").rank(_candidates())
+
+    first = result.items[0]
+    assert first.title == "독립을 위해 [목숨]을 건 여자"
+    assert first.description == "이 장면 어떻게 보셨나요?\n#쇼츠 #다큐"
+    from app.ranking import SYSTEM_PROMPT
+
+    assert "title" in SYSTEM_PROMPT and "description" in SYSTEM_PROMPT
+
+
+def test_openai_ranker_tolerates_missing_suggestions() -> None:
+    result = OpenAIRanker(FakeOpenAI(_payload({1: 80, 2: 70, 3: 60, 4: 50, 5: 40})), model="gpt-test").rank(
+        _candidates()
+    )
+
+    assert all(item.title is None and item.description is None for item in result.items)
+
+
+def test_heuristic_ranker_suggests_a_short_title_and_a_description() -> None:
+    from app.ranking import suggest_title_from_hook
+
+    assert suggest_title_from_hook("짧은 훅") == "짧은 훅"
+    long_hook = "이 문장은 서른 글자를 훌쩍 넘기는 긴 설명이라 제목으로 쓰기에는 어울리지 않습니다"
+    short = suggest_title_from_hook(long_hook)
+    assert len(short) <= 30 and short.endswith("…") and not short[:-1].endswith(" ")
+
+    result = HeuristicRanker().rank(_candidates())
+    for item in result.items:
+        assert item.title and len(item.title) <= 30
+        assert item.description and "#쇼츠" in item.description
