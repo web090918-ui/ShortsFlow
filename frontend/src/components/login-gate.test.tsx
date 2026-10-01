@@ -1,7 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/video" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/video",
+  useSearchParams: () => new URLSearchParams("login=failed"),
+}));
 
 import { LoginGate } from "./login-gate";
 
@@ -30,6 +33,7 @@ describe("LoginGate", () => {
     );
 
     const link = await screen.findByRole("link", { name: "Google로 로그인" });
+    expect((await screen.findByRole("alert")).textContent).toContain("Google 로그인에 실패했습니다");
     expect(link.getAttribute("href")).toBe(
       "http://localhost:8000/auth/google/start?next=%2Fvideo",
     );
