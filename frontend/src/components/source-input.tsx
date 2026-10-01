@@ -17,6 +17,7 @@ import {
   LayoutPicker,
   TemplatePicker,
 } from "@/components/template-picker";
+import { BackgroundNotice } from "@/components/background-notice";
 import { CandidateScene } from "@/components/candidate-scene";
 import { useRenderOptions } from "@/lib/render-options-context";
 import { youtubeVideoId } from "@/lib/youtube-player";
@@ -937,6 +938,10 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                       : "이 구간 그대로 만들기"}
               </button>
 
+              <BackgroundNotice
+                jobId={directJob?.id ?? renderJob?.id ?? null}
+                projectHref={source ? `/my/${source.id}` : "/my"}
+              />
               {directJob ? (
                 <RenderResult
                   job={directJob}

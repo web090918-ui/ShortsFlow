@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API_URL } from "@/config";
+import { BackgroundNotice } from "@/components/background-notice";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { BrandColorPicker, CaptionPositionPicker, TemplatePicker } from "@/components/template-picker";
@@ -396,6 +397,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
             </p>
           ) : null}
 
+          <BackgroundNotice jobId={renderJob?.id ?? null} projectHref={`/my/${sourceId}`} />
           {renderJob ? (
             <RenderResult job={renderJob} onRetry={startRender} retryDisabled={isStartingRender} />
           ) : null}

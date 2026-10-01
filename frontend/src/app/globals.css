@@ -968,6 +968,63 @@ h2 {
   font-weight: 500;
 }
 
+/* Layer popup: the render keeps going on the server after the page is left. */
+.layer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.layer-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 26px 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: center;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 35%);
+}
+
+.layer-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.layer-dialog h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.layer-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.layer-dialog p strong {
+  color: var(--text);
+}
+
+.layer-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.layer-actions .submit-button {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
 .rights-confirmation {
   display: flex;
   gap: 12px;
