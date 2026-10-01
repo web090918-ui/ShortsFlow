@@ -1,4 +1,4 @@
-# Handoff (2026-10-01)
+# Handoff (2026-10-01, evening)
 
 Where the project stands, what is waiting on the owner, and what comes next. Read this first when continuing from another machine.
 
@@ -10,7 +10,9 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 - Caption templates and frame layouts (Task 13, 2026-10-01): the default Short is now the headline composition seen on FikaClip-style showcases (big title with a coloured keyword above the whole source frame on black, small caption below: `STAGE` layout + `HEADLINE_*` templates), plus two karaoke templates with per-word highlight from json3/Whisper word timings and `FIT` (blurred background) and `FILL` (crop) layouts. An optional `title` rides on analysis and render jobs; `[brackets]` mark the keyword. `GET /templates` serves the catalog; the picker shows each style on the viewer's own frame with the typed title. See [Task 13](TASK_13_CAPTION_TEMPLATES.md).
 - Options (2026-10-01, later): templates are now six stage compositions (자막 팝형, 자막 강조형, 다크 미니멀, 페이퍼, SNS, 커뮤니티) with a brand colour, caption position (하단/중앙), 영상 언어 자동 감지 and 제작 언어; AI suggests an editable title and description per Top 3 clip. 9:16 only; other ratios shown as planned.
 - 글·사진으로 만들기 (Task 14, 2026-10-01): typed title/price/description plus up to three pictures (upload or URL) become a READY product Source; AI suggests angles, title and description; product Shorts render on the same stage templates with brand colour and a picture slideshow. The Coupang link is now a shortcut inside that flow. See [Task 14](TASK_14_TEXT_PHOTO_SHORTS.md).
-- Tests at the last run: backend 190 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 43 (`vitest`), lint and `next build` clean.
+- Member workspace (2026-10-01, owner's commits `dd32db6`…`20d7bc0` plus follow-ups): `/my` is a light-themed workspace with a sidebar (내 프로젝트 / 영상 쇼츠 만들기 / 글·사진으로 만들기), a red 크레딧 button in the top bar, and the studios rendered inside it at `/my/video` and `/my/affiliate`. 내 프로젝트 groups work per source video (`GET /me/projects`, `/my/{source_id}`). Credit charging rules live in 계정 · 제작 설정; the balance carries a "?" tooltip with what it can make.
+- Picking a clip (2026-10-01): each Top 3 card shows a miniature of the finished Short in the chosen template/brand colour (upload: a frame captured at the clip start; YouTube: a muted player paused at that second), the AI title/description, hook, reason and tags. Starting any render opens a layer popup: it keeps going on the server; the file is in 내 프로젝트.
+- Tests at the last run: backend 190 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 44 (`vitest`), lint and `next build` clean. Last commit `4e14f1e`.
 
 ## Waiting on the owner (no code change needed)
 
@@ -27,9 +29,19 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 
 ## Agreed next order
 
-1. Task 12A — implemented 2026-10-01 (Google sign-in, session cookie, `user_id` on Sources and jobs, `/my` work history, login enforced in google mode); production check pending the OAuth client.
-2. Task 12B — connect the creator's YouTube channel (incremental `youtube.upload` consent) and publish a finished Short with title, description (affiliate link and disclosure), and privacy; test users only until Google verification.
-3. Task 10 Cloud Run validation (angles and TTS) once model access is confirmed; then Agoda and Trip.com providers behind `ProductSourceProvider` (their public pages are expected to block servers like Coupang's, so plan on partner links or APIs).
+1. **Owner checks after today's deploys**: on `/my/video`, run one YouTube analysis end to end (Top 3 cards with scene previews → 제목과 설명 → render → layer popup → 내 프로젝트). On `/my/affiliate`, make one 글·사진 Short with 1–2 uploaded pictures (needs bucket CORS, item 2 above) and watch for a TTS 403 (item 3 above). Report any template card that looks off by name.
+2. Task 12B — connect the creator's YouTube channel (incremental `youtube.upload` consent) and publish a finished Short with the stored title/description (affiliate link and disclosure) and privacy; test users only until Google verification. Jobs already carry `title` and `description` for this.
+3. Agoda / Trip.com: partner API keys → providers behind `ProductSourceProvider` that pre-fill the 글·사진 form (public pages return 403 or a JS shell; reviews are not available anywhere, creators paste them into 설명/메모).
+4. Later: server-side start frames for YouTube candidates (needs the media, so only when it is already cached), other aspect ratios (generalise 1080x1920 and the compositions), payments (ledger `purchase` reason).
+
+## Where things are (for the next machine)
+
+- Templates/compositions: `backend/app/captions.py` (`TEMPLATE_STYLES`, `build_ass`, `build_product_ass`), `backend/app/templates.py` (enums), `backend/app/render_options.py` (`GET /templates`); frontend mirror in `frontend/src/lib/render-options.ts`, pickers in `frontend/src/components/template-picker.tsx`.
+- Video wizard: `frontend/src/components/source-input.tsx`; Top 3 scene preview `candidate-scene.tsx`; popup `background-notice.tsx`.
+- 글·사진: `backend/app/products.py` (`ManualProductInput`), `backend/app/sources.py` (`POST /sources/product`, `/sources/product-images`), `backend/app/product_pipeline.py`, `video_processing.compose_product_short`; frontend `affiliate-input.tsx`, `product-studio.tsx`.
+- Workspace: `frontend/src/components/member-workspace.tsx` (+ `.module.css`), `my-projects.tsx`, routes under `frontend/src/app/my/`; backend `backend/app/me.py`.
+- Scratch render checks used today (FFmpeg frames per template) are not in the repo; recreate with a 4-second `testsrc2` clip and `build_ass` if needed.
+- An untracked `output/` folder exists in the owner's checkout; it is not part of the repo.
 
 ## Operating notes
 
