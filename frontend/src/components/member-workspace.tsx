@@ -75,7 +75,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
           <button className={styles.upgradeButton} type="button" aria-expanded={showUpgradeNotice} aria-controls="upgrade-notice" onClick={() => setShowUpgradeNotice(!showUpgradeNotice)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z" /></svg>업그레이드</button>
           {showUpgradeNotice ? <p id="upgrade-notice" role="status" className={styles.upgradeNotice}>유료 플랜은 준비 중입니다.</p> : null}
         </section>
-        <Link className={styles.settingsLink} href="/my/settings" aria-current={settings ? "page" : undefined}>⚙ 계정 · 제작 설정</Link>
+        <Link className={styles.settingsLink} href="/my/settings" aria-current={settings ? "page" : undefined}>⚙ 설정</Link>
         <Link className={styles.homeLink} href="/">서비스 소개 ↗</Link>
       </div>
     </aside>
