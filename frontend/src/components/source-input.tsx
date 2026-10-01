@@ -6,6 +6,7 @@ import type { CSSProperties, FormEvent } from "react";
 import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
 import { RenderResult } from "@/components/render-result";
+import { SourcePlayer } from "@/components/source-player";
 import type { RenderJob } from "@/components/render-result";
 import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
@@ -201,6 +202,7 @@ export function SourceInput() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<Source | null>(null);
+  const [playbackSource, setPlaybackSource] = useState<{ youtubeUrl?: string; file?: File }>({});
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rangeStart, setRangeStart] = useState(0);
@@ -355,11 +357,12 @@ export function SourceInput() {
     }
   }
 
-  function resetForSource(createdSource: Source) {
+  function resetForSource(createdSource: Source, playback: { youtubeUrl?: string; file?: File }) {
     const duration =
       createdSource.metadata?.youtube?.duration_seconds ??
       createdSource.metadata?.upload?.duration_seconds;
     setSource(createdSource);
+    setPlaybackSource(playback);
     setRangeStart(0);
     setRangeEnd(
       typeof duration === "number" && duration > 0
@@ -393,7 +396,7 @@ export function SourceInput() {
     if (mode === "url") {
       const cachedSource = readCachedSource(requestedUrl);
       if (cachedSource) {
-        resetForSource(cachedSource);
+        resetForSource(cachedSource, { youtubeUrl: requestedUrl });
         return;
       }
     }
@@ -408,9 +411,9 @@ export function SourceInput() {
         });
         const createdSource = await readJsonResponse<Source>(response);
         cacheSource(requestedUrl, createdSource);
-        resetForSource(createdSource);
+        resetForSource(createdSource, { youtubeUrl: requestedUrl });
       } else {
-        resetForSource(await uploadFile(file as File));
+        resetForSource(await uploadFile(file as File), { file: file as File });
       }
     } catch (submissionError) {
       setUploadStep(null);
@@ -701,6 +704,14 @@ export function SourceInput() {
           source.status === "READY" &&
           typeof sourceDuration === "number" ? (
             <section className="range-picker" aria-labelledby="range-heading">
+              <SourcePlayer
+                key={source.id}
+                {...playbackSource}
+                start={rangeStart}
+                end={rangeEnd}
+                onStart={updateRangeStart}
+                onEnd={updateRangeEnd}
+              />
               <div className="range-heading-row">
                 <div>
                   <h3 id="range-heading">분석할 영상 구간</h3>
