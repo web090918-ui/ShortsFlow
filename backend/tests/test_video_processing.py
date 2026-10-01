@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from app import video_processing
-from app.video_processing import FfmpegVideoProcessor, VideoProcessingError
+from app.video_processing import (
+    FfmpegVideoProcessor,
+    VideoProcessingError,
+    parse_silences,
+    speech_segments,
+)
 
 
 @pytest.fixture
@@ -153,3 +158,85 @@ def test_stage_layout_fills_picture_band_on_black(fake_tools, tmp_path: Path) ->
         "scale=1080:608:force_original_aspect_ratio=increase,crop=1080:608,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:0x000000,setsar=1"
     )
     assert video_filter.index("pad=") < video_filter.index(",subtitles=filename=")
+
+
+def test_probe_reports_whether_the_source_has_audio(fake_tools, tmp_path: Path) -> None:
+    info = FfmpegVideoProcessor().probe(tmp_path / "in.mp4")
+    assert info.has_audio is True
+
+
+def test_parse_silences_pairs_log_lines_and_offsets_them() -> None:
+    stderr = (
+        "[silencedetect @ 0x1] silence_start: 5.2\n"
+        "[silencedetect @ 0x1] silence_end: 6.8 | silence_duration: 1.6\n"
+        "[silencedetect @ 0x1] silence_start: 20.0\n"
+    )
+    assert parse_silences(stderr, offset_seconds=100.0) == [(105.2, 106.8)]
+
+
+def test_speech_segments_keep_padding_and_merge_slivers() -> None:
+    segments = speech_segments(
+        [(20.0, 22.0), (22.1, 24.0), (39.9, 41.0)], start_seconds=10.0, end_seconds=40.0
+    )
+    # The 22-22.1 sliver between two pauses is too short for a jump cut, so it stays
+    # attached to the first part together with the pause before it; a pause running
+    # past the end of the range leaves nothing to cut after the padding.
+    assert segments == [(10.0, 22.22), (23.88, 40.0)]
+    assert speech_segments([], start_seconds=0.0, end_seconds=30.0) == [(0.0, 30.0)]
+    # A pause too short to survive the padding is left alone.
+    assert speech_segments([(5.0, 5.2)], start_seconds=0.0, end_seconds=30.0) == [(0.0, 30.0)]
+
+
+def test_detect_silences_runs_silencedetect_over_the_range_only(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(video_processing.shutil, "which", lambda name: f"/usr/bin/{name}")
+    calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        stderr = b"[silencedetect] silence_start: 1.0\n[silencedetect] silence_end: 2.5\n"
+        return subprocess.CompletedProcess(command, 0, b"", stderr)
+
+    monkeypatch.setattr(video_processing.subprocess, "run", fake_run)
+
+    silences = FfmpegVideoProcessor().detect_silences(
+        tmp_path / "in.mp4", start_seconds=30.0, end_seconds=60.0
+    )
+
+    command = calls[0]
+    assert command[command.index("-ss") + 1] == "30.000"
+    assert command[command.index("-t") + 1] == "30.000"
+    assert any("silencedetect=noise=-35dB:d=0.6" in part for part in command)
+    assert command[-2:] == ["null", "-"]
+    assert silences == [(31.0, 32.5)]
+
+
+def test_trim_to_vertical_with_segments_joins_them_before_reframing(fake_tools, tmp_path: Path) -> None:
+    FfmpegVideoProcessor().trim_to_vertical(
+        tmp_path / "in.mp4",
+        tmp_path / "out.mp4",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        keep_segments=[(10.0, 20.0), (22.0, 40.0)],
+    )
+
+    command = fake_tools[0]
+    graph = command[command.index("-filter_complex") + 1]
+    assert "[0:v]trim=start=0.000:end=10.000,setpts=PTS-STARTPTS[v0]" in graph
+    assert "[0:a]atrim=start=12.000:end=30.000,asetpts=PTS-STARTPTS[a1]" in graph
+    assert "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vc][aout]" in graph
+    assert graph.endswith("crop=1080:1920,setsar=1[vout]")
+    assert "-t" not in command
+    assert command[command.index("-map") + 1] == "[vout]"
+    assert "-vf" not in command
+
+
+def test_trim_to_vertical_with_a_single_full_segment_uses_the_plain_cut(fake_tools, tmp_path: Path) -> None:
+    FfmpegVideoProcessor().trim_to_vertical(
+        tmp_path / "in.mp4",
+        tmp_path / "out.mp4",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        keep_segments=[(10.0, 40.0)],
+    )
+    assert "-filter_complex" not in fake_tools[0]
+    assert "-vf" in fake_tools[0]

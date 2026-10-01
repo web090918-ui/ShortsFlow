@@ -154,6 +154,11 @@ def test_titan_provider_prepares_metadata_from_info_json(monkeypatch):
         "thumbnail": "https://i.ytimg.com/abc.jpg",
         "upload_date": "20240101",
         "view_count": 42,
+        "heatmap": [
+            {"start_time": i * 3.01, "end_time": (i + 1) * 3.01, "value": 1.0 if i == 50 else 0.1}
+            for i in range(100)
+        ],
+        "chapters": [{"start_time": 0, "end_time": 120, "title": "Intro"}],
     }
     monkeypatch.setattr(acquisition, "download_text", lambda url, **kwargs: json.dumps(info))
 
@@ -165,6 +170,10 @@ def test_titan_provider_prepares_metadata_from_info_json(monkeypatch):
     assert youtube["duration_seconds"] == 301
     assert youtube["channel_title"] == "Channel"
     assert youtube["thumbnail_url"] == "https://i.ytimg.com/abc.jpg"
+    assert len(youtube["heatmap"]) == 100
+    assert youtube["chapters"] == [{"start_seconds": 0, "end_seconds": 120, "title": "Intro"}]
+    # 301 s is too short for a 300 s analysis window to be worth suggesting.
+    assert youtube["recommended_ranges"] == []
     assert prepared.metadata["media"] == {"provider": "apify_titan"}
     assert prepared.processing_reference == {
         "provider": "apify_titan",

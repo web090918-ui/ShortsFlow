@@ -65,9 +65,13 @@ class StubShortPipeline:
         caption_position=None,
         channel_name=None,
         description=None,
+        remove_silence=False,
+        title_intro=False,
     ):
         self.calls.append(
             {
+                "remove_silence": remove_silence,
+                "title_intro": title_intro,
                 "layout": layout,
                 "title": title,
                 "brand_color": brand_color,
@@ -207,6 +211,8 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "caption_position": "BOTTOM",
             "channel_name": None,
             "description": None,
+            "remove_silence": False,
+            "title_intro": False,
         }
     ]
 
@@ -729,3 +735,50 @@ def test_candidate_render_uses_the_ranker_adjusted_range(
     # Cues follow the adjusted range: the one at 170-180 is now inside the clip.
     assert call["captions"] == ["이전 문장", "후보 안 첫 문장", "후보 안 둘째 문장", "후보 밖"]
     assert call["title"] == "이전 문장"
+
+
+def test_manual_range_carries_edit_options_to_the_render(monkeypatch, isolated_jobs, tmp_path) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+
+    created = client.post(
+        "/shorts", json=_payload(remove_silence=True, title_intro=True, title="제목")
+    ).json()
+    assert created["remove_silence"] is True
+    assert created["title_intro"] is True
+
+    _run_worker(created["id"])
+    assert pipeline.calls[0]["remove_silence"] is True
+    assert pipeline.calls[0]["title_intro"] is True
+
+    plain = client.post("/shorts", json=_payload()).json()
+    assert plain["remove_silence"] is False and plain["title_intro"] is False
+
+
+def test_candidate_render_inherits_edit_options_from_the_analysis(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+    isolated_jobs.save(analysis.model_copy(update={"remove_silence": True, "title_intro": True}))
+
+    inherited = client.post(
+        "/shorts",
+        json={"processing_job_id": str(analysis.id), "candidate_id": "cand-a", "rights_confirmed": True},
+    ).json()
+    assert inherited["remove_silence"] is True and inherited["title_intro"] is True
+
+    overridden = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+            "remove_silence": False,
+        },
+    ).json()
+    assert overridden["remove_silence"] is False and overridden["title_intro"] is True
+
+    _run_worker(inherited["id"])
+    assert pipeline.calls[0]["remove_silence"] is True

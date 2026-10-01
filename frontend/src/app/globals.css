@@ -346,6 +346,106 @@ h2 {
   background: var(--accent);
 }
 
+.range-heatmap {
+  position: absolute;
+  right: 0;
+  bottom: 18px;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  height: 14px;
+  pointer-events: none;
+}
+
+.range-heatmap span {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.range-suggestions {
+  display: grid;
+  gap: 8px;
+}
+
+.range-suggestions-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.range-suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.range-suggestion {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.range-suggestion strong {
+  color: var(--accent);
+  font-size: 0.74rem;
+}
+
+.range-suggestion span {
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+
+.range-suggestion small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.range-suggestion[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.edit-options {
+  display: grid;
+  gap: 10px;
+}
+
+.edit-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.edit-option input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.edit-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.edit-option strong {
+  font-size: 0.86rem;
+}
+
+.edit-option small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
 .range-slider input[type="range"] {
   position: absolute;
   inset: 0;

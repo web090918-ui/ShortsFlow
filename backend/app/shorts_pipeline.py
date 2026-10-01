@@ -25,15 +25,24 @@ from app.acquisition import (
     YtDlpProvider,
     titan_acquirer_from_settings,
 )
-from app.captions import TEMPLATE_STYLES, CaptionCue, build_ass, select_cues
+from app.captions import TEMPLATE_STYLES, CaptionCue, build_ass, remap_cues, select_cues
 from app.config import Settings
 from app.templates import CaptionPosition, RenderLayout, RenderTemplate
 from app.source_media import SourceMediaRepository
-from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
+from app.video_processing import (
+    FfmpegVideoProcessor,
+    VideoProcessingError,
+    VideoProcessor,
+    segments_duration,
+    speech_segments,
+)
 
 
 logger = logging.getLogger(__name__)
 RANGE_TOLERANCE_SECONDS = 0.5
+# Silence removal only applies when it changes something and leaves a real Short.
+MIN_SILENCE_REMOVED_SECONDS = 0.5
+MIN_OUTPUT_SECONDS = 15.0
 
 
 class ShortStage(str, Enum):
@@ -220,6 +229,9 @@ class ShortArtifact(BaseModel):
     brand_color: str | None = None
     caption_position: str = CaptionPosition.BOTTOM.value
     captions_applied: int = 0
+    # Seconds of pauses cut out by silence removal (0 when off or nothing to cut).
+    silence_removed_seconds: float = 0.0
+    title_intro: bool = False
     source_title: str | None
     source_duration_seconds: float
     source_width: int | None
@@ -265,6 +277,8 @@ class ShortPipeline:
         caption_position: CaptionPosition = CaptionPosition.BOTTOM,
         channel_name: str | None = None,
         description: str | None = None,
+        remove_silence: bool = False,
+        title_intro: bool = False,
     ) -> ShortArtifact:
         try:
             return self._run(
@@ -278,6 +292,8 @@ class ShortPipeline:
                 caption_position=caption_position,
                 channel_name=channel_name,
                 description=description,
+                remove_silence=remove_silence,
+                title_intro=title_intro,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -318,6 +334,8 @@ class ShortPipeline:
         caption_position: CaptionPosition,
         channel_name: str | None,
         description: str | None,
+        remove_silence: bool,
+        title_intro: bool,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -344,6 +362,24 @@ class ShortPipeline:
 
             report(ShortStage.PROCESSING, 55)
             clip_end = min(end_seconds, info.duration_seconds)
+            keep_segments = None
+            silence_removed = 0.0
+            if remove_silence and info.has_audio:
+                silences = self._processor.detect_silences(
+                    acquired.path, start_seconds=start_seconds, end_seconds=clip_end
+                )
+                segments = speech_segments(
+                    silences, start_seconds=start_seconds, end_seconds=clip_end
+                )
+                removed = round((clip_end - start_seconds) - segments_duration(segments), 3)
+                # Keep the cut only when it removes something and leaves a real Short.
+                if (
+                    len(segments) > 1
+                    and removed >= MIN_SILENCE_REMOVED_SECONDS
+                    and segments_duration(segments) >= MIN_OUTPUT_SECONDS
+                ):
+                    keep_segments = segments
+                    silence_removed = removed
             subtitles_path = None
             captions_applied = 0
             style = TEMPLATE_STYLES[template] if template is not None else None
@@ -352,20 +388,27 @@ class ShortPipeline:
                 selected = select_cues(
                     captions or [], start_seconds=start_seconds, end_seconds=clip_end
                 )
+                if keep_segments is not None:
+                    # Cue times follow the output clock once pauses are cut out.
+                    selected = remap_cues(selected, keep_segments)
+                    ass_start, ass_end = 0.0, segments_duration(keep_segments)
+                else:
+                    ass_start, ass_end = start_seconds, clip_end
                 if selected or chrome:
                     subtitles_path = temp_path / "captions.ass"
                     subtitles_path.write_text(
                         build_ass(
                             selected,
                             template=template,
-                            clip_start_seconds=start_seconds,
-                            clip_end_seconds=clip_end,
+                            clip_start_seconds=ass_start,
+                            clip_end_seconds=ass_end,
                             layout=layout,
                             title=title,
                             brand_color=brand_color,
                             caption_position=caption_position,
                             channel_name=channel_name,
                             description=description,
+                            title_intro=title_intro,
                         ),
                         encoding="utf-8",
                     )
@@ -378,6 +421,7 @@ class ShortPipeline:
                 subtitles_path=subtitles_path,
                 layout=layout,
                 stage_color=style.stage_color if style is not None else "#000000",
+                keep_segments=keep_segments,
             )
             output_bytes = output_path.stat().st_size
 
@@ -408,6 +452,8 @@ class ShortPipeline:
             brand_color=brand_color,
             caption_position=caption_position.value,
             captions_applied=captions_applied,
+            silence_removed_seconds=silence_removed,
+            title_intro=bool(title and title_intro),
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,
             source_width=info.width,

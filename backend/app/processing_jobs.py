@@ -89,6 +89,9 @@ class CreateProcessingJobRequest(BaseModel):
     # Accent for the headline keyword, karaoke word, pill and band; None = template default.
     brand_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     caption_position: CaptionPosition = CaptionPosition.BOTTOM
+    # Edit options renders made from this analysis start from.
+    remove_silence: bool = False
+    title_intro: bool = False
     # Spoken language of the source ("auto" lets captions/Whisper decide) and the
     # language for titles, descriptions, and AI reasons.
     transcript_language: str = Field(
@@ -113,6 +116,9 @@ class ProcessingJobResponse(BaseModel):
     title: str | None = None
     brand_color: str | None = None
     caption_position: CaptionPosition = CaptionPosition.BOTTOM
+    # Jump-cut pauses out of the Short / open with a full-frame title for ~2.4 s.
+    remove_silence: bool = False
+    title_intro: bool = False
     transcript_language: str = "ko"
     output_language: str = "ko"
     attempt_count: int = Field(ge=0)
@@ -742,6 +748,8 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             description=render_input.get("description")
             if isinstance(render_input.get("description"), str)
             else None,
+            remove_silence=job.remove_silence,
+            title_intro=job.title_intro,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
@@ -893,6 +901,8 @@ def create_processing_job(
         title=payload.title.strip() if payload.title and payload.title.strip() else None,
         brand_color=payload.brand_color,
         caption_position=payload.caption_position,
+        remove_silence=payload.remove_silence,
+        title_intro=payload.title_intro,
         transcript_language=payload.transcript_language,
         output_language=payload.output_language,
         attempt_count=0,

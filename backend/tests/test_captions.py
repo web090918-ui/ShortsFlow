@@ -1,5 +1,6 @@
-from app.captions import CaptionCue, build_ass, select_cues
+from app.captions import CaptionCue, CaptionWord, build_ass, remap_cues, select_cues
 from app.downloads import RenderTemplate
+from app.templates import RenderLayout
 
 
 def _cues() -> list[CaptionCue]:
@@ -369,3 +370,57 @@ def test_caption_position_only_moves_captions_on_caption_templates() -> None:
     assert default_style(RenderTemplate.CAPTION_ACCENT).endswith(",5,90,90,0,1")
     assert default_style(RenderTemplate.PAPER).endswith(",2,90,90,440,1")
     assert default_style(RenderTemplate.SNS_CARD).endswith(",2,90,90,440,1")
+
+
+def test_remap_cues_follows_the_output_clock_after_cuts() -> None:
+    cues = [
+        CaptionCue(start_seconds=12, end_seconds=19, text="첫"),
+        CaptionCue(
+            start_seconds=21,
+            end_seconds=26,
+            text="둘",
+            words=[
+                CaptionWord(start_seconds=21, end_seconds=21.5, text="가"),  # inside the cut
+                CaptionWord(start_seconds=23, end_seconds=25, text="나"),
+            ],
+        ),
+        CaptionCue(start_seconds=20.2, end_seconds=21.8, text="삭제됨"),  # entirely in the gap
+    ]
+
+    remapped = remap_cues(cues, [(10.0, 20.0), (22.0, 40.0)])
+
+    assert [(c.start_seconds, c.end_seconds, c.text) for c in remapped] == [
+        (2.0, 9.0, "첫"),
+        (10.0, 14.0, "둘"),
+    ]
+    # The word that sat in the gap collapsed to zero length and was dropped.
+    assert [(w.start_seconds, w.end_seconds) for w in remapped[1].words] == [(11.0, 13.0)]
+
+
+def test_title_intro_opens_full_frame_then_hands_over_to_the_headline() -> None:
+    document = build_ass(
+        [],
+        template=RenderTemplate.CLEAN_CAPTION,
+        clip_start_seconds=0,
+        clip_end_seconds=30,
+        layout=RenderLayout.FILL,
+        title="[핵심] 문장",
+        title_intro=True,
+    )
+    lines = document.splitlines()
+    intro = [line for line in lines if "\\fscx150" in line]
+    assert len(intro) == 1
+    assert intro[0].startswith("Dialogue: 3,0:00:00.00,0:00:02.40,Headline")
+    assert "\\pos(540,960)" in intro[0]
+    # A dimming rectangle covers the whole frame for the same span.
+    assert any(line.startswith("Dialogue: 0,0:00:00.00,0:00:02.40,Chrome") and "m 0 0 l 1080 0 l 1080 1920" in line for line in lines)
+    headline = [line for line in lines if line.startswith("Dialogue: 2,") and "Headline" in line]
+    assert headline and headline[0].startswith("Dialogue: 2,0:00:02.40,0:00:30.00")
+    assert "\\fad(200,0)" in headline[0]
+
+    plain = build_ass(
+        [], template=RenderTemplate.CLEAN_CAPTION, clip_start_seconds=0, clip_end_seconds=30,
+        layout=RenderLayout.FILL, title="[핵심] 문장",
+    )
+    assert "\\fscx150" not in plain
+    assert "Dialogue: 2,0:00:00.00,0:00:30.00,Headline" in plain

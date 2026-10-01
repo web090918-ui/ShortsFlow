@@ -40,6 +40,10 @@ DEFAULT_BRAND_COLOR = "#4FE1E1"  # aqua, the default swatch in the picker
 BRAND = "BRAND"  # sentinel: use the render's brand colour
 
 HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Title intro: the headline fills the frame for the first moments, then settles into
+# its usual place. Shorts are judged in the first three seconds.
+INTRO_SECONDS = 2.4
+INTRO_SCALE = 150  # percent of the headline font size
 
 
 class CaptionWord(BaseModel):
@@ -607,6 +611,50 @@ def _coloured(text: str, keyword: str | None, accent: str, base: str) -> str:
     return plain.replace(keyword, f"{{\\1c{accent}}}{keyword}{{\\1c{base}}}", 1)
 
 
+def remap_cues(
+    cues: list[CaptionCue], segments: list[tuple[float, float]]
+) -> list[CaptionCue]:
+    """Re-time cues for a jump-cut render that keeps only ``segments`` (absolute times).
+
+    The result is expressed on the output clock, which starts at 0 at the first kept
+    segment. A moment inside a removed gap lands on the start of the next kept
+    segment; cues left shorter than a readable flash are dropped.
+    """
+    ordered = sorted(segments)
+    offsets: list[float] = []
+    elapsed = 0.0
+    for seg_start, seg_end in ordered:
+        offsets.append(elapsed)
+        elapsed += seg_end - seg_start
+    total = elapsed
+
+    def to_output(moment: float) -> float:
+        for (seg_start, seg_end), offset in zip(ordered, offsets):
+            if moment < seg_start:
+                return offset  # inside a removed gap before this segment
+            if moment <= seg_end:
+                return offset + (moment - seg_start)
+        return total
+
+    remapped: list[CaptionCue] = []
+    for cue in cues:
+        start = to_output(cue.start_seconds)
+        end = to_output(cue.end_seconds)
+        if end - start < MIN_CUE_SECONDS:
+            continue
+        words = None
+        if cue.words:
+            words = []
+            for word in cue.words:
+                w_start = to_output(word.start_seconds)
+                w_end = to_output(word.end_seconds)
+                if w_end > w_start:
+                    words.append(CaptionWord(start_seconds=w_start, end_seconds=w_end, text=word.text))
+            words = words or None
+        remapped.append(CaptionCue(start_seconds=start, end_seconds=end, text=cue.text, words=words))
+    return remapped
+
+
 def select_cues(
     cues: list[CaptionCue], *, start_seconds: float, end_seconds: float
 ) -> list[CaptionCue]:
@@ -787,10 +835,27 @@ def _chrome_events(
     channel_name: str | None,
     description: str | None,
     end: str,
+    title_intro: bool = False,
 ) -> list[str]:
     """Headline, pill, band, kicker, hashtags, and channel line for the whole clip."""
     start = _ass_time(0)
     events: list[str] = []
+    headline_start = start
+    if title and title_intro:
+        # Big centred title over a dimmed frame, shrinking away before the headline appears.
+        intro_end = _ass_time(INTRO_SECONDS)
+        fade_ms = 350
+        events.append(
+            _rect(0, 0, PLAY_RES_X, PLAY_RES_Y, BLACK, start=start, end=intro_end, alpha="80")
+        )
+        intro_text = _coloured(title, headline_keyword(title), palette.resolve(style.headline_accent), palette.text)
+        events.append(
+            f"Dialogue: 3,{start},{intro_end},Headline,,0,0,0,,"
+            f"{{\\an5\\pos({PLAY_RES_X // 2},{PLAY_RES_Y // 2})\\fscx{INTRO_SCALE}\\fscy{INTRO_SCALE}"
+            f"\\fad(200,{fade_ms})\\t({int(INTRO_SECONDS * 1000) - fade_ms},{int(INTRO_SECONDS * 1000)},\\fscx100\\fscy100)}}"
+            f"{intro_text}"
+        )
+        headline_start = intro_end
     accent = palette.resolve(style.headline_accent)
     dark_on_brand = INK
     left_x = HEADLINE_MARGIN_X + 20
@@ -820,19 +885,20 @@ def _chrome_events(
     if title:
         keyword = headline_keyword(title)
         text = _coloured(title, keyword, accent, palette.text)
+        fade = "\\fad(200,0)" if headline_start != start else ""
         if palette.on_stage and style.headline_align_left:
             # Leave space for two title lines and hashtags above the picture.
             y = 300 if style.kicker else (340 if style.tagline else 280)
             events.append(
-                f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an7\\pos({left_x},{y})}}{text}"
+                f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an7\\pos({left_x},{y}){fade}}}{text}"
             )
         elif palette.on_stage and style.tagline:
             events.append(
-                f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},440)}}{text}"
+                f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},440){fade}}}{text}"
             )
         else:
             events.append(
-                f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{headline_y})}}{text}"
+                f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{headline_y}){fade}}}{text}"
             )
 
     if palette.on_stage and style.hashtags and description:
@@ -901,6 +967,7 @@ def build_ass(
     caption_position: CaptionPosition = CaptionPosition.BOTTOM,
     channel_name: str | None = None,
     description: str | None = None,
+    title_intro: bool = False,
 ) -> str:
     """Return an ASS document whose times are relative to the clip start."""
     style = TEMPLATE_STYLES[template]
@@ -921,6 +988,7 @@ def build_ass(
             channel_name=channel_name.strip() if channel_name and channel_name.strip() else None,
             description=description,
             end=clip_end,
+            title_intro=title_intro,
         )
     )
     if not style.show_caption:

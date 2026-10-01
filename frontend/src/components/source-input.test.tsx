@@ -236,6 +236,8 @@ describe("SourceInput", () => {
           layout_id: "STAGE",
           brand_color: "#4FE1E1",
           caption_position: "BOTTOM",
+          remove_silence: false,
+          title_intro: true,
           transcript_language: "ko",
           output_language: "ko",
         }),
@@ -269,6 +271,8 @@ describe("SourceInput", () => {
           layout_id: "STAGE",
           brand_color: "#FFD23F",
           caption_position: "MIDDLE",
+          remove_silence: false,
+          title_intro: true,
           title: "호텔 바우처, [처음] 받아봤습니다",
           description: "수정한 설명 #쇼츠",
         }),
@@ -349,9 +353,64 @@ describe("SourceInput", () => {
           layout_id: "STAGE",
           brand_color: "#4FE1E1",
           caption_position: "BOTTOM",
+          remove_silence: false,
+          title_intro: true,
           rights_confirmed: true,
         }),
       }),
     );
+  });
+
+  it("preselects the most replayed range and lets the creator switch suggestions", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
+          type: "YOUTUBE",
+          status: "READY",
+          metadata: {
+            youtube: {
+              title: "Long video",
+              duration_seconds: 1800,
+              heatmap: Array.from({ length: 100 }, (_, i) => ({
+                start_seconds: i * 18,
+                end_seconds: (i + 1) * 18,
+                value: i === 50 ? 1 : 0.1,
+              })),
+              recommended_ranges: [
+                { start_seconds: 760, end_seconds: 1060, peak_seconds: 909, score: 1, reason: "다시보기가 많은 구간" },
+                { start_seconds: 0, end_seconds: 120, peak_seconds: 30, score: 0.4, reason: "챕터 「인트로」" },
+              ],
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(<SourceInput />);
+    await user.type(screen.getByLabelText("YouTube URL"), "https://youtube.com/watch?v=source123");
+    await user.click(screen.getByRole("button", { name: "영상 불러오기" }));
+
+    expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
+    expect(screen.getByText("선택 5:00")).toBeTruthy();
+    expect(screen.getByText(/미리 골랐어요/)).toBeTruthy();
+    const first = screen.getByRole("button", { name: /추천 1/ });
+    expect(first.getAttribute("aria-pressed")).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: /추천 2/ }));
+    expect(screen.getByText("선택 2:00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /추천 2/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(first.getAttribute("aria-pressed")).toBe("false");
+
+    // Moving the slider by hand leaves the suggestions as plain shortcuts again.
+    fireEvent.change(screen.getByLabelText("구간 종료"), { target: { value: "200" } });
+    expect(screen.getByText("선택 3:20")).toBeTruthy();
+    expect(screen.queryByText(/미리 골랐어요/)).toBeNull();
+
+    // Edit options: silence removal off, title intro on by default.
+    expect((screen.getByRole("checkbox", { name: /무음 구간 자동 제거/ }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: /첫 3초 제목 인트로/ }) as HTMLInputElement).checked).toBe(true);
   });
 });

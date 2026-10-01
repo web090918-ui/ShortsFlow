@@ -9,6 +9,8 @@ import deno
 import yt_dlp
 from yt_dlp.utils import DownloadError
 
+from app.range_recommendation import youtube_insights
+
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +193,7 @@ class YouTubeSourceProvider:
                 "upload_date": info.get("upload_date"),
                 "view_count": info.get("view_count"),
                 "live_status": info.get("live_status"),
+                **youtube_insights(info, duration_seconds=_number(info.get("duration"))),
             },
             "media": {
                 "resolved_at": resolved_at,

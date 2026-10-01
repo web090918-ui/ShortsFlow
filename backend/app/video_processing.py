@@ -5,6 +5,7 @@ Acquisition providers deliver a source file; this module owns trimming and the
 """
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -21,6 +22,15 @@ PRODUCT_BOX_WIDTH = 1080
 PRODUCT_BOX_HEIGHT = 900
 PRODUCT_BOX_TOP = 330
 FFMPEG_TIMEOUT_SECONDS = 15 * 60
+# Silence removal: anything quieter than this for at least this long is a pause.
+SILENCE_NOISE_DB = -35
+SILENCE_MIN_SECONDS = 0.6
+# Breathing room kept on both sides of every cut so words are not clipped.
+SILENCE_PADDING_SECONDS = 0.12
+# A kept stretch shorter than this merges with its neighbour instead of a jump cut.
+MIN_SPEECH_SEGMENT_SECONDS = 0.4
+_SILENCE_START = re.compile(r"silence_start:\s*(-?[0-9.]+)")
+_SILENCE_END = re.compile(r"silence_end:\s*(-?[0-9.]+)")
 
 
 class VideoProcessingError(RuntimeError):
@@ -32,6 +42,70 @@ class VideoInfo:
     duration_seconds: float
     width: int | None
     height: int | None
+    has_audio: bool = True
+
+
+Segment = tuple[float, float]
+
+
+def speech_segments(
+    silences: list[Segment],
+    *,
+    start_seconds: float,
+    end_seconds: float,
+    padding_seconds: float = SILENCE_PADDING_SECONDS,
+    min_segment_seconds: float = MIN_SPEECH_SEGMENT_SECONDS,
+) -> list[Segment]:
+    """The parts of [start, end] to keep once the detected silences are cut out.
+
+    Each silence is shrunk by ``padding_seconds`` on both sides so speech never gets
+    clipped; a silence too short to survive that shrink is not cut at all.
+    """
+    cuts: list[Segment] = []
+    for raw_start, raw_end in sorted(silences):
+        cut_start = max(start_seconds, raw_start + padding_seconds)
+        cut_end = min(end_seconds, raw_end - padding_seconds)
+        if cut_end - cut_start <= 0:
+            continue
+        if cuts and cut_start <= cuts[-1][1]:
+            cuts[-1] = (cuts[-1][0], max(cuts[-1][1], cut_end))
+        else:
+            cuts.append((cut_start, cut_end))
+    kept: list[Segment] = []
+    cursor = start_seconds
+    for cut_start, cut_end in cuts:
+        if cut_start - cursor >= min_segment_seconds:
+            kept.append((cursor, cut_start))
+        elif kept:
+            # Too short to stand alone: keep it (and the silence) attached to the previous part.
+            kept[-1] = (kept[-1][0], cut_start)
+        elif cut_start > cursor:
+            # Leading sliver before the first silence: keep it rather than start on a cut.
+            kept.append((cursor, cut_start))
+        cursor = cut_end
+    if end_seconds - cursor >= min_segment_seconds or not kept:
+        kept.append((cursor, end_seconds))
+    elif end_seconds > cursor:
+        kept[-1] = (kept[-1][0], end_seconds)
+    return [(round(s, 3), round(e, 3)) for s, e in kept if e > s]
+
+
+def segments_duration(segments: list[Segment]) -> float:
+    return round(sum(end - start for start, end in segments), 3)
+
+
+def parse_silences(stderr: str, *, offset_seconds: float = 0.0) -> list[Segment]:
+    """Pair silencedetect's start/end log lines into absolute (start, end) tuples."""
+    starts = [float(m.group(1)) for m in _SILENCE_START.finditer(stderr)]
+    ends = [float(m.group(1)) for m in _SILENCE_END.finditer(stderr)]
+    pairs: list[Segment] = []
+    for index, start in enumerate(starts):
+        end = ends[index] if index < len(ends) else None
+        if end is None:
+            continue  # silence running to the end of the probed range: nothing to cut after speech
+        if end > start:
+            pairs.append((offset_seconds + max(0.0, start), offset_seconds + end))
+    return pairs
 
 
 class VideoProcessor(Protocol):
@@ -59,7 +133,12 @@ class VideoProcessor(Protocol):
         subtitles_path: Path | None = None,
         layout: RenderLayout = RenderLayout.FILL,
         stage_color: str = "#000000",
+        keep_segments: list[Segment] | None = None,
     ) -> None: ...
+
+    def detect_silences(
+        self, media_path: Path, *, start_seconds: float, end_seconds: float
+    ) -> list[Segment]: ...
 
 
 def _escape_filter_path(path: Path) -> str:
@@ -150,14 +229,54 @@ class FfmpegVideoProcessor:
             raise VideoProcessingError("원본 영상 길이를 확인하지 못했습니다.")
 
         width = height = None
+        has_audio = False
         for stream in payload.get("streams") or []:
-            if isinstance(stream, dict) and stream.get("codec_type") == "video":
+            if not isinstance(stream, dict):
+                continue
+            if stream.get("codec_type") == "audio":
+                has_audio = True
+            if stream.get("codec_type") == "video" and width is None:
                 width = stream.get("width") if isinstance(stream.get("width"), int) else None
                 height = (
                     stream.get("height") if isinstance(stream.get("height"), int) else None
                 )
-                break
-        return VideoInfo(duration_seconds=duration, width=width, height=height)
+        return VideoInfo(duration_seconds=duration, width=width, height=height, has_audio=has_audio)
+
+    def detect_silences(
+        self, media_path: Path, *, start_seconds: float, end_seconds: float
+    ) -> list[Segment]:
+        """Absolute (start, end) pauses inside the range, from FFmpeg's silencedetect."""
+        command = [
+            self._executable("ffmpeg"),
+            "-nostdin",
+            "-hide_banner",
+            "-nostats",
+            "-ss",
+            f"{start_seconds:.3f}",
+            "-t",
+            f"{end_seconds - start_seconds:.3f}",
+            "-i",
+            str(media_path),
+            "-vn",
+            "-af",
+            f"silencedetect=noise={SILENCE_NOISE_DB}dB:d={SILENCE_MIN_SECONDS}",
+            "-f",
+            "null",
+            "-",
+        ]
+        try:
+            completed = subprocess.run(
+                command, check=True, capture_output=True, timeout=self._timeout_seconds
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VideoProcessingError("무음 구간 분석 시간이 초과되었습니다.") from exc
+        except subprocess.CalledProcessError as exc:
+            detail = exc.stderr.decode("utf-8", errors="replace").strip() if exc.stderr else ""
+            raise VideoProcessingError(
+                "무음 구간을 분석하지 못했습니다." + (f" ({detail[:200]})" if detail else "")
+            ) from exc
+        stderr = completed.stderr.decode("utf-8", errors="replace") if completed.stderr else ""
+        return parse_silences(stderr, offset_seconds=start_seconds)
 
     def _encode(
         self,
@@ -167,21 +286,23 @@ class FfmpegVideoProcessor:
         start_seconds: float | None = None,
         end_seconds: float | None = None,
         video_filter: str | None = None,
+        filter_complex: str | None = None,
     ) -> None:
         command = [self._executable("ffmpeg"), "-nostdin", "-hide_banner", "-loglevel", "error"]
         if start_seconds is not None:
             # Input seeking keeps the trim fast; re-encoding below keeps it frame-accurate.
             command += ["-ss", f"{start_seconds:.3f}"]
         command += ["-i", str(input_path)]
-        if start_seconds is not None and end_seconds is not None:
+        if start_seconds is not None and end_seconds is not None and filter_complex is None:
             command += ["-t", f"{end_seconds - start_seconds:.3f}"]
-        if video_filter is not None:
-            command += ["-vf", video_filter]
+        if filter_complex is not None:
+            # The graph trims, joins and reframes in one pass; it labels its outputs.
+            command += ["-filter_complex", filter_complex, "-map", "[vout]", "-map", "[aout]"]
+        else:
+            if video_filter is not None:
+                command += ["-vf", video_filter]
+            command += ["-map", "0:v:0", "-map", "0:a:0?"]
         command += [
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a:0?",
             "-c:v",
             "libx264",
             "-preset",
@@ -247,14 +368,42 @@ class FfmpegVideoProcessor:
         subtitles_path: Path | None = None,
         layout: RenderLayout = RenderLayout.FILL,
         stage_color: str = "#000000",
+        keep_segments: list[Segment] | None = None,
     ) -> None:
+        vertical = _vertical_filter(subtitles_path, layout, stage_color)
+        if keep_segments and keep_segments != [(start_seconds, end_seconds)]:
+            # Jump-cut render: keep only the listed stretches (absolute times), joined in
+            # order, then reframe. Input seeking to the range start keeps decoding short,
+            # so trim times are relative to it. Subtitles were already retimed to match.
+            parts = []
+            for index, (seg_start, seg_end) in enumerate(keep_segments):
+                rel_start = max(0.0, seg_start - start_seconds)
+                rel_end = max(rel_start, seg_end - start_seconds)
+                parts.append(
+                    f"[0:v]trim=start={rel_start:.3f}:end={rel_end:.3f},setpts=PTS-STARTPTS[v{index}];"
+                    f"[0:a]atrim=start={rel_start:.3f}:end={rel_end:.3f},asetpts=PTS-STARTPTS[a{index}]"
+                )
+            inputs = "".join(f"[v{i}][a{i}]" for i in range(len(keep_segments)))
+            graph = (
+                ";".join(parts)
+                + f";{inputs}concat=n={len(keep_segments)}:v=1:a=1[vc][aout];"
+                + f"[vc]{vertical}[vout]"
+            )
+            self._encode(
+                input_path,
+                output_path,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
+                filter_complex=graph,
+            )
+            return
         # One encode pass instead of trim followed by convert: same result, half the time.
         self._encode(
             input_path,
             output_path,
             start_seconds=start_seconds,
             end_seconds=end_seconds,
-            video_filter=_vertical_filter(subtitles_path, layout, stage_color),
+            video_filter=vertical,
         )
 
     def _run(self, command: list[str], *, failure: str) -> None:

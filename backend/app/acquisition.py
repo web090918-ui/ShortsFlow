@@ -30,6 +30,7 @@ from app.source_media import (
     utcnow,
 )
 from app.youtube import PreparedVideoSource, _YtDlpLogger, _deno_runtime_path
+from app.range_recommendation import youtube_insights
 
 
 logger = logging.getLogger(__name__)
@@ -458,6 +459,8 @@ class ApifyTitanProvider:
                     "thumbnail_url": info.get("thumbnail"),
                     "upload_date": info.get("upload_date"),
                     "view_count": info.get("view_count"),
+                    # Replay heatmap, chapters and the analysis windows derived from them.
+                    **youtube_insights(info, duration_seconds=float(duration)),
                 },
                 "media": {"provider": self.name},
             },

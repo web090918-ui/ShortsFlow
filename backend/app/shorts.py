@@ -67,6 +67,9 @@ class CreateShortRequest(BaseModel):
     # None keeps the analysis job's brand colour / caption position (or the defaults).
     brand_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     caption_position: CaptionPosition | None = None
+    # None keeps the analysis job's edit options (or off for a manual range).
+    remove_silence: bool | None = None
+    title_intro: bool | None = None
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -105,6 +108,9 @@ class ShortJobResponse(BaseModel):
     description: str | None = None
     brand_color: str | None = None
     caption_position: CaptionPosition = CaptionPosition.BOTTOM
+    remove_silence: bool = False
+    title_intro: bool = False
+    silence_removed_seconds: float = 0.0
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -196,6 +202,9 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         else None,
         brand_color=job.brand_color,
         caption_position=job.caption_position,
+        remove_silence=job.remove_silence,
+        title_intro=job.title_intro,
+        silence_removed_seconds=float(_short_result(job).get("silence_removed_seconds") or 0.0),
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
@@ -411,6 +420,10 @@ def _resolve_candidate(
         "channel_name": _channel_name(analysis.source_id, user),
         "brand_color": payload.brand_color or analysis.brand_color,
         "caption_position": (payload.caption_position or analysis.caption_position).value,
+        "remove_silence": analysis.remove_silence
+        if payload.remove_silence is None
+        else payload.remove_silence,
+        "title_intro": analysis.title_intro if payload.title_intro is None else payload.title_intro,
     }
     return (
         analysis.source_url,
@@ -476,6 +489,8 @@ def create_short(
             "channel_name": _channel_name(payload.source_id, user),
             "brand_color": payload.brand_color,
             "caption_position": (payload.caption_position or CaptionPosition.BOTTOM).value,
+            "remove_silence": bool(payload.remove_silence),
+            "title_intro": bool(payload.title_intro),
         }
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)
@@ -523,6 +538,8 @@ def create_short(
         title=(render_input or {}).get("title"),
         brand_color=(render_input or {}).get("brand_color"),
         caption_position=CaptionPosition((render_input or {}).get("caption_position") or "BOTTOM"),
+        remove_silence=bool((render_input or {}).get("remove_silence")),
+        title_intro=bool((render_input or {}).get("title_intro")),
         attempt_count=0,
         error_message=None,
         result=None,

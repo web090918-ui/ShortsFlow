@@ -54,6 +54,8 @@ Task 05B — Manual-range Short (user-entered start/end to 9:16 MP4) was added a
 - In the manual-range Short flow, the acquisition provider only obtains the source file; FFmpeg owns trimming and the 9:16 conversion. Never let a download provider edit video.
 - Apify Titan is the only external YouTube provider (metadata, captions, media) as of 2026-09-29. Tunelio was retired and must not be re-added without an explicit decision. Keep every Titan call behind the existing boundaries in `app/acquisition.py` so the provider can change later.
 - Caption templates are ASS style presets in `backend/app/captions.py` (`RenderTemplate` ids, served by `GET /templates`); frame layouts are `RenderLayout.FILL` (center crop) or `FIT` (whole frame over a blurred background). Add a template by adding a style there; keep template logic out of `video_processing.py`.
+- YouTube's "most replayed" heatmap and chapters come from the yt-dlp info dict that both providers already read (`heatmap`, `chapters`). `backend/app/range_recommendation.py` turns them into `metadata.youtube.recommended_ranges`; the UI shows them as shortcuts on the existing range slider, never as a separate mode. They are hints for the analysis window, not Shorts picks.
+- Edit options are per-render flags (`remove_silence`, `title_intro`). Silence detection and the jump-cut concat live in `video_processing.py`; caption retiming (`remap_cues`) and the title intro live in `captions.py`. Keep the ASS file on the output clock when segments are cut.
 - Prefer direct, readable code over speculative abstractions.
 - Preserve a path to later phases without implementing them early.
 

@@ -35,6 +35,18 @@ import type { UploadTarget } from "@/lib/upload";
 
 type InputMode = "url" | "upload";
 
+/** One bucket of YouTube's "most replayed" curve (100 per video, value 0-1). */
+type HeatmapBucket = { start_seconds: number; end_seconds: number; value: number };
+
+/** An analysis window the backend derived from replay peaks and chapters. */
+type RecommendedRange = {
+  start_seconds: number;
+  end_seconds: number;
+  peak_seconds: number;
+  score: number;
+  reason: string;
+};
+
 type Source = {
   id: string;
   type: "YOUTUBE" | "PRODUCT" | "UPLOAD";
@@ -45,6 +57,8 @@ type Source = {
       channel_title?: string | null;
       duration_seconds?: number | null;
       thumbnail_url?: string | null;
+      heatmap?: HeatmapBucket[];
+      recommended_ranges?: RecommendedRange[];
     };
     upload?: {
       filename: string;
@@ -210,7 +224,12 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(0);
+  // Index of the recommended range the slider currently sits on; null once the user moves it.
+  const [appliedRecommendation, setAppliedRecommendation] = useState<number | null>(null);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  // Edit options: jump-cut pauses out of the Short, and open with a full-frame title.
+  const [removeSilence, setRemoveSilence] = useState(false);
+  const [titleIntro, setTitleIntro] = useState(true);
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [layoutId, setLayoutId] = useState<FrameLayout["id"]>(DEFAULT_LAYOUT_ID);
   const [brandColor, setBrandColor] = useState(DEFAULT_BRAND_COLOR);
@@ -241,6 +260,8 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
     source?.metadata?.upload?.duration_seconds ??
     null;
   const sampleImageUrl = source?.metadata?.youtube?.thumbnail_url ?? sampleFrame;
+  const heatmap = source?.metadata?.youtube?.heatmap ?? [];
+  const recommendedRanges = source?.metadata?.youtube?.recommended_ranges ?? [];
   const channelName = source?.metadata?.youtube?.channel_title ?? authStatus.user?.name ?? null;
   const selectedTemplate = renderOptions.templates.find((template) => template.id === templateId);
   const supportsCaptionPosition = selectedTemplate?.preview.positionable === "true"
@@ -370,6 +391,8 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
           caption_position: effectiveCaptionPosition,
+          remove_silence: removeSilence,
+          title_intro: titleIntro,
           rights_confirmed: true,
         }),
       });
@@ -389,12 +412,21 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
       createdSource.metadata?.upload?.duration_seconds;
     setSource(createdSource);
     setPlaybackSource(playback);
-    setRangeStart(0);
-    setRangeEnd(
-      typeof duration === "number" && duration > 0
-        ? Math.min(duration, DEFAULT_RANGE_SECONDS)
-        : 0,
-    );
+    const suggested = createdSource.metadata?.youtube?.recommended_ranges?.[0];
+    if (suggested && typeof duration === "number" && suggested.end_seconds <= duration) {
+      // Start on the most replayed stretch; the slider stays fully adjustable.
+      setRangeStart(suggested.start_seconds);
+      setRangeEnd(suggested.end_seconds);
+      setAppliedRecommendation(0);
+    } else {
+      setRangeStart(0);
+      setRangeEnd(
+        typeof duration === "number" && duration > 0
+          ? Math.min(duration, DEFAULT_RANGE_SECONDS)
+          : 0,
+      );
+      setAppliedRecommendation(null);
+    }
     setAnalysisJob(null);
     setRenderJob(null);
     setDirectJob(null);
@@ -509,6 +541,8 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
           caption_position: effectiveCaptionPosition,
+          remove_silence: removeSilence,
+          title_intro: titleIntro,
           transcript_language: transcriptLanguage,
           output_language: outputLanguage,
         }),
@@ -551,6 +585,8 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           layout_id: layoutId,
           brand_color: brandColor,
           caption_position: effectiveCaptionPosition,
+          remove_silence: removeSilence,
+          title_intro: titleIntro,
           ...(meta.title.trim() ? { title: meta.title.trim() } : {}),
           ...(meta.description.trim() ? { description: meta.description.trim() } : {}),
         }),
@@ -565,13 +601,23 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
     }
   }
 
+  function applyRecommendation(index: number) {
+    const range = recommendedRanges[index];
+    if (!range || typeof sourceDuration !== "number") return;
+    setRangeStart(Math.max(0, range.start_seconds));
+    setRangeEnd(Math.min(sourceDuration, range.end_seconds));
+    setAppliedRecommendation(index);
+  }
+
   function updateRangeStart(value: number) {
+    setAppliedRecommendation(null);
     setRangeStart(Math.max(0, Math.min(value, rangeEnd - 1)));
     setAnalysisJob(null);
     setRenderJob(null);
   }
 
   function updateRangeEnd(value: number) {
+    setAppliedRecommendation(null);
     if (typeof sourceDuration !== "number") return;
     setRangeEnd(Math.min(sourceDuration, Math.max(value, rangeStart + 1)));
     setAnalysisJob(null);
@@ -725,6 +771,16 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
               </div>
 
               <div className="range-slider" style={rangeStyle}>
+                {heatmap.length > 0 ? (
+                  <span className="range-heatmap" aria-hidden="true">
+                    {heatmap.map((bucket, index) => (
+                      <span
+                        key={index}
+                        style={{ height: `${Math.max(6, Math.round(bucket.value * 100))}%` }}
+                      />
+                    ))}
+                  </span>
+                ) : null}
                 <span className="range-slider-track" aria-hidden="true" />
                 <span className="range-slider-selection" aria-hidden="true" />
                 <input
@@ -746,6 +802,37 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                   onChange={(event) => updateRangeEnd(Number(event.target.value))}
                 />
               </div>
+
+              {recommendedRanges.length > 0 ? (
+                <div className="range-suggestions" role="group" aria-label="추천 구간">
+                  <span className="range-suggestions-label">
+                    {appliedRecommendation !== null
+                      ? "다시보기가 많은 구간을 미리 골랐어요. 슬라이더로 조정할 수 있어요."
+                      : "다시보기가 많은 구간"}
+                  </span>
+                  <div className="range-suggestion-chips">
+                    {recommendedRanges.map((range, index) => (
+                      <button
+                        key={`${range.start_seconds}-${range.end_seconds}`}
+                        type="button"
+                        className="range-suggestion"
+                        aria-pressed={appliedRecommendation === index}
+                        onClick={() => applyRecommendation(index)}
+                      >
+                        <strong>추천 {index + 1}</strong>
+                        <span>
+                          {formatDuration(range.start_seconds)} – {formatDuration(range.end_seconds)}
+                        </span>
+                        <small>{range.reason}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : source.type === "YOUTUBE" ? (
+                <p className="range-help">
+                  이 영상은 아직 다시보기 데이터가 없어요. 구간을 직접 골라 주세요.
+                </p>
+              ) : null}
 
               <div className="range-time-fields">
                 <label>
@@ -866,6 +953,33 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                   value={brandColor}
                   onChange={setBrandColor}
                 />
+                <div className="edit-options" role="group" aria-label="편집 옵션">
+                  <label className="edit-option">
+                    <input
+                      type="checkbox"
+                      checked={removeSilence}
+                      onChange={(event) => setRemoveSilence(event.target.checked)}
+                    />
+                    <span>
+                      <strong>무음 구간 자동 제거</strong>
+                      <small>
+                        말 사이 0.6초 이상 쉬는 부분을 잘라 점프컷으로 이어요. 음악이나 리액션
+                        영상은 끄는 편이 좋아요.
+                      </small>
+                    </span>
+                  </label>
+                  <label className="edit-option">
+                    <input
+                      type="checkbox"
+                      checked={titleIntro}
+                      onChange={(event) => setTitleIntro(event.target.checked)}
+                    />
+                    <span>
+                      <strong>첫 3초 제목 인트로</strong>
+                      <small>제목을 화면 가득 띄웠다가 제자리로 줄여요. 제목이 있을 때만 적용돼요.</small>
+                    </span>
+                  </label>
+                </div>
               </div>
 
               {supportsCaptionPosition ? (

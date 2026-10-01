@@ -37,13 +37,29 @@ class StubProvider:
 
 
 class StubProcessor:
-    def __init__(self, *, duration: float = 120, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        duration: float = 120,
+        fail: bool = False,
+        silences: list[tuple[float, float]] | None = None,
+        has_audio: bool = True,
+    ) -> None:
         self.duration = duration
         self.fail = fail
+        self.silences = silences or []
+        self.has_audio = has_audio
         self.calls: list[dict] = []
+        self.silence_probes: list[tuple[float, float]] = []
 
     def probe(self, media_path):
-        return VideoInfo(duration_seconds=self.duration, width=1920, height=1080)
+        return VideoInfo(
+            duration_seconds=self.duration, width=1920, height=1080, has_audio=self.has_audio
+        )
+
+    def detect_silences(self, media_path, *, start_seconds, end_seconds):
+        self.silence_probes.append((start_seconds, end_seconds))
+        return [s for s in self.silences if s[1] > start_seconds and s[0] < end_seconds]
 
     def trim(self, input_path, output_path, *, start_seconds, end_seconds):
         raise AssertionError("pipeline should use the single-pass render")
@@ -61,6 +77,7 @@ class StubProcessor:
         subtitles_path=None,
         layout=None,
         stage_color="#000000",
+        keep_segments=None,
     ):
         if self.fail:
             raise VideoProcessingError("boom")
@@ -68,6 +85,7 @@ class StubProcessor:
             {
                 "start": start_seconds,
                 "end": end_seconds,
+                "keep_segments": keep_segments,
                 "layout": layout,
                 "stage_color": stage_color,
                 "subtitles": subtitles_path.read_text(encoding="utf-8")
@@ -128,6 +146,7 @@ def test_pipeline_acquires_renders_stores_and_cleans_up() -> None:
         {
             "start": 10.0,
             "end": 40.0,
+            "keep_segments": None,
             "layout": RenderLayout.FILL,
             "stage_color": "#000000",
             "subtitles": None,
@@ -258,3 +277,87 @@ def test_pipeline_writes_the_headline_even_without_captions() -> None:
     ass = processor.calls[0]["subtitles"]
     assert ass is not None and ",Headline,," in ass
     assert processor.calls[0]["layout"] == RenderLayout.STAGE
+
+
+def test_pipeline_removes_silences_and_retimes_captions() -> None:
+    # Clip 10-40 s with a 2 s pause at 20-22 s and a 1 s pause at 30-31 s.
+    processor = StubProcessor(silences=[(20.0, 22.0), (30.0, 31.0)])
+    pipeline = ShortPipeline(provider=StubProvider(), processor=processor, storage=StubStorage())
+    captions = [
+        CaptionCue(start_seconds=12, end_seconds=19, text="첫 문장"),
+        CaptionCue(start_seconds=22.5, end_seconds=29, text="둘째 문장"),
+        CaptionCue(start_seconds=31.5, end_seconds=39, text="셋째 문장"),
+    ]
+
+    artifact = pipeline.run(
+        job_id="job-s",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        report=lambda stage, progress: None,
+        captions=captions,
+        template=RenderTemplate.CLEAN_CAPTION,
+        remove_silence=True,
+    )
+
+    assert processor.silence_probes == [(10.0, 40.0)]
+    call = processor.calls[0]
+    # Padding of 0.12 s stays on each side of every cut.
+    assert call["keep_segments"] == [(10.0, 20.12), (21.88, 30.12), (30.88, 40.0)]
+    assert artifact.silence_removed_seconds == pytest.approx(2.52, abs=0.01)
+    # Second cue starts 22.5 s absolute = 12.5 s into the clip minus the 1.76 s cut so far.
+    assert "Dialogue: 1,0:00:10.74,0:00:17.24,Default" in call["subtitles"]
+    assert "Dialogue: 1,0:00:02.00,0:00:09.00,Default" in call["subtitles"]
+
+
+def test_pipeline_keeps_the_plain_cut_when_silence_removal_has_nothing_to_do() -> None:
+    processor = StubProcessor(silences=[])
+    pipeline = ShortPipeline(provider=StubProvider(), processor=processor, storage=StubStorage())
+
+    artifact = pipeline.run(
+        job_id="job-n",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        report=lambda stage, progress: None,
+        remove_silence=True,
+    )
+
+    assert processor.calls[0]["keep_segments"] is None
+    assert artifact.silence_removed_seconds == 0.0
+
+
+def test_pipeline_skips_silence_detection_without_an_audio_stream() -> None:
+    processor = StubProcessor(silences=[(20.0, 25.0)], has_audio=False)
+    pipeline = ShortPipeline(provider=StubProvider(), processor=processor, storage=StubStorage())
+
+    pipeline.run(
+        job_id="job-m",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        report=lambda stage, progress: None,
+        remove_silence=True,
+    )
+
+    assert processor.silence_probes == []
+    assert processor.calls[0]["keep_segments"] is None
+
+
+def test_pipeline_passes_the_title_intro_to_the_subtitle_file() -> None:
+    processor = StubProcessor()
+    pipeline = ShortPipeline(provider=StubProvider(), processor=processor, storage=StubStorage())
+
+    artifact = pipeline.run(
+        job_id="job-i",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10.0,
+        end_seconds=40.0,
+        report=lambda stage, progress: None,
+        template=RenderTemplate.CLEAN_CAPTION,
+        title="[핵심] 한 줄",
+        title_intro=True,
+    )
+
+    assert artifact.title_intro is True
+    assert "\\fscx150" in processor.calls[0]["subtitles"]
