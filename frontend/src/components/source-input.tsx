@@ -656,8 +656,10 @@ export function SourceInput() {
                 <div>
                   <h3 id="range-heading">분석할 영상 구간</h3>
                   <p>
-                    이 구간의 자막을 분석해 15~60초 후보를 만들고 AI Score로 Top 3를
-                    추천합니다. 한 번에 최대 60분입니다.
+                    AI 추천은 <strong>이 구간 안에서만</strong> 15~60초 후보를 찾아 AI Score로
+                    Top 3를 고릅니다. 넓게 잡을수록 선택지가 많아지고, 크레딧은 구간의 분 수만큼
+                    차감됩니다 (최대 60분). 원하는 장면을 이미 알면 좁게 잡고 "이 구간 그대로
+                    만들기"를 쓰세요.
                   </p>
                 </div>
                 <strong>
