@@ -357,15 +357,24 @@ def _resolve_candidate(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found."
         )
+    ranking = analysis.result.get("ranking") or {}
+    ranked = next(
+        (
+            item
+            for item in ranking.get("items", [])
+            if isinstance(item, dict) and item.get("candidate_id") == payload.candidate_id
+        ),
+        {},
+    )
+    # The ranker may have moved the cut onto a cleaner speech boundary; render that.
+    clip_start = float(ranked.get("start_seconds", candidate["start_seconds"]))
+    clip_end = float(ranked.get("end_seconds", candidate["end_seconds"]))
     transcript = analysis.result.get("transcript") or {}
     captions = []
     for segment in transcript.get("segments", []):
         if not isinstance(segment, dict):
             continue
-        if (
-            segment.get("end_seconds", 0) <= candidate["start_seconds"]
-            or segment.get("start_seconds", 0) >= candidate["end_seconds"]
-        ):
+        if segment.get("end_seconds", 0) <= clip_start or segment.get("start_seconds", 0) >= clip_end:
             continue
         # Sound tags and speaker marks are not speech; keep them off the screen too.
         text = clean_caption_text(str(segment.get("text") or ""))
@@ -381,15 +390,6 @@ def _resolve_candidate(
         captions.append(cue)
     template = payload.template_id or analysis.template_id
     layout = payload.layout_id or analysis.layout_id
-    ranking = analysis.result.get("ranking") or {}
-    ranked = next(
-        (
-            item
-            for item in ranking.get("items", [])
-            if isinstance(item, dict) and item.get("candidate_id") == payload.candidate_id
-        ),
-        {},
-    )
     title = (
         _clean_title(payload.title)
         or _clean_title(analysis.title)
@@ -397,7 +397,7 @@ def _resolve_candidate(
     )
     if title is None:
         # A short hook reads as a headline; a long sentence would wrap into a block.
-        hook = candidate.get("hook_text")
+        hook = ranked.get("hook_text") or candidate.get("hook_text")
         if isinstance(hook, str) and len(hook.strip()) <= MAX_HOOK_HEADLINE_CHARS:
             title = _clean_title(hook)
     description = _clean_title(payload.description) or _clean_title(ranked.get("description"))
@@ -414,8 +414,8 @@ def _resolve_candidate(
     }
     return (
         analysis.source_url,
-        float(candidate["start_seconds"]),
-        float(candidate["end_seconds"]),
+        clip_start,
+        clip_end,
         template,
         layout,
         analysis.source_id,

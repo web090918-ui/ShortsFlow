@@ -11,12 +11,16 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
-from app.candidates import CandidateSet, ClipCandidate
+from app.candidates import CandidateSet, ClipCandidate, SpeechUnit
 
 
 logger = logging.getLogger(__name__)
-CRITERIA_VERSION = "generic_v1"
+CRITERIA_VERSION = "generic_v2"
 MAX_TEXT_CHARS = 700
+MAX_CONTEXT_CHARS = 240
+# A boundary may move at most this far, and only onto a speech-unit edge: the model
+# fixes a cut that dropped a setup or a punchline, it does not pick a different clip.
+MAX_BOUNDARY_SHIFT_SECONDS = 12.0
 
 
 class RankingError(RuntimeError):
@@ -43,6 +47,9 @@ class RankedCandidate(BaseModel):
     # the on-video headline ([brackets] mark the coloured keyword).
     title: str | None = None
     description: str | None = None
+    # True when the ranker moved the start or end onto a nearby speech-unit boundary
+    # so the clip no longer opens or closes mid-thought.
+    boundary_adjusted: bool = False
 
 
 MAX_TITLE_CHARS = 100
@@ -101,6 +108,57 @@ def select_top(
     return picked
 
 
+def _snap(value: float, edges: list[float], *, anchor: float) -> float | None:
+    """Nearest speech-unit edge to ``value`` that stays within reach of the original."""
+    if not edges:
+        return None
+    nearest = min(edges, key=lambda edge: abs(edge - value))
+    if abs(nearest - anchor) > MAX_BOUNDARY_SHIFT_SECONDS:
+        return None
+    return nearest
+
+
+def adjust_boundaries(
+    candidate: ClipCandidate,
+    candidates: CandidateSet,
+    *,
+    start: float | None,
+    end: float | None,
+) -> tuple[float, float, str, bool]:
+    """Apply a ranker's start/end suggestion, snapped to unit edges and length limits.
+
+    Returns (start, end, hook_text, adjusted). Anything the model got wrong, such as a
+    boundary off any unit edge, a shift too far, or a length outside the Short limits,
+    falls back to the original clip rather than failing the job.
+    """
+    units = candidates.units
+    original = (candidate.start_seconds, candidate.end_seconds, candidate.hook_text, False)
+    if not units or (start is None and end is None):
+        return original
+    new_start = candidate.start_seconds
+    new_end = candidate.end_seconds
+    if start is not None:
+        snapped = _snap(start, [u.start_seconds for u in units], anchor=candidate.start_seconds)
+        if snapped is not None:
+            new_start = snapped
+    if end is not None:
+        snapped = _snap(end, [u.end_seconds for u in units], anchor=candidate.end_seconds)
+        if snapped is not None:
+            new_end = snapped
+    new_start = max(candidates.source_start_seconds, new_start)
+    new_end = min(candidates.source_end_seconds, new_end)
+    duration = new_end - new_start
+    if not (candidates.min_seconds <= duration <= candidates.max_seconds):
+        return original
+    if (new_start, new_end) == (candidate.start_seconds, candidate.end_seconds):
+        return original
+    first = next((u for u in units if u.start_seconds >= new_start - 0.05), None)
+    hook = candidate.hook_text
+    if first is not None and first.start_seconds < new_end:
+        hook = first.text if len(first.text) <= 80 else first.text[:77].rstrip() + "..."
+    return round(new_start, 3), round(new_end, 3), hook, True
+
+
 def _finish(
     scored: dict[int, dict[str, Any]],
     candidates: CandidateSet,
@@ -113,24 +171,30 @@ def _finish(
         candidates.items,
         key=lambda item: (-scored[item.index]["ai_score"], item.start_seconds),
     )
-    ranked = [
-        RankedCandidate(
-            candidate_id=item.id,
-            index=item.index,
-            rank=position,
-            ai_score=scored[item.index]["ai_score"],
-            reason=scored[item.index]["reason"],
-            strengths=scored[item.index].get("strengths", []),
-            concerns=scored[item.index].get("concerns", []),
-            start_seconds=item.start_seconds,
-            end_seconds=item.end_seconds,
-            duration_seconds=item.duration_seconds,
-            hook_text=item.hook_text,
-            title=scored[item.index].get("title"),
-            description=scored[item.index].get("description"),
+    ranked = []
+    for position, item in enumerate(ordered, start=1):
+        entry = scored[item.index]
+        start, end, hook, adjusted = adjust_boundaries(
+            item, candidates, start=entry.get("start_seconds"), end=entry.get("end_seconds")
         )
-        for position, item in enumerate(ordered, start=1)
-    ]
+        ranked.append(
+            RankedCandidate(
+                candidate_id=item.id,
+                index=item.index,
+                rank=position,
+                ai_score=entry["ai_score"],
+                reason=entry["reason"],
+                strengths=entry.get("strengths", []),
+                concerns=entry.get("concerns", []),
+                start_seconds=start,
+                end_seconds=end,
+                duration_seconds=round(end - start, 3),
+                hook_text=hook,
+                title=entry.get("title"),
+                description=entry.get("description"),
+                boundary_adjusted=adjusted,
+            )
+        )
     return RankingResult(
         ranker=ranker,
         criteria_version=CRITERIA_VERSION,
@@ -168,6 +232,12 @@ def _clamp_score(value: Any) -> int | None:
     return max(0, min(100, round(value)))
 
 
+def _seconds(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def _string_list(value: Any, limit: int = 3) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -200,6 +270,8 @@ to any creator; you know nothing about the channel or its audience:
 
 1. Hook: do the first one or two sentences make a viewer stop scrolling?
 2. Self-contained: is it understandable with no context from the rest of the video?
+   Watch for openings that lean on what came just before ("so", "that's why", "그래서",
+   "그게") and endings that stop before the point lands.
 3. Complete thought: does it start and end cleanly rather than mid-idea?
 4. Payoff: does it deliver something concrete (insight, emotion, surprise, useful fact)?
 5. Pacing: is the speech dense and lively rather than filler, silence, or rambling?
@@ -216,10 +288,39 @@ Also propose, in the requested language, upload metadata for each candidate:
 - "description": one or two sentences (at most 150 characters) inviting viewers to
   watch or comment, followed by two or three relevant hashtags.
 
+Each candidate also lists the speech just before and after it, with the time at which
+each of those speech units starts and ends. If the clip would read as a complete
+thought by starting one or two units earlier, or ending one or two units later or
+earlier, say so with "start_seconds" and/or "end_seconds" set to one of the listed
+unit boundaries. Only do this to fix a cut that opens or closes mid-thought; never
+move a boundary more than about 10 seconds, and keep the clip between the stated
+minimum and maximum length. Omit both fields when the cut is already clean. Score
+the clip as it would be after your adjustment.
+
 Return JSON only, shaped as:
 {"items":[{"index":1,"ai_score":82,"reason":"...","strengths":["..."],"concerns":["..."],
-"title":"...","description":"..."}]}
+"title":"...","description":"...","start_seconds":123.4,"end_seconds":161.0}]}
 Include every candidate index exactly once."""
+
+
+def _neighbour_units(
+    candidate: ClipCandidate, units: list[SpeechUnit], *, before: bool, count: int = 2
+) -> str:
+    """Timestamped neighbouring units for the prompt; falls back to the plain context text."""
+    if before:
+        picked = [u for u in units if u.end_seconds <= candidate.start_seconds + 0.05][-count:]
+    else:
+        picked = [u for u in units if u.start_seconds >= candidate.end_seconds - 0.05][:count]
+    if not picked:
+        text = candidate.context_before if before else candidate.context_after
+        return text[:MAX_CONTEXT_CHARS] if text else "(none)"
+    parts = []
+    for unit in picked:
+        text = unit.text
+        if len(text) > MAX_CONTEXT_CHARS // count:
+            text = text[: MAX_CONTEXT_CHARS // count - 3].rstrip() + "..."
+        parts.append(f"[{unit.start_seconds:.1f}-{unit.end_seconds:.1f}s] {text}")
+    return " | ".join(parts)
 
 
 def build_user_prompt(
@@ -230,6 +331,7 @@ def build_user_prompt(
         f"Transcript language: {candidates.language or 'unknown'}",
         f"Video title: {video_title or 'unknown'}",
         f"Selected source range: {candidates.source_start_seconds:.0f}-{candidates.source_end_seconds:.0f} seconds",
+        f"Clip length limits: {candidates.min_seconds:.0f}-{candidates.max_seconds:.0f} seconds",
         f"Candidates: {len(candidates.items)}",
         "",
     ]
@@ -245,6 +347,8 @@ def build_user_prompt(
             f"ends_on_sentence: {item.ends_on_sentence_boundary}",
             f"hook: {item.hook_text}",
             f"text: {text}",
+            f"before: {_neighbour_units(item, candidates.units, before=True)}",
+            f"after: {_neighbour_units(item, candidates.units, before=False)}",
             "",
         ]
     return "\n".join(lines)
@@ -319,6 +423,8 @@ class OpenAIRanker:
                 "concerns": _string_list(raw.get("concerns")),
                 "title": _clean_text(raw.get("title"), MAX_TITLE_CHARS),
                 "description": _clean_text(raw.get("description"), MAX_DESCRIPTION_CHARS),
+                "start_seconds": _seconds(raw.get("start_seconds")),
+                "end_seconds": _seconds(raw.get("end_seconds")),
             }
         missing = [item.index for item in candidates.items if item.index not in scored]
         if missing:

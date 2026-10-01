@@ -687,3 +687,45 @@ def test_candidate_render_defaults_to_the_ai_suggested_title_and_description(
     assert _run_worker(edited["id"]).status_code == 200
     assert pipeline.calls[0]["title"] == "내가 고친 제목"
     assert client.get(f"/shorts/{edited['id']}").json()["description"] == "내가 고친 설명 #쇼츠"
+
+
+def test_candidate_render_uses_the_ranker_adjusted_range(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+    analysis.result["ranking"] = {
+        "top_3": [],
+        "items": [
+            {
+                "candidate_id": "cand-a",
+                "start_seconds": 95,
+                "end_seconds": 175,
+                "hook_text": "이전 문장",
+                "boundary_adjusted": True,
+            }
+        ],
+    }
+    isolated_jobs.save(analysis)
+
+    response = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-a",
+            "rights_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 202
+    created = response.json()
+    assert created["start_seconds"] == 95
+    assert created["end_seconds"] == 175
+
+    _run_worker(created["id"])
+    call = pipeline.calls[0]
+    assert call["start"] == 95 and call["end"] == 175
+    # Cues follow the adjusted range: the one at 170-180 is now inside the clip.
+    assert call["captions"] == ["이전 문장", "후보 안 첫 문장", "후보 안 둘째 문장", "후보 밖"]
+    assert call["title"] == "이전 문장"

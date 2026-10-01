@@ -112,11 +112,11 @@ def test_worker_is_idempotent_for_duplicate_delivery(monkeypatch) -> None:
     assert first.json()["result"]["next_step"] == "RENDER"
     assert first.json()["step"] == "RANKING"
     candidates = first.json()["result"]["candidates"]
-    assert candidates["generator"] == "heuristic_v1"
+    assert candidates["generator"] == "heuristic_v2"
     assert len(candidates["items"]) >= 1
     assert candidates["items"][0]["start_seconds"] >= 60
     ranking = first.json()["result"]["ranking"]
-    assert ranking["criteria_version"] == "generic_v1"
+    assert ranking["criteria_version"] == "generic_v2"
     assert len(ranking["items"]) == len(candidates["items"])
     assert 1 <= len(ranking["top_3"]) <= 3
     assert ranking["top_3"][0]["candidate_id"] == ranking["items"][0]["candidate_id"]

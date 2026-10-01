@@ -4,6 +4,7 @@ from app.candidates import (
     CandidateGenerationError,
     HeuristicCandidateGenerator,
     build_units,
+    starts_with_connective,
 )
 from app.transcripts import TranscriptResult, TranscriptSegment
 
@@ -70,7 +71,7 @@ def test_generates_ten_to_fifteen_candidates_for_a_ten_minute_range() -> None:
 
     result = generator.generate(transcript)
 
-    assert result.generator == "heuristic_v1"
+    assert result.generator == "heuristic_v2"
     assert result.transcript_provider == "apify_titan"
     assert 10 <= len(result.items) <= 15
     starts = [item.start_seconds for item in result.items]
@@ -185,3 +186,64 @@ def test_generator_rejects_invalid_configuration() -> None:
         HeuristicCandidateGenerator(min_seconds=60, max_seconds=30)
     with pytest.raises(ValueError):
         HeuristicCandidateGenerator(target_count_min=5, target_count_max=3)
+
+
+def test_connective_openings_are_not_clean_starts() -> None:
+    assert starts_with_connective("그래서 결국 이렇게 됐어요")
+    assert starts_with_connective("근데, 문제는 돈이었어요")
+    assert starts_with_connective("So the thing is")
+    assert not starts_with_connective("그래서라는 말은 접속사입니다")  # a longer word, not the connective
+    assert not starts_with_connective("오늘은 돈 얘기를 해볼게요")
+    assert not starts_with_connective("Sound check")
+
+
+def test_candidates_avoid_starting_on_a_connective_when_a_clean_start_exists() -> None:
+    # Every odd unit starts with "그래서"; a clean alternative always exists next to it.
+    segments = []
+    cursor = 0.0
+    for counter in range(1, 120):
+        text = f"그래서 이어지는 말 {counter} 입니다" if counter % 2 else f"새로운 주제 {counter} 입니다"
+        segments.append(TranscriptSegment(start_seconds=cursor, end_seconds=cursor + 3, text=text))
+        cursor += 3
+
+    result = HeuristicCandidateGenerator().generate(_transcript(segments, start=0, end=cursor))
+
+    assert all(not item.hook_text.startswith("그래서") for item in result.items)
+    assert all(item.starts_on_sentence_boundary for item in result.items)
+
+
+def test_candidates_end_on_a_sentence_end_or_pause_near_the_target_length() -> None:
+    # Units of 7 seconds; only every third one ends a sentence. A 30-second target
+    # would land mid-sentence, so the window shifts to the sentence end next to it.
+    segments = []
+    cursor = 0.0
+    for counter in range(1, 91):  # the range itself ends on a sentence end
+        text = f"문장 {counter} 입니다" if counter % 3 == 0 else f"말을 {counter} 이어가고"
+        segments.append(TranscriptSegment(start_seconds=cursor, end_seconds=cursor + 7, text=text))
+        cursor += 7
+
+    result = HeuristicCandidateGenerator().generate(_transcript(segments, start=0, end=cursor))
+
+    assert result.items
+    assert all(item.ends_on_sentence_boundary for item in result.items)
+    assert all(item.transcript_text.endswith("입니다") for item in result.items)
+
+
+def test_candidates_carry_neighbouring_speech_and_the_unit_list() -> None:
+    transcript = _transcript(_speech(0, 400), start=0, end=400)
+
+    result = HeuristicCandidateGenerator().generate(transcript)
+
+    first = result.items[0]
+    assert first.context_before == ""
+    assert first.context_after
+    middle = result.items[len(result.items) // 2]
+    assert middle.context_before and middle.context_after
+    assert middle.context_before not in middle.transcript_text
+    assert result.units
+    starts = {unit.start_seconds for unit in result.units}
+    ends = {unit.end_seconds for unit in result.units}
+    for item in result.items:
+        # Padding may pull a boundary slightly outside the unit; the unit edge is within it.
+        assert any(abs(item.start_seconds - s) <= 0.3 for s in starts)
+        assert any(abs(item.end_seconds - e) <= 0.3 for e in ends)

@@ -2,11 +2,12 @@ import json
 
 import pytest
 
-from app.candidates import CandidateSet, ClipCandidate
+from app.candidates import CandidateSet, ClipCandidate, SpeechUnit
 from app.ranking import (
     HeuristicRanker,
     OpenAIRanker,
     RankingError,
+    adjust_boundaries,
     build_user_prompt,
     select_top,
 )
@@ -89,7 +90,7 @@ def test_openai_ranker_orders_by_score_and_returns_top_3() -> None:
     result = ranker.rank(_candidates(), video_title="테스트 영상")
 
     assert result.ranker == "openai:test-model"
-    assert result.criteria_version == "generic_v1"
+    assert result.criteria_version == "generic_v2"
     assert [item.index for item in result.items] == [2, 4, 3, 1, 5]
     assert [item.rank for item in result.items] == [1, 2, 3, 4, 5]
     assert [item.index for item in result.top_3] == [2, 4, 3]
@@ -257,3 +258,106 @@ def test_heuristic_ranker_suggests_a_short_title_and_a_description() -> None:
     for item in result.items:
         assert item.title and len(item.title) <= 30
         assert item.description and "#쇼츠" in item.description
+
+
+def _candidates_with_units() -> CandidateSet:
+    """Five-second speech units from 0 to 400s; candidate 1 covers units 2-7 (10-40s)."""
+    units = [
+        SpeechUnit(
+            start_seconds=t,
+            end_seconds=t + 5,
+            text=f"유닛 {t // 5} 입니다",
+            sentence_end=True,
+        )
+        for t in range(0, 400, 5)
+    ]
+    candidates = _candidates()
+    items = []
+    for item in candidates.items:
+        start = 10 + (item.index - 1) * 60
+        items.append(
+            item.model_copy(
+                update={
+                    "start_seconds": float(start),
+                    "end_seconds": float(start + 30),
+                    "duration_seconds": 30.0,
+                    "context_before": "앞 문맥",
+                    "context_after": "뒤 문맥",
+                }
+            )
+        )
+    return candidates.model_copy(update={"items": items, "units": units})
+
+
+def test_user_prompt_lists_neighbouring_speech_with_timestamps() -> None:
+    prompt = build_user_prompt(_candidates_with_units(), reason_language="ko", video_title=None)
+
+    assert "Clip length limits: 15-60 seconds" in prompt
+    assert "before: [0.0-5.0s] 유닛 0 입니다 | [5.0-10.0s] 유닛 1 입니다" in prompt
+    assert "after: [40.0-45.0s] 유닛 8 입니다 | [45.0-50.0s] 유닛 9 입니다" in prompt
+
+
+def test_user_prompt_falls_back_to_context_text_without_units() -> None:
+    candidates = _candidates_with_units().model_copy(update={"units": []})
+
+    prompt = build_user_prompt(candidates, reason_language="ko", video_title=None)
+
+    assert "before: 앞 문맥" in prompt
+    assert "after: 뒤 문맥" in prompt
+
+
+def test_boundary_adjustment_snaps_to_unit_edges_and_refreshes_the_hook() -> None:
+    candidates = _candidates_with_units()
+    candidate = candidates.items[0]
+
+    start, end, hook, adjusted = adjust_boundaries(
+        candidate, candidates, start=4.2, end=46.0
+    )
+
+    assert adjusted
+    assert (start, end) == (5.0, 45.0)
+    assert hook == "유닛 1 입니다"
+
+
+def test_boundary_adjustment_ignores_shifts_too_far_or_too_long() -> None:
+    candidates = _candidates_with_units()
+    candidate = candidates.items[1]  # 70-100s
+
+    # 30 seconds back is beyond the allowed shift: the start stays put.
+    start, end, _, adjusted = adjust_boundaries(candidate, candidates, start=40.0, end=None)
+    assert (start, end, adjusted) == (70.0, 100.0, False)
+
+    # Each edge is within reach but together they fall under the minimum length.
+    start, end, _, adjusted = adjust_boundaries(candidate, candidates, start=80.0, end=90.0)
+    assert (start, end, adjusted) == (70.0, 100.0, False)
+
+    # One edge too far, the other fine: only the fine one moves.
+    start, end, _, adjusted = adjust_boundaries(candidate, candidates, start=60.0, end=130.0)
+    assert (start, end, adjusted) == (60.0, 100.0, True)
+
+    # No units stored (an older job): nothing moves.
+    bare = candidates.model_copy(update={"units": []})
+    assert adjust_boundaries(candidate, bare, start=65.0, end=None)[3] is False
+
+
+def test_openai_ranker_applies_suggested_boundaries() -> None:
+    payload = json.dumps(
+        {
+            "items": [
+                {"index": 1, "ai_score": 90, "reason": "r", "start_seconds": 5, "end_seconds": 45},
+                {"index": 2, "ai_score": 80, "reason": "r", "start_seconds": "bad"},
+                {"index": 3, "ai_score": 70, "reason": "r"},
+                {"index": 4, "ai_score": 60, "reason": "r"},
+                {"index": 5, "ai_score": 50, "reason": "r"},
+            ]
+        }
+    )
+    result = OpenAIRanker(FakeOpenAI(payload), model="gpt-test").rank(_candidates_with_units())
+
+    first = result.items[0]
+    assert first.index == 1
+    assert (first.start_seconds, first.end_seconds, first.duration_seconds) == (5.0, 45.0, 40.0)
+    assert first.boundary_adjusted is True
+    assert first.hook_text == "유닛 1 입니다"
+    assert all(not item.boundary_adjusted for item in result.items[1:])
+    assert result.items[1].start_seconds == 70.0

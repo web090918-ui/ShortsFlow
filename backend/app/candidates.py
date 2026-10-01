@@ -17,13 +17,33 @@ from pydantic import BaseModel, Field
 from app.transcripts import TranscriptResult, TranscriptSegment
 
 
-GENERATOR_VERSION = "heuristic_v1"
+GENERATOR_VERSION = "heuristic_v2"
 
 _SENTENCE_END = re.compile(r"[.!?。！？…]+[\"'”’)\]]*$")
 # Caption artifacts that are not speech: sound tags like [음악] / [Music] and ">>" speaker marks.
 _NON_SPEECH = re.compile(r"\[[^\]]*\]|\([^)]*\)|(?:^|\s)>>+")
 # Korean captions rarely carry punctuation; common sentence-final endings stand in.
 _KOREAN_SENTENCE_END = re.compile(r"(습니다|입니다|니다|세요|네요|군요|거든요|는데요|죠|다|요|까)$")
+# A clip that opens with a connective or a demonstrative ("그래서", "근데", "그게", "so",
+# "but") refers back to something the viewer never heard; such starts are not boundaries.
+_CONNECTIVE_START = re.compile(
+    r"^(?:그래서|그러니까|그니까|그런데|근데|그리고|그러면|그럼|그치만|하지만|그래도|그러나|"
+    r"왜냐하면|왜냐면|그게|이게|저게|그거|이거|저거|그건|이건|그걸|이걸|그렇게|이렇게|"
+    r"그러고|그러다가|어쨌든|아무튼|즉|또|또한|근까|"
+    r"so|and|but|because|which|then|also|or|anyway)(?![가-힣A-Za-z])",
+    re.IGNORECASE,
+)
+# How many neighbouring speech units travel with a candidate as ranking context.
+CONTEXT_UNITS = 2
+
+
+class SpeechUnit(BaseModel):
+    """A sentence-or-pause bounded stretch of speech; candidates start and end on these."""
+
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(gt=0)
+    text: str = Field(min_length=1)
+    sentence_end: bool = False
 
 
 class ClipCandidate(BaseModel):
@@ -41,6 +61,10 @@ class ClipCandidate(BaseModel):
     ends_on_sentence_boundary: bool
     leading_gap_seconds: float = Field(ge=0)
     trailing_gap_seconds: float = Field(ge=0)
+    # Speech just before and after the clip so a ranker can tell whether the cut
+    # dropped a setup or a punchline. Empty at the edges of the selected range.
+    context_before: str = ""
+    context_after: str = ""
 
 
 class CandidateSet(BaseModel):
@@ -52,6 +76,9 @@ class CandidateSet(BaseModel):
     min_seconds: float
     max_seconds: float
     items: list[ClipCandidate]
+    # Every speech unit of the range, so later stages can move a clip boundary
+    # without re-reading the transcript. Older stored results have none.
+    units: list[SpeechUnit] = []
 
 
 class CandidateGenerator(Protocol):
@@ -83,6 +110,10 @@ class _Unit:
 def _ends_sentence(text: str) -> bool:
     stripped = text.rstrip()
     return bool(_SENTENCE_END.search(stripped) or _KOREAN_SENTENCE_END.search(stripped))
+
+
+def starts_with_connective(text: str) -> bool:
+    return bool(_CONNECTIVE_START.match(text.lstrip()))
 
 
 def clean_caption_text(text: str) -> str:
@@ -168,6 +199,13 @@ class HeuristicCandidateGenerator:
         self._padding = padding_seconds
         self._gap_threshold = gap_threshold
 
+    def _ends_boundary(self, units: list[_Unit], j: int) -> bool:
+        return (
+            j == len(units) - 1
+            or units[j].sentence_end
+            or units[j].gap_after >= self._gap_threshold
+        )
+
     def _windows(self, units: list[_Unit]) -> list[tuple[int, int]]:
         windows: set[tuple[int, int]] = set()
         for i in range(len(units)):
@@ -177,12 +215,25 @@ class HeuristicCandidateGenerator:
                     j += 1
                 while j > i and units[j].end - units[i].start > self._max:
                     j -= 1
+                # The target length lands mid-thought more often than not: look a few
+                # units around it for a sentence end or a pause and finish there.
+                if not self._ends_boundary(units, j):
+                    options = [
+                        k
+                        for k in range(max(i, j - 2), min(len(units), j + 3))
+                        if self._min <= units[k].end - units[i].start <= self._max
+                        and self._ends_boundary(units, k)
+                    ]
+                    if options:
+                        j = min(options, key=lambda k: abs(units[k].end - units[i].start - target))
                 duration = units[j].end - units[i].start
                 if self._min <= duration <= self._max:
                     windows.add((i, j))
         return sorted(windows)
 
     def _starts_boundary(self, units: list[_Unit], i: int) -> bool:
+        if starts_with_connective(units[i].text):
+            return False
         return i == 0 or units[i - 1].sentence_end or units[i].gap_before >= self._gap_threshold
 
     def _select(
@@ -191,10 +242,15 @@ class HeuristicCandidateGenerator:
         def span(window: tuple[int, int]) -> tuple[float, float]:
             return units[window[0]].start, units[window[1]].end
 
-        # Sentence-boundary starts first, then everything else; within each group by start.
+        # Clean starts first, then clean ends, then everything else; within each group by start.
         ordered = sorted(
             windows,
-            key=lambda w: (not self._starts_boundary(units, w[0]), span(w)[0], -(span(w)[1])),
+            key=lambda w: (
+                not self._starts_boundary(units, w[0]),
+                not self._ends_boundary(units, w[1]),
+                span(w)[0],
+                -(span(w)[1]),
+            ),
         )
         selected: list[tuple[int, int]] = []
         for threshold in (0.5, 0.75, 0.9):
@@ -250,9 +306,15 @@ class HeuristicCandidateGenerator:
                     word_count=len(words),
                     words_per_second=round(len(words) / duration, 2) if duration else 0.0,
                     starts_on_sentence_boundary=self._starts_boundary(units, i),
-                    ends_on_sentence_boundary=last.sentence_end or j == len(units) - 1,
+                    ends_on_sentence_boundary=self._ends_boundary(units, j),
                     leading_gap_seconds=round(first.gap_before, 3),
                     trailing_gap_seconds=round(last.gap_after, 3),
+                    context_before=" ".join(
+                        unit.text for unit in units[max(0, i - CONTEXT_UNITS) : i]
+                    ),
+                    context_after=" ".join(
+                        unit.text for unit in units[j + 1 : j + 1 + CONTEXT_UNITS]
+                    ),
                 )
             )
         if not items:
@@ -266,4 +328,13 @@ class HeuristicCandidateGenerator:
             min_seconds=self._min,
             max_seconds=self._max,
             items=items,
+            units=[
+                SpeechUnit(
+                    start_seconds=round(unit.start, 3),
+                    end_seconds=round(unit.end, 3),
+                    text=unit.text,
+                    sentence_end=unit.sentence_end,
+                )
+                for unit in units
+            ],
         )
