@@ -19,7 +19,7 @@ export default function Home() {
           <a className={styles.skip} href="#main-content">본문으로 이동</a>
           <Link href="/" className={styles.logo} aria-label="Cutpick 홈"><span className={styles.logoSymbol} aria-hidden="true"><i /><i /></span>cutpick.</Link>
           <nav aria-label="주요 메뉴"><Link href="/video">영상 쇼츠</Link><Link href="/affiliate">상품 쇼츠</Link><a href="#use-cases">활용 방법</a><a href="#how-it-works">만드는 과정</a></nav>
-          <AuthMenu />
+          <AuthMenu compact />
         </header>
         <main className={styles.main} id="main-content">
           <section className={styles.hero} aria-labelledby="hero-title">

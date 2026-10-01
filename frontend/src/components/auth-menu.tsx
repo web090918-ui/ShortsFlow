@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { describeCreditBudget, loginUrl, logout } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 
-export function AuthMenu() {
+export function AuthMenu({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const { status, loading, setStatus } = useAuthStatus();
@@ -29,14 +29,14 @@ export function AuthMenu() {
             크레딧 <strong>{status.credits}</strong>
           </Link>
         ) : null}
-        <span className="auth-user" title={status.user.email ?? undefined}>
+        {(!compact || status.user.picture) ? <span className="auth-user" title={status.user.email ?? undefined}>
           {status.user.picture ? (
             // Google avatar hosts vary; a plain image avoids remote-pattern config.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={status.user.picture} alt="" referrerPolicy="no-referrer" />
           ) : null}
-          {label}
-        </span>
+          {!compact ? label : null}
+        </span> : null}
         <button
           type="button"
           className="auth-logout"
@@ -47,7 +47,7 @@ export function AuthMenu() {
             router.refresh();
           }}
         >
-          로그아웃
+          {compact ? "Logout" : "로그아웃"}
         </button>
       </div>
     );
