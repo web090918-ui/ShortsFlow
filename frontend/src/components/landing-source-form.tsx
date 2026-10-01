@@ -23,7 +23,7 @@ export function LandingSourceForm() {
     <form onSubmit={submit} noValidate>
       <label className="poster-input-label" htmlFor="landing-video-url">YouTube 영상 링크</label>
       <div className="poster-input-row">
-        <input id="landing-video-url" type="url" value={url} onChange={(event) => { setUrl(event.target.value); setError(null); }} placeholder="영상 링크를 붙여넣으세요" aria-invalid={Boolean(error)} aria-describedby={error ? "landing-url-error" : undefined} autoComplete="url" />
+        <input id="landing-video-url" type="url" value={url} onChange={(event) => { setUrl(event.target.value); setError(null); }} placeholder="영상 링크를 붙여넣으세요" aria-invalid={Boolean(error)} aria-describedby={error ? "landing-url-error" : undefined} autoComplete="url" spellCheck={false} />
         <button type="submit">시작 <span aria-hidden="true">→</span></button>
       </div>
       {error ? <p id="landing-url-error" className="poster-input-error" role="alert">{error}</p> : null}
