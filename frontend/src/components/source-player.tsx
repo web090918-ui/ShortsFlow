@@ -112,18 +112,17 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
     previousRange.current = { start, end };
     if (previous.start === start && previous.end === end) return;
     const startChanged = previous.start !== start;
-    stopAt.current = startChanged ? end : null;
-    const time = startChanged ? start : end;
-    pendingStart.current = startChanged && !youtube.current && Boolean(videoId);
-    if (youtube.current) {
-      if (startChanged && videoId) playYouTubeFrom(youtube.current, videoId, time);
-      else { youtube.current.pauseVideo(); youtube.current.seekTo(time, true); }
+    if (!startChanged) {
+      if (stopAt.current !== null) stopAt.current = end;
+      return;
     }
+    stopAt.current = end;
+    const time = start;
+    pendingStart.current = !youtube.current && Boolean(videoId);
+    if (youtube.current && videoId) playYouTubeFrom(youtube.current, videoId, time);
     if (video.current && video.current.readyState >= 1) {
       video.current.currentTime = time;
-      if (startChanged) {
-        void video.current.play().catch(() => setPlaybackNotice("‘선택 구간 재생’을 눌러 영상을 확인해 주세요."));
-      } else video.current.pause();
+      void video.current.play().catch(() => setPlaybackNotice("‘선택 구간 재생’을 눌러 영상을 확인해 주세요."));
     }
   }, [start, end, videoId]);
 
@@ -172,7 +171,7 @@ export function SourcePlayer({ youtubeUrl, file, start, end, onStart, onEnd }: P
         <button type="button" disabled={!ready || Math.floor(current) <= start} onClick={() => onEnd(readCurrent())}>현재 시간을 종료로</button>
         <button type="button" disabled={!ready || end <= start} onClick={playRange}>선택 구간 재생</button>
       </div>
-      <p className="source-player-help">시작점을 바꾸면 해당 시점부터 재생합니다. 종료점을 바꾸면 마지막 장면으로 이동합니다.</p>
+      <p className="source-player-help">시작점을 바꾸면 해당 시점부터 재생합니다. 종료점은 재생 위치를 유지한 채 조정합니다.</p>
     </section>
   );
 }

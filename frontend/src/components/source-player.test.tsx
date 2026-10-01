@@ -43,8 +43,10 @@ describe("source playback", () => {
     view.rerender(<SourcePlayer {...props} start={20} />);
     expect(video.currentTime).toBe(20);
     expect(play).toHaveBeenCalledOnce();
+    pause.mockClear();
     view.rerender(<SourcePlayer {...props} start={20} end={50} />);
-    expect(video.currentTime).toBe(50);
+    expect(video.currentTime).toBe(20);
+    expect(pause).not.toHaveBeenCalled();
     play.mockClear();
     await user.click(screen.getByRole("button", { name: "선택 구간 재생" }));
     expect(video.currentTime).toBe(20);
@@ -80,6 +82,15 @@ describe("source playback", () => {
     player.getPlayerState.mockReturnValue(-1);
     view.rerender(<SourcePlayer {...props} start={15} />);
     expect(player.loadVideoById).toHaveBeenLastCalledWith({ videoId: "M7lc1UVf-VE", startSeconds: 15 });
+    player.seekTo.mockClear();
+    player.loadVideoById.mockClear();
+    player.pauseVideo.mockClear();
+    player.playVideo.mockClear();
+    view.rerender(<SourcePlayer {...props} start={15} end={45} />);
+    expect(player.seekTo).not.toHaveBeenCalled();
+    expect(player.loadVideoById).not.toHaveBeenCalled();
+    expect(player.pauseVideo).not.toHaveBeenCalled();
+    expect(player.playVideo).not.toHaveBeenCalled();
     act(() => { options.events.onAutoplayBlocked(); });
     expect(screen.getByRole("status").textContent).toContain("브라우저가 재생을 제한");
     act(() => { options.events.onStateChange({ data: 1 }); });
