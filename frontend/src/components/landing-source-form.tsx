@@ -4,7 +4,8 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { youtubeVideoId } from "@/lib/youtube-player";
 
-export function LandingSourceForm() {
+/** `target` is the studio route that receives the URL; the member workspace passes its own. */
+export function LandingSourceForm({ target = "/video" }: { target?: string } = {}) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function LandingSourceForm() {
       return;
     }
     setError(null);
-    router.push(`/video?url=${encodeURIComponent(url.trim())}`);
+    router.push(`${target}?url=${encodeURIComponent(url.trim())}`);
   }
 
   return (

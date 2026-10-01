@@ -43,12 +43,22 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
   const params = useSearchParams();
   const { status, loading } = useAuthStatus();
   const settings = pathname === "/my/settings";
+  const section = pathname?.startsWith("/my/video")
+    ? "video"
+    : pathname?.startsWith("/my/affiliate")
+      ? "affiliate"
+      : settings
+        ? "settings"
+        : "projects";
+  const topbarTitle = { projects: "내 작업실", video: "영상 쇼츠 만들기", affiliate: "상품 쇼츠 만들기", settings: "계정 · 제작 설정" }[section];
   return <div className={styles.workspace}>
     <aside className={styles.sidebar}>
       <Link href="/my" className={styles.brand} aria-label="Cutpick 회원 작업실"><span className={styles.symbol} aria-hidden="true"><i /><i /></span>cutpick.</Link>
       <span className={styles.label}>MY WORKSPACE</span>
       <nav aria-label="회원 메뉴">
-        <Link href="/my" aria-current={!settings ? "page" : undefined}><span aria-hidden="true">▦</span> 내 프로젝트</Link>
+        <Link href="/my" aria-current={section === "projects" ? "page" : undefined}><span aria-hidden="true">▦</span> 내 프로젝트</Link>
+        <Link href="/my/video" aria-current={section === "video" ? "page" : undefined}><span aria-hidden="true">▷</span> 영상 쇼츠 만들기</Link>
+        <Link href="/my/affiliate" aria-current={section === "affiliate" ? "page" : undefined}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
       </nav>
       <div className={styles.sidebarBottom}>
         <Link className={styles.balance} href="/my#credit-heading"><span>남은 크레딧</span><strong>{loading ? "…" : status.credits ?? "—"}<small> C</small></strong><span>사용 내역 확인 →</span></Link>
@@ -58,11 +68,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
     </aside>
     <div className={styles.body}>
       <header className={styles.topbar}>
-        <span>{settings ? "계정 · 제작 설정" : "내 작업실"}</span>
-        <nav className={styles.topbarActions} aria-label="새 쇼츠 만들기">
-          <Link href="/video" className={styles.topAction}><span aria-hidden="true">▷</span> 영상 쇼츠 만들기</Link>
-          <Link href="/affiliate" className={`${styles.topAction} ${styles.topActionSecondary}`}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
-        </nav>
+        <span>{topbarTitle}</span>
         <Link href="/my#credit-heading" className={styles.topbarCredits}>크레딧 <strong>{status.credits ?? "—"}</strong></Link>
         <Link href="/my/settings" aria-label="계정 설정">계정 설정</Link>
       </header>
@@ -83,10 +89,24 @@ export function MemberWelcome() {
   return <section className={styles.welcome}>
     <span className={styles.label}>LET’S MAKE A SHORT</span><h1>오늘은 어떤 쇼츠를 만들까요?</h1>
     <p>영상이나 상품 링크로 시작하고, 완성한 쇼츠는 아래에서 다시 확인하세요.</p>
-    <LandingSourceForm />
-    <div className={styles.quickLinks}><Link href="/video">YouTube · 영상 업로드 →</Link><Link href="/affiliate">상품 링크로 만들기 →</Link></div>
-    <Link className={styles.preferred} href={`/${source}`}>내 기본 제작 방식으로 시작 →</Link>
+    <LandingSourceForm target="/my/video" />
+    <div className={styles.quickLinks}><Link href="/my/video">YouTube · 영상 업로드 →</Link><Link href="/my/affiliate">상품 링크로 만들기 →</Link></div>
+    <Link className={styles.preferred} href={`/my/${source}`}>내 기본 제작 방식으로 시작 →</Link>
   </section>;
+}
+
+/** Heading for a studio opened inside the workspace (/my/video, /my/affiliate). */
+export function MemberStudio({ kind, children }: { kind: "video" | "affiliate"; children: ReactNode }) {
+  const video = kind === "video";
+  return <div className={styles.studio}>
+    <div className={styles.studioHeading}>
+      <span className={styles.label}>{video ? "VIDEO STUDIO" : "AFFILIATE STUDIO"}</span>
+      <h1>{video ? "영상 쇼츠 만들기" : "상품 쇼츠 만들기"}</h1>
+      <p>{video ? "YouTube 링크나 내 영상 파일에서 구간을 고르고, AI 추천 Top 3로 세로 쇼츠를 만드세요." : "쿠팡 파트너스 상품 링크에서 콘텐츠 앵글을 고르고, 내레이션이 들어간 상품 쇼츠를 만드세요."}</p>
+      <span className={styles.studioFormat}>9:16 · MP4</span>
+    </div>
+    {children}
+  </div>;
 }
 
 export function MemberSettings() {

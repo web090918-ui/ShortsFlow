@@ -18,12 +18,12 @@ it("persists the preferred creation flow and uses it on the dashboard", () => {
   expect(localStorage.getItem("cutpick:member-1:start-source")).toBe("affiliate");
   view.unmount();
   render(<MemberWelcome />);
-  expect(screen.getByRole("link", { name: "내 기본 제작 방식으로 시작 →" }).getAttribute("href")).toBe("/affiliate");
+  expect(screen.getByRole("link", { name: "내 기본 제작 방식으로 시작 →" }).getAttribute("href")).toBe("/my/affiliate");
 });
 it("does not use another member's saved preference", () => {
   localStorage.setItem("cutpick:another-member:start-source", "affiliate");
   render(<MemberWelcome />);
-  expect(screen.getByRole("link", { name: "내 기본 제작 방식으로 시작 →" }).getAttribute("href")).toBe("/video");
+  expect(screen.getByRole("link", { name: "내 기본 제작 방식으로 시작 →" }).getAttribute("href")).toBe("/my/video");
 });
 it("keeps the session visible when logout fails and allows retry", async () => {
   mocks.logout.mockRejectedValueOnce(new Error("로그아웃 실패")).mockResolvedValueOnce(undefined);

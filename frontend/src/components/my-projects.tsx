@@ -196,7 +196,7 @@ function WorkItems({ items, emptyText }: { items: WorkItem[]; emptyText: string 
               <span className="work-source">{item.short.title ?? describeSource(item.short.youtube_url)}</span>
               <time dateTime={item.created_at}>{formatDate(item.created_at)}</time>
             </header>
-            <RenderResult job={item.short} onRetry={() => router.push("/video")} />
+            <RenderResult job={item.short} onRetry={() => router.push("/my/video")} />
           </article>
         ) : (
           <article key={item.analysis.id} className="work-card">
@@ -308,10 +308,10 @@ export function MyProjects({ onCount }: { onCount?: (count: number) => void }) {
           <h2>아직 프로젝트가 없습니다</h2>
           <p className="range-help">영상이나 상품 링크로 첫 쇼츠를 만들어 보세요. 원본 영상 하나가 프로젝트 하나가 됩니다.</p>
           <div className="my-works-actions">
-            <Link className="submit-button" href="/video">
+            <Link className="submit-button" href="/my/video">
               영상으로 만들기
             </Link>
-            <Link className="submit-button secondary-button" href="/affiliate">
+            <Link className="submit-button secondary-button" href="/my/affiliate">
               상품 링크로 만들기
             </Link>
           </div>
@@ -405,7 +405,7 @@ export function ProjectDetail({ sourceId }: { sourceId: string }) {
             <span>쇼츠 {project.shorts_count}개</span>
             <span>AI 분석 {project.analyses_count}회</span>
           </p>
-          <Link className="submit-button project-new" href="/video">
+          <Link className="submit-button project-new" href="/my/video">
             이 영상으로 쇼츠 더 만들기 →
           </Link>
         </div>
