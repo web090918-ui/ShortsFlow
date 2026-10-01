@@ -1,9 +1,10 @@
-"""Caption rendering: transcript cues -> ASS subtitle file per template and layout.
+"""Caption rendering: transcript cues (and an optional headline) -> ASS file.
 
-Templates differ only in ASS style values and, for karaoke-style presets, in
-emitting one event per spoken word so the current word is highlighted. FFmpeg
-burns the file with the ``subtitles`` filter (libass); no template logic lives in
-the video code.
+Templates differ only in ASS style values; karaoke presets emit one event per
+spoken word so the current word is coloured, and every preset can draw a headline
+(title with one coloured keyword) when the render has a title. FFmpeg burns the
+file with the ``subtitles`` filter (libass); no template logic lives in the video
+code.
 """
 
 import re
@@ -18,8 +19,16 @@ from app.templates import RenderLayout, RenderTemplate
 PLAY_RES_X = 1080
 PLAY_RES_Y = 1920
 MIN_CUE_SECONDS = 0.3
-# Where the 16:9 picture sits in a FIT layout: 1080x607 centred -> bottom edge y=1263.
-FIT_CAPTION_MARGIN_V = 440
+# A 16:9 source placed whole in the 9:16 frame is 1080x607, centred: y 656..1263.
+PICTURE_TOP = 656
+PICTURE_BOTTOM = 1263
+# Captions in the band under the picture (bottom edge at 1920-440 = 1480).
+BAND_CAPTION_MARGIN_V = 440
+# Headline centred in the band above the picture; overlaid near the top on FILL.
+BAND_HEADLINE_Y = PICTURE_TOP // 2
+FILL_HEADLINE_Y = 230
+HEADLINE_MARGIN_X = 70
+MAX_TITLE_CHARS = 80
 
 
 class CaptionWord(BaseModel):
@@ -58,6 +67,12 @@ class CaptionStyle:
     blur: float = 0.0
     highlight: str | None = None  # karaoke: colour of the word being spoken
     bar_height: int = 0  # >0 draws a full-width band behind each cue (news lower third)
+    # Headline (title) drawn when the render has one.
+    headline_accent: str = "&H0000E6FF"
+    headline_font: str = "NanumSquareRound"
+    headline_size: int = 84
+    headline_box: bool = False
+    listed: bool = True
     # CSS-ish hints for the picker preview; the frontend uses them, the renderer does not.
     preview: dict[str, str] | None = None
 
@@ -66,12 +81,136 @@ WHITE = "&H00FFFFFF"
 BLACK = "&H00000000"
 ACCENT = "&H004FFFD7"  # #D7FF4F
 YELLOW = "&H0000E6FF"  # #FFE600
+RED = "&H003C3CFF"  # #FF3C3C
+SKY = "&H00FFD24F"  # #4FD2FF
 MAGENTA = "&H00FF4FD7"  # #D74FFF
 CYAN = "&H00FFE14F"  # #4FE1FF
 
+
+def _headline_template(
+    *,
+    name: str,
+    description: str,
+    accent: str,
+    accent_css: str,
+    box: bool = False,
+    caption_box: bool = False,
+) -> CaptionStyle:
+    """The composition in today's Korean Shorts: headline on top, small caption below."""
+    preview = {
+        "color": "#FFFFFF",
+        "stroke": "#000000",
+        "weight": "800",
+        "headlineAccent": accent_css,
+        "headlineBox": "true" if box else "false",
+    }
+    if caption_box:
+        preview["background"] = "#000000"
+    return CaptionStyle(
+        name=name,
+        description=description,
+        tag="요즘 감성",
+        font_name="NanumSquareRound",
+        font_size=50,
+        primary=WHITE,
+        outline=BLACK,
+        back="&HA0000000" if caption_box else "&H80000000",
+        bold=-1,
+        border_style=3 if caption_box else 1,
+        outline_width=12 if caption_box else 3,
+        shadow=0,
+        margin_v=260,
+        headline_accent=accent,
+        headline_box=box,
+        preview=preview,
+    )
+
+
 TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
+    RenderTemplate.HEADLINE_YELLOW: _headline_template(
+        name="헤드라인 옐로",
+        description="큰 제목에 노란 키워드, 아래에 작은 자막. 요즘 쇼츠의 기본형.",
+        accent=YELLOW,
+        accent_css="#FFE600",
+    ),
+    RenderTemplate.HEADLINE_RED: _headline_template(
+        name="헤드라인 레드",
+        description="빨간 키워드로 긴장감을 주는 제목. 다큐·이슈 영상에.",
+        accent=RED,
+        accent_css="#FF3C3C",
+    ),
+    RenderTemplate.HEADLINE_LIME: _headline_template(
+        name="헤드라인 라임",
+        description="형광 연두 키워드. 정보·꿀팁 영상에 잘 맞아요.",
+        accent=ACCENT,
+        accent_css="#D7FF4F",
+    ),
+    RenderTemplate.HEADLINE_SKY: _headline_template(
+        name="헤드라인 뉴스",
+        description="하늘색 키워드와 박스 자막. 뉴스·시사 느낌.",
+        accent=SKY,
+        accent_css="#4FD2FF",
+        caption_box=True,
+    ),
+    RenderTemplate.HEADLINE_BOX: _headline_template(
+        name="헤드라인 박스",
+        description="제목을 검은 박스 위에 얹어 어떤 배경에서도 또렷하게.",
+        accent=YELLOW,
+        accent_css="#FFE600",
+        box=True,
+    ),
+    RenderTemplate.IMPACT_YELLOW: CaptionStyle(
+        name="임팩트 옐로",
+        description="두꺼운 자막, 말하는 단어만 노란색으로 바뀌어요.",
+        tag="단어 강조",
+        font_name="NanumSquareRound",
+        font_size=74,
+        primary=WHITE,
+        outline=BLACK,
+        back="&H00000000",
+        bold=-1,
+        border_style=1,
+        outline_width=7,
+        shadow=2,
+        margin_v=0,
+        alignment=5,
+        spacing=1,
+        highlight=YELLOW,
+        headline_accent=YELLOW,
+        preview={
+            "color": "#FFFFFF",
+            "stroke": "#000000",
+            "accent": "#FFE600",
+            "weight": "900",
+            "headlineAccent": "#FFE600",
+        },
+    ),
+    RenderTemplate.KARAOKE_POP: CaptionStyle(
+        name="카라오케 팝",
+        description="검은 박스 위 흰 글씨, 말하는 단어만 형광색으로.",
+        tag="단어 강조",
+        font_name="NanumSquareRound",
+        font_size=70,
+        primary=WHITE,
+        outline=BLACK,
+        back="&H90000000",
+        bold=-1,
+        border_style=3,
+        outline_width=14,
+        shadow=0,
+        margin_v=420,
+        highlight=ACCENT,
+        headline_accent=ACCENT,
+        preview={
+            "color": "#FFFFFF",
+            "background": "#111111",
+            "accent": "#D7FF4F",
+            "weight": "900",
+            "headlineAccent": "#D7FF4F",
+        },
+    ),
     RenderTemplate.CLEAN_CAPTION: CaptionStyle(
-        name="Clean Caption",
+        name="클린",
         description="읽기 쉬운 기본 자막. 흰 글씨에 검은 외곽선.",
         tag="기본",
         font_name="NanumGothic",
@@ -84,12 +223,12 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         outline_width=4,
         shadow=1,
         margin_v=300,
-        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "700"},
+        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "700", "headlineAccent": "#FFE600"},
     ),
     RenderTemplate.BOLD_HIGHLIGHT: CaptionStyle(
-        name="Bold Highlight",
+        name="볼드 박스",
         description="형광 글씨를 검은 박스 위에. 핵심 문장을 강하게.",
-        tag="강조",
+        tag="기본",
         font_name="NanumGothic",
         font_size=80,
         primary=ACCENT,
@@ -100,12 +239,13 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         outline_width=16,
         shadow=0,
         margin_v=520,
-        preview={"color": "#D7FF4F", "background": "#111111", "weight": "800"},
+        headline_accent=ACCENT,
+        preview={"color": "#D7FF4F", "background": "#111111", "weight": "800", "headlineAccent": "#D7FF4F"},
     ),
     RenderTemplate.MINIMAL: CaptionStyle(
-        name="Minimal",
+        name="미니멀",
         description="화면을 가리지 않는 작은 자막.",
-        tag="미니멀",
+        tag="기본",
         font_name="NanumGothic",
         font_size=48,
         primary=WHITE,
@@ -116,43 +256,8 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         outline_width=2,
         shadow=0,
         margin_v=180,
-        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "400"},
-    ),
-    RenderTemplate.IMPACT_YELLOW: CaptionStyle(
-        name="Impact Yellow",
-        description="두꺼운 흰 글씨, 말하는 단어만 노란색. 요즘 쇼츠의 정석.",
-        tag="유행",
-        font_name="NanumSquareRound",
-        font_size=86,
-        primary=WHITE,
-        outline=BLACK,
-        back="&H00000000",
-        bold=-1,
-        border_style=1,
-        outline_width=7,
-        shadow=2,
-        margin_v=0,
-        alignment=5,
-        spacing=1,
-        highlight=YELLOW,
-        preview={"color": "#FFFFFF", "stroke": "#000000", "accent": "#FFE600", "weight": "900"},
-    ),
-    RenderTemplate.KARAOKE_POP: CaptionStyle(
-        name="Karaoke Pop",
-        description="검은 박스 위 흰 글씨, 말하는 단어만 형광색으로. 캡컷 스타일.",
-        tag="유행",
-        font_name="NanumSquareRound",
-        font_size=78,
-        primary=WHITE,
-        outline=BLACK,
-        back="&H90000000",
-        bold=-1,
-        border_style=3,
-        outline_width=14,
-        shadow=0,
-        margin_v=420,
-        highlight=ACCENT,
-        preview={"color": "#FFFFFF", "background": "#111111", "accent": "#D7FF4F", "weight": "900"},
+        headline_accent=WHITE,
+        preview={"color": "#FFFFFF", "stroke": "#000000", "weight": "400", "headlineAccent": "#FFFFFF"},
     ),
     RenderTemplate.NEWS_BAR: CaptionStyle(
         name="News Bar",
@@ -169,6 +274,8 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         shadow=0,
         margin_v=240,
         bar_height=130,
+        headline_accent=SKY,
+        listed=False,
         preview={"color": "#FFFFFF", "background": "#202020", "weight": "700"},
     ),
     RenderTemplate.NEON_GLOW: CaptionStyle(
@@ -186,6 +293,8 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         shadow=3,
         margin_v=360,
         blur=6.0,
+        headline_accent=CYAN,
+        listed=False,
         preview={"color": "#4FE1FF", "stroke": "#D74FFF", "weight": "800", "glow": "true"},
     ),
     RenderTemplate.HANDWRITING: CaptionStyle(
@@ -202,6 +311,9 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         outline_width=3,
         shadow=2,
         margin_v=320,
+        headline_font="Nanum Pen Script",
+        headline_size=96,
+        listed=False,
         preview={"color": "#FFFFFF", "stroke": "#303030", "weight": "400", "font": "cursive"},
     ),
     RenderTemplate.TYPEWRITER: CaptionStyle(
@@ -219,13 +331,16 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         shadow=0,
         margin_v=300,
         spacing=2,
+        headline_font="NanumGothicCoding",
+        headline_accent=ACCENT,
+        listed=False,
         preview={"color": "#D7FF4F", "background": "#000000", "weight": "700", "font": "monospace"},
     ),
 }
 
 
 def template_catalog() -> list[dict[str, Any]]:
-    """What the picker needs: id, name, description, tag, preview hints, karaoke flag."""
+    """What the picker needs for listed templates: id, names, tag, preview hints, flags."""
     return [
         {
             "id": template.value,
@@ -236,20 +351,26 @@ def template_catalog() -> list[dict[str, Any]]:
             "preview": style.preview or {},
         }
         for template, style in TEMPLATE_STYLES.items()
+        if style.listed
     ]
 
 
 def layout_catalog() -> list[dict[str, str]]:
     return [
         {
-            "id": RenderLayout.FILL.value,
-            "name": "가득 채우기",
-            "description": "화면을 꽉 채우고 양옆을 잘라냅니다. 인물 중심 영상에 좋아요.",
+            "id": RenderLayout.STAGE.value,
+            "name": "제목 + 원본",
+            "description": "검은 배경 가운데에 원본 화면을 그대로 두고, 위에는 제목, 아래에는 자막을 넣습니다.",
         },
         {
             "id": RenderLayout.FIT.value,
-            "name": "원본 그대로",
-            "description": "원본 화면을 전부 보여 주고 위아래는 흐린 배경으로 채웁니다. 원본 자막이나 화면 구성이 잘리지 않아요.",
+            "name": "원본 + 흐린 배경",
+            "description": "원본 화면을 전부 보여 주고 위아래는 흐린 배경으로 채웁니다.",
+        },
+        {
+            "id": RenderLayout.FILL.value,
+            "name": "가득 채우기",
+            "description": "화면을 꽉 채우고 양옆을 잘라냅니다. 인물 중심 영상에 좋아요.",
         },
     ]
 
@@ -266,6 +387,32 @@ def _ass_text(text: str) -> str:
     cleaned = re.sub(r"[{}]", "", text)
     cleaned = " ".join(cleaned.split())
     return cleaned.replace("\n", "\\N")
+
+
+_BRACKET = re.compile(r"\[([^\[\]]+)\]")
+
+
+def headline_keyword(title: str) -> str | None:
+    """The word to colour: a ``[bracketed]`` phrase if the user marked one, else the longest word."""
+    marked = _BRACKET.search(title)
+    if marked:
+        return marked.group(1).strip() or None
+    words = [w for w in re.split(r"\s+", title.strip()) if len(w) >= 2]
+    if len(words) < 2:
+        return None
+    return max(words, key=len)
+
+
+def _headline_text(title: str, accent: str) -> str:
+    """ASS text for the headline: user line breaks kept, keyword recoloured."""
+    keyword = headline_keyword(title)
+    lines = [" ".join(line.split()) for line in title.replace("\r", "").split("\n")]
+    plain = "\\N".join(re.sub(r"[{}]", "", line) for line in lines if line)
+    plain = plain.replace("[", "").replace("]", "")
+    if not keyword:
+        return plain
+    coloured = f"{{\\1c{accent}}}{keyword}{{\\1c{WHITE}}}"
+    return plain.replace(keyword, coloured, 1)
 
 
 def select_cues(
@@ -309,12 +456,23 @@ def _style_line(name: str, style: CaptionStyle, *, alignment: int, margin_v: int
     )
 
 
+def _headline_style_line(style: CaptionStyle) -> str:
+    border_style, outline, back = (
+        (3, 18, "&H90000000") if style.headline_box else (1, 5, "&H80000000")
+    )
+    return (
+        f"Style: Headline,{style.headline_font},{style.headline_size},{WHITE},&H000000FF,"
+        f"{BLACK},{back},-1,0,0,0,100,100,0,0,{border_style},{outline},0,5,"
+        f"{HEADLINE_MARGIN_X},{HEADLINE_MARGIN_X},0,1"
+    )
+
+
 def _header(
     style: CaptionStyle, *, layout: RenderLayout
 ) -> tuple[list[str], str, int]:
     """ASS header, the global override prefix (blur) for every event, and the MarginV used."""
-    if layout == RenderLayout.FIT:
-        alignment, margin_v = 2, FIT_CAPTION_MARGIN_V
+    if layout in (RenderLayout.FIT, RenderLayout.STAGE):
+        alignment, margin_v = 2, BAND_CAPTION_MARGIN_V
     else:
         alignment, margin_v = style.alignment, style.margin_v
     lines = [
@@ -331,12 +489,24 @@ def _header(
         "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
         "MarginR, MarginV, Encoding",
         _style_line("Default", style, alignment=alignment, margin_v=margin_v),
+        _headline_style_line(style),
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     prefix = f"{{\\blur{style.blur:g}}}" if style.blur else ""
     return lines, prefix, margin_v
+
+
+def _headline_event(
+    style: CaptionStyle, *, title: str, end: float, layout: RenderLayout
+) -> str:
+    y = FILL_HEADLINE_Y if layout == RenderLayout.FILL else BAND_HEADLINE_Y
+    text = _headline_text(title, style.headline_accent)
+    return (
+        f"Dialogue: 2,{_ass_time(0)},{_ass_time(end)},Headline,,0,0,0,,"
+        f"{{\\an5\\pos({PLAY_RES_X // 2},{y})}}{text}"
+    )
 
 
 def _bar_event(style: CaptionStyle, *, start: float, end: float, margin_v: int) -> str:
@@ -367,7 +537,7 @@ def _karaoke_events(
         for j, other in enumerate(words):
             text = _ass_text(other.text)
             if j == index:
-                # Only the fill colour changes: libass 0.17 renders \\3c/\\bord combos
+                # Only the fill colour changes: libass 0.17 renders \3c/\bord combos
                 # mid-line as a blurred halo, so boxes stay a style-level BorderStyle 3.
                 parts.append(f"{{\\1c{style.highlight}}}{text}{{\\r}}")
             else:
@@ -385,10 +555,20 @@ def build_ass(
     clip_start_seconds: float,
     clip_end_seconds: float,
     layout: RenderLayout = RenderLayout.FILL,
+    title: str | None = None,
 ) -> str:
     """Return an ASS document whose times are relative to the clip start."""
     style = TEMPLATE_STYLES[template]
     lines, prefix, margin_v = _header(style, layout=layout)
+    if title and title.strip():
+        lines.append(
+            _headline_event(
+                style,
+                title=title.strip()[:MAX_TITLE_CHARS],
+                end=clip_end_seconds - clip_start_seconds,
+                layout=layout,
+            )
+        )
     for cue in select_cues(cues, start_seconds=clip_start_seconds, end_seconds=clip_end_seconds):
         if style.bar_height:
             lines.append(

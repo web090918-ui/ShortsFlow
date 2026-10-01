@@ -17,7 +17,8 @@ export type RenderJob = {
   end_seconds: number;
   duration_seconds: number;
   template_id: string;
-  layout_id?: "FILL" | "FIT";
+  layout_id?: "STAGE" | "FILL" | "FIT";
+  title?: string | null;
   candidate_id: string | null;
   download_url: string | null;
   preview_url: string | null;
@@ -96,7 +97,7 @@ export function RenderResult({ job, onRetry, retryDisabled = false }: Props) {
       <p className="shorts-status-range">
         {formatTimecode(job.start_seconds)} – {formatTimecode(job.end_seconds)} ·{" "}
         {formatTimecode(job.duration_seconds)} · {templateName(renderOptions, job.template_id)}
-        {job.layout_id === "FIT" ? " · 원본 그대로" : ""}
+        {job.layout_id === "FIT" ? " · 원본 + 흐린 배경" : job.layout_id === "STAGE" ? " · 제목 + 원본" : ""}
         {job.status === "completed" && job.captions_applied > 0
           ? ` · 자막 ${job.captions_applied}개`
           : ""}

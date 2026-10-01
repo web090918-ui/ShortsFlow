@@ -59,6 +59,9 @@ class CreateShortRequest(BaseModel):
     template_id: RenderTemplate | None = None
     # None keeps the layout chosen for the analysis job (or FILL for a manual range).
     layout_id: RenderLayout | None = None
+    # Headline drawn on top of the Short; [brackets] mark the coloured keyword.
+    # None falls back to the analysis job's title, then to a short candidate hook.
+    title: str | None = Field(default=None, max_length=80)
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -93,6 +96,7 @@ class ShortJobResponse(BaseModel):
     duration_seconds: float
     template_id: RenderTemplate
     layout_id: RenderLayout = RenderLayout.FILL
+    title: str | None = None
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -178,6 +182,7 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         duration_seconds=job.duration_seconds,
         template_id=job.template_id,
         layout_id=job.layout_id,
+        title=job.title,
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
@@ -337,11 +342,18 @@ def _resolve_candidate(
         captions.append(cue)
     template = payload.template_id or analysis.template_id
     layout = payload.layout_id or analysis.layout_id
+    title = _clean_title(payload.title) or _clean_title(analysis.title)
+    if title is None:
+        # A short hook reads as a headline; a long sentence would wrap into a block.
+        hook = candidate.get("hook_text")
+        if isinstance(hook, str) and len(hook.strip()) <= MAX_HOOK_HEADLINE_CHARS:
+            title = _clean_title(hook)
     render_input = {
         "processing_job_id": str(analysis.id),
         "candidate_id": candidate["id"],
         "candidate_index": candidate.get("index"),
         "captions": captions,
+        "title": title,
     }
     return (
         analysis.source_url,
@@ -352,6 +364,16 @@ def _resolve_candidate(
         analysis.source_id,
         render_input,
     )
+
+
+MAX_HOOK_HEADLINE_CHARS = 30
+
+
+def _clean_title(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 @router.post("", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -390,6 +412,8 @@ def create_short(
         start, end = payload.start_seconds, payload.end_seconds
         template = payload.template_id or RenderTemplate.CLEAN_CAPTION
         layout = payload.layout_id or RenderLayout.FILL
+        if _clean_title(payload.title):
+            render_input = {"title": _clean_title(payload.title)}
         source_id = payload.source_id or uuid4()
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)
@@ -434,6 +458,7 @@ def create_short(
         duration_seconds=duration,
         template_id=template,
         layout_id=layout,
+        title=(render_input or {}).get("title"),
         attempt_count=0,
         error_message=None,
         result=None,

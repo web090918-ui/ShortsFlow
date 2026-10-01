@@ -501,8 +501,52 @@ h2 {
   background-size: cover;
 }
 
-.caption-sample-fit .caption-sample-frame {
+.caption-sample-fit .caption-sample-frame,
+.caption-sample-stage .caption-sample-frame {
   background-size: contain;
+}
+
+.caption-sample-stage {
+  background: #000;
+}
+
+/* Headline centred in the band above a contained 16:9 picture (top 34% of the frame). */
+.caption-sample-headline {
+  display: grid;
+  position: absolute;
+  z-index: 1;
+  top: 17%;
+  left: 6%;
+  right: 6%;
+  justify-items: center;
+  transform: translateY(-50%);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.3;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.caption-sample-fill .caption-sample-headline {
+  top: 12%;
+}
+
+.caption-sample-headline-line {
+  display: block;
+}
+
+.title-field textarea {
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
 }
 
 .caption-sample-blur {
@@ -515,25 +559,26 @@ h2 {
   background: linear-gradient(145deg, #2c3126, #0a0c08 72%);
 }
 
-.caption-sample b {
+.caption-sample-caption {
   position: relative;
   z-index: 1;
   max-width: 92%;
   margin-bottom: 18%;
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   line-height: 1.4;
   text-align: center;
   word-break: keep-all;
 }
 
-.caption-sample-middle b {
+.caption-sample-middle .caption-sample-caption {
   margin-bottom: 0;
   align-self: center;
 }
 
-.caption-sample-fit b {
-  /* The real FIT render places captions in the blurred band under the picture. */
-  margin-bottom: 14%;
+.caption-sample-fit .caption-sample-caption,
+.caption-sample-stage .caption-sample-caption {
+  /* The real render places captions in the band under the picture. */
+  margin-bottom: 22%;
 }
 
 .layout-picker .caption-sample {

@@ -25,7 +25,7 @@ describe("TemplatePicker", () => {
 
     const cards = screen.getAllByRole("button", { name: /템플릿$/ });
     expect(cards).toHaveLength(DEFAULT_RENDER_OPTIONS.templates.length);
-    expect(screen.getByRole("button", { name: "Clean Caption 템플릿" }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: "클린 템플릿" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
     for (const card of cards) {
@@ -33,8 +33,8 @@ describe("TemplatePicker", () => {
       expect(frame?.style.backgroundImage).toContain(IMAGE);
     }
 
-    await user.click(screen.getByRole("button", { name: "Neon Glow 템플릿" }));
-    expect(onChange).toHaveBeenCalledWith("NEON_GLOW");
+    await user.click(screen.getByRole("button", { name: "헤드라인 레드 템플릿" }));
+    expect(onChange).toHaveBeenCalledWith("HEADLINE_RED");
   });
 
   it("colours the spoken word on karaoke templates only", () => {
@@ -47,18 +47,18 @@ describe("TemplatePicker", () => {
       />,
     );
 
-    const impact = screen.getByRole("button", { name: "Impact Yellow 템플릿" });
-    const spoken = impact.querySelectorAll<HTMLElement>(".caption-sample b > span")[2];
+    const impact = screen.getByRole("button", { name: "임팩트 옐로 템플릿" });
+    const spoken = impact.querySelectorAll<HTMLElement>(".caption-sample-caption > span")[2];
     expect(spoken.style.color).toBe("rgb(255, 230, 0)");
 
-    const pop = screen.getByRole("button", { name: "Karaoke Pop 템플릿" });
-    const popLine = pop.querySelector<HTMLElement>(".caption-sample b");
+    const pop = screen.getByRole("button", { name: "카라오케 팝 템플릿" });
+    const popLine = pop.querySelector<HTMLElement>(".caption-sample-caption");
     expect(popLine?.style.backgroundColor).toBe("rgb(17, 17, 17)");
-    const popSpoken = pop.querySelectorAll<HTMLElement>(".caption-sample b > span")[2];
+    const popSpoken = pop.querySelectorAll<HTMLElement>(".caption-sample-caption > span")[2];
     expect(popSpoken.style.color).toBe("rgb(215, 255, 79)");
 
-    const clean = screen.getByRole("button", { name: "Clean Caption 템플릿" });
-    const plain = clean.querySelectorAll<HTMLElement>(".caption-sample b > span")[2];
+    const clean = screen.getByRole("button", { name: "클린 템플릿" });
+    const plain = clean.querySelectorAll<HTMLElement>(".caption-sample-caption > span")[2];
     expect(plain.getAttribute("style")).toBeNull();
   });
 
@@ -95,8 +95,11 @@ describe("LayoutPicker", () => {
     );
 
     const fill = screen.getByRole("button", { name: "가득 채우기 배치" });
-    const fit = screen.getByRole("button", { name: "원본 그대로 배치" });
+    const fit = screen.getByRole("button", { name: "원본 + 흐린 배경 배치" });
+    const stage = screen.getByRole("button", { name: "제목 + 원본 배치" });
     expect(fill.querySelector(".caption-sample-blur")).toBeNull();
+    expect(stage.querySelector(".caption-sample-blur")).toBeNull();
+    expect(stage.querySelector(".caption-sample-stage")).toBeTruthy();
     expect(fit.querySelector<HTMLElement>(".caption-sample-blur")?.style.backgroundImage).toContain(IMAGE);
     expect(fit.querySelector(".caption-sample-fit")).toBeTruthy();
 

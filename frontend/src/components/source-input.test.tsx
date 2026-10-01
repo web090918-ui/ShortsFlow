@@ -198,7 +198,7 @@ describe("SourceInput", () => {
 
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
     expect(screen.getByText("선택 15:00")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /Bold Highlight/ }));
+    await user.click(screen.getByRole("button", { name: /볼드 박스/ }));
     const analyzeButton = screen.getByRole("button", { name: "AI 추천 구간 찾기" });
     expect((analyzeButton as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
@@ -221,7 +221,7 @@ describe("SourceInput", () => {
           end_seconds: 900,
           rights_confirmed: true,
           template_id: "BOLD_HIGHLIGHT",
-          layout_id: "FILL",
+          layout_id: "STAGE",
           transcript_language: "ko",
         }),
       }),
@@ -312,8 +312,8 @@ describe("SourceInput", () => {
           source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
           start_seconds: 0,
           end_seconds: 120,
-          template_id: "CLEAN_CAPTION",
-          layout_id: "FILL",
+          template_id: "HEADLINE_YELLOW",
+          layout_id: "STAGE",
           rights_confirmed: true,
         }),
       }),

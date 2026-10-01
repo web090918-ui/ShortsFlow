@@ -12,15 +12,36 @@ subtitle**, not a caption we drew. The 9:16 conversion scales a 16:9 frame to co
 (including wide subtitle lines) is removed. Our ASS captions wrap inside 90 px margins
 and were never cut.
 
+## Headline composition (same day, second pass)
+
+The owner compared the first template set with FikaClip's showcase and asked for that
+look instead: a **big two-line title with one coloured keyword** in the black band above
+the video, the **whole source frame in the middle**, and a **small spoken caption** in
+the band below. That is now the default (`STAGE` layout + `HEADLINE_YELLOW`).
+
+- `title` (max 80 chars) is accepted on `POST /processing-jobs` (stored on the analysis
+  job) and `POST /shorts`. Rendering a Top 3 candidate without a title falls back to the
+  analysis title, then to the candidate's `hook_text` when it is 30 characters or
+  shorter (a long sentence would wrap into a block). A manual range with no title has
+  no headline.
+- Keyword: a `[bracketed]` phrase if the user marked one, else the longest word (titles
+  with a single word get no colour). User line breaks are kept.
+- The headline is an extra `Headline` style (NanumSquareRound 84, bold, outline or box)
+  drawn on layer 2 for the whole clip, centred at y=328 for `STAGE`/`FIT` and overlaid at
+  y=230 for `FILL`. Every template can draw it; `headline_accent` sets the keyword colour.
+- The frontend has a "쇼츠 제목 (선택)" textarea above the pickers; the typed title shows
+  up in every template card immediately.
+
 ## Frame layouts (`RenderLayout`)
 
 | id | user-facing name | FFmpeg |
 | --- | --- | --- |
-| `FILL` (default) | 가득 채우기 | `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920` (unchanged) |
-| `FIT` | 원본 그대로 | `split` → blurred, enlarged copy as background (`boxblur` at quarter size) + whole frame scaled to fit (`force_original_aspect_ratio=decrease`) → `overlay` centred |
+| `STAGE` (default) | 제목 + 원본 | `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black` |
+| `FIT` | 원본 + 흐린 배경 | `split` → blurred, enlarged copy as background (`boxblur` at quarter size) + whole frame scaled to fit → `overlay` centred |
+| `FILL` | 가득 채우기 | `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920` (the original MVP rule) |
 
-Captions are burnt after the layout filter so 1080x1920 positions hold. In `FIT` the
-caption style is forced to bottom-centre with `MarginV 440`, which lands in the blurred
+Captions are burnt after the layout filter so 1080x1920 positions hold. In `STAGE` and
+`FIT` the caption style is forced to bottom-centre with `MarginV 440`, which lands in the
 band under a 1080x607 picture instead of covering it.
 
 `layout_id` is carried like `template_id`: on `POST /processing-jobs` (stored on the
@@ -29,20 +50,28 @@ candidate; `null` keeps the analysis job's layout), and on every job response.
 
 ## Caption templates (`RenderTemplate`)
 
-| id | style | font | notes |
+Listed in the picker, in this order:
+
+| id | name | look | keyword colour |
 | --- | --- | --- | --- |
-| `CLEAN_CAPTION` | white, black outline | NanumGothic | original |
-| `BOLD_HIGHLIGHT` | accent on black box | NanumGothic | original |
-| `MINIMAL` | small white | NanumGothic | original |
-| `IMPACT_YELLOW` | heavy white, spoken word yellow, middle of frame | NanumSquareRound | karaoke |
-| `KARAOKE_POP` | white on a dark box, spoken word in accent | NanumSquareRound | karaoke |
-| `NEWS_BAR` | white on a wide dark bar | NanumBarunGothic | |
-| `NEON_GLOW` | cyan with magenta glow (`\blur6`) | NanumSquare | |
-| `HANDWRITING` | pen-style | Nanum Pen Script (`fonts-nanum-extra`) | |
-| `TYPEWRITER` | monospace accent on black box | NanumGothicCoding | |
+| `HEADLINE_YELLOW` | 헤드라인 옐로 | small white caption, outlined | #FFE600 |
+| `HEADLINE_RED` | 헤드라인 레드 | same | #FF3C3C |
+| `HEADLINE_LIME` | 헤드라인 라임 | same | #D7FF4F |
+| `HEADLINE_SKY` | 헤드라인 뉴스 | caption on a dark box | #4FD2FF |
+| `HEADLINE_BOX` | 헤드라인 박스 | headline itself on a dark box | #FFE600 |
+| `IMPACT_YELLOW` | 임팩트 옐로 | heavy caption, spoken word yellow (karaoke) | #FFE600 |
+| `KARAOKE_POP` | 카라오케 팝 | caption on a dark box, spoken word accent (karaoke) | #D7FF4F |
+| `CLEAN_CAPTION` | 클린 | original white/outline | #FFE600 |
+| `BOLD_HIGHLIGHT` | 볼드 박스 | original accent on box | #D7FF4F |
+| `MINIMAL` | 미니멀 | original small caption | white |
+
+`NEWS_BAR`, `NEON_GLOW`, `HANDWRITING`, and `TYPEWRITER` stay valid ids (`listed=False`)
+so jobs that used them keep loading, but the picker no longer shows them; the owner
+judged them dated next to the headline look.
 
 All styles live in `backend/app/captions.py` (`TEMPLATE_STYLES`); the video code knows
-nothing about templates. Product Shorts use the same styles for their spoken lines.
+nothing about templates. Product Shorts use the same styles for their spoken lines
+(no headline).
 
 ### Karaoke (per-word highlight)
 
@@ -80,10 +109,11 @@ blurred background + contain) and the sample sentence is styled from the templat
 
 ## Validation
 
-- `backend && pytest`: 167 passed (catalog, FIT filter, karaoke events, json3/Whisper
-  words, layout passthrough).
+- `backend && pytest`: 174 passed (catalog, STAGE/FIT filters, headline event and
+  keyword rule, karaoke events, json3/Whisper words, layout and title passthrough).
 - Real FFmpeg in the backend image: a 1920x1080 test clip with its own bottom caption was
-  rendered with every new template in both layouts; `FIT` keeps the source caption whole,
-  `FILL` crops it as before. No libass font-fallback warnings.
+  rendered with every template in every layout, including headline titles with marked
+  and auto-detected keywords; `STAGE`/`FIT` keep the source caption whole, `FILL` crops it
+  as before. No libass font-fallback warnings.
 - `frontend`: lint, 28 vitest tests (new `template-picker.test.tsx`, upload test asserts the
   captured frame appears in the previews), `next build`.

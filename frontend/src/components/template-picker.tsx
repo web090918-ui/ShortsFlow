@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 
+import { headlineRuns } from "@/lib/render-options";
 import type { CaptionTemplate, FrameLayout } from "@/lib/render-options";
 
 type LayoutId = FrameLayout["id"];
@@ -9,12 +10,16 @@ type LayoutId = FrameLayout["id"];
 /** Sample line shown on every card; the third word is the "spoken" one for karaoke styles. */
 const SAMPLE_WORDS = ["이", "장면이", "핵심이에요"];
 const SPOKEN_INDEX = 2;
+export const SAMPLE_TITLE = "이 장면 하나로\n[채널]이 달라집니다";
 
 type SampleProps = {
   template: CaptionTemplate;
   layout: LayoutId;
   /** A frame from the viewer's own video (thumbnail, captured frame, or product image). */
   imageUrl: string | null;
+  /** Headline to show; the sample title when the viewer has not typed one. */
+  title?: string | null;
+  showHeadline?: boolean;
 };
 
 function captionStyle(template: CaptionTemplate): CSSProperties {
@@ -45,30 +50,55 @@ function spokenStyle(template: CaptionTemplate): CSSProperties | undefined {
   return { color: template.preview.accent };
 }
 
+function headlineStyle(template: CaptionTemplate): CSSProperties {
+  const boxed = template.preview.headlineBox === "true";
+  return boxed
+    ? { backgroundColor: "rgba(0, 0, 0, 0.85)", padding: "3px 8px", borderRadius: "3px" }
+    : { textShadow: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000" };
+}
+
+function Frame({ imageUrl, layout }: { imageUrl: string | null; layout: LayoutId }) {
+  if (!imageUrl) return <span className="caption-sample-frame caption-sample-placeholder" />;
+  return (
+    <>
+      {layout === "FIT" ? (
+        <span className="caption-sample-blur" style={{ backgroundImage: `url("${imageUrl}")` }} />
+      ) : null}
+      <span className="caption-sample-frame" style={{ backgroundImage: `url("${imageUrl}")` }} />
+    </>
+  );
+}
+
 /**
  * A miniature 9:16 frame: the viewer's video placed with the chosen layout, the
- * template's caption on top. The real render uses the same geometry, so what the
- * card shows is where the text will land.
+ * headline above it and the template's caption below. The real render uses the
+ * same geometry, so what the card shows is where the text will land.
  */
-export function CaptionSample({ template, layout, imageUrl }: SampleProps) {
+export function CaptionSample({ template, layout, imageUrl, title, showHeadline = true }: SampleProps) {
   const spoken = spokenStyle(template);
-  const position = layout === "FIT" ? "fit" : template.id === "IMPACT_YELLOW" ? "middle" : "bottom";
+  const accent = template.preview.headlineAccent ?? "#FFE600";
+  const position = layout === "FILL" && template.id === "IMPACT_YELLOW" ? "middle" : "bottom";
+  const headlineText = (title && title.trim()) || SAMPLE_TITLE;
   return (
     <span
       className={`caption-sample caption-sample-${layout.toLowerCase()} caption-sample-${position}`}
       aria-hidden="true"
     >
-      {imageUrl ? (
-        <>
-          {layout === "FIT" ? (
-            <span className="caption-sample-blur" style={{ backgroundImage: `url("${imageUrl}")` }} />
-          ) : null}
-          <span className="caption-sample-frame" style={{ backgroundImage: `url("${imageUrl}")` }} />
-        </>
-      ) : (
-        <span className="caption-sample-frame caption-sample-placeholder" />
-      )}
-      <b style={captionStyle(template)}>
+      <Frame imageUrl={imageUrl} layout={layout} />
+      {showHeadline ? (
+        <b className="caption-sample-headline" style={headlineStyle(template)}>
+          {headlineText.split("\n").map((line, lineIndex) => (
+            <span key={`${lineIndex}-${line}`} className="caption-sample-headline-line">
+              {headlineRuns(line).map((run, runIndex) => (
+                <span key={`${runIndex}-${run.text}`} style={run.accent ? { color: accent } : undefined}>
+                  {run.text}
+                </span>
+              ))}
+            </span>
+          ))}
+        </b>
+      ) : null}
+      <b className="caption-sample-caption" style={captionStyle(template)}>
         {SAMPLE_WORDS.map((word, index) => (
           <span key={word} style={index === SPOKEN_INDEX ? spoken : undefined}>
             {word}
@@ -86,6 +116,8 @@ type TemplatePickerProps = {
   onChange: (id: string) => void;
   layout?: LayoutId;
   imageUrl: string | null;
+  title?: string | null;
+  showHeadline?: boolean;
   description?: string;
 };
 
@@ -93,8 +125,10 @@ export function TemplatePicker({
   templates,
   value,
   onChange,
-  layout = "FILL",
+  layout = "STAGE",
   imageUrl,
+  title,
+  showHeadline = true,
   description,
 }: TemplatePickerProps) {
   return (
@@ -114,7 +148,13 @@ export function TemplatePicker({
             aria-label={`${template.name} 템플릿`}
             onClick={() => onChange(template.id)}
           >
-            <CaptionSample template={template} layout={layout} imageUrl={imageUrl} />
+            <CaptionSample
+              template={template}
+              layout={layout}
+              imageUrl={imageUrl}
+              title={title}
+              showHeadline={showHeadline}
+            />
             <strong>
               {template.name} <em>{template.tag}</em>
             </strong>
@@ -137,7 +177,7 @@ export function LayoutPicker({ layouts, value, onChange, imageUrl }: LayoutPicke
   return (
     <fieldset className="template-picker layout-picker">
       <legend>화면 배치</legend>
-      <p>원본에 자막이나 중요한 화면이 양옆에 있다면 ‘원본 그대로’를 고르세요.</p>
+      <p>원본에 자막이나 중요한 화면이 양옆에 있다면 원본을 그대로 두는 배치를 고르세요.</p>
       <div className="layout-options">
         {layouts.map((layout) => (
           <button
@@ -152,22 +192,7 @@ export function LayoutPicker({ layouts, value, onChange, imageUrl }: LayoutPicke
               className={`caption-sample caption-sample-${layout.id.toLowerCase()} caption-sample-bottom`}
               aria-hidden="true"
             >
-              {imageUrl ? (
-                <>
-                  {layout.id === "FIT" ? (
-                    <span
-                      className="caption-sample-blur"
-                      style={{ backgroundImage: `url("${imageUrl}")` }}
-                    />
-                  ) : null}
-                  <span
-                    className="caption-sample-frame"
-                    style={{ backgroundImage: `url("${imageUrl}")` }}
-                  />
-                </>
-              ) : (
-                <span className="caption-sample-frame caption-sample-placeholder" />
-              )}
+              <Frame imageUrl={imageUrl} layout={layout.id} />
             </span>
             <strong>{layout.name}</strong>
             <small>{layout.description}</small>

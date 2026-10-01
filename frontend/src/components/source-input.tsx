@@ -11,6 +11,7 @@ import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 import { LayoutPicker, TemplatePicker } from "@/components/template-picker";
 import { useRenderOptions } from "@/lib/render-options-context";
+import { DEFAULT_LAYOUT_ID, DEFAULT_TEMPLATE_ID } from "@/lib/render-options";
 import type { FrameLayout } from "@/lib/render-options";
 import { currentDurationReader, currentFrameCapturer, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
@@ -186,8 +187,10 @@ export function SourceInput() {
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(0);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
-  const [templateId, setTemplateId] = useState("CLEAN_CAPTION");
-  const [layoutId, setLayoutId] = useState<FrameLayout["id"]>("FILL");
+  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
+  const [layoutId, setLayoutId] = useState<FrameLayout["id"]>(DEFAULT_LAYOUT_ID);
+  // Headline drawn on top of the Short; [brackets] mark the coloured keyword.
+  const [title, setTitle] = useState("");
   // One frame of the chosen file, shown inside the template previews.
   const [sampleFrame, setSampleFrame] = useState<string | null>(null);
   const renderOptions = useRenderOptions();
@@ -306,6 +309,7 @@ export function SourceInput() {
           end_seconds: rangeEnd,
           template_id: templateId,
           layout_id: layoutId,
+          ...(title.trim() ? { title: title.trim() } : {}),
           rights_confirmed: true,
         }),
       });
@@ -334,7 +338,7 @@ export function SourceInput() {
     setRenderJob(null);
     setDirectJob(null);
     setRightsConfirmed(false);
-    setTemplateId("CLEAN_CAPTION");
+    setTemplateId(DEFAULT_TEMPLATE_ID);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -439,6 +443,7 @@ export function SourceInput() {
           rights_confirmed: true,
           template_id: templateId,
           layout_id: layoutId,
+          ...(title.trim() ? { title: title.trim() } : {}),
           transcript_language: transcriptLanguage,
         }),
       });
@@ -725,6 +730,18 @@ export function SourceInput() {
                 </select>
               </label>
 
+              <label className="field title-field">
+                <span>쇼츠 제목 (선택)</span>
+                <textarea
+                  aria-label="쇼츠 제목"
+                  value={title}
+                  maxLength={80}
+                  rows={2}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder={"한 줄 또는 두 줄로 쓰고, 강조할 단어는 [대괄호]로 감싸세요\n비우면 AI 추천 구간의 짧은 훅 문장을 제목으로 씁니다"}
+                />
+              </label>
+
               <LayoutPicker
                 layouts={renderOptions.layouts}
                 value={layoutId}
@@ -738,6 +755,7 @@ export function SourceInput() {
                 onChange={setTemplateId}
                 layout={layoutId}
                 imageUrl={sampleImageUrl}
+                title={title}
               />
 
               <label className="rights-confirmation">

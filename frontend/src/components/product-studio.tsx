@@ -65,7 +65,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
   const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState("BOLD_HIGHLIGHT");
+  const [templateId, setTemplateId] = useState("KARAOKE_POP");
   const renderOptions = useRenderOptions();
   const [ctaUrl, setCtaUrl] = useState("");
   const [termsConfirmed, setTermsConfirmed] = useState(false);
@@ -255,7 +255,9 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
             templates={renderOptions.templates}
             value={templateId}
             onChange={setTemplateId}
+            layout="FILL"
             imageUrl={product.image_url}
+            showHeadline={false}
             description="상품 이미지 위에 얹었을 때의 느낌이에요. 말하는 문장이 이 스타일로 들어갑니다."
           />
 

@@ -68,7 +68,13 @@ def _escape_filter_path(path: Path) -> str:
 def _vertical_filter(
     subtitles_path: Path | None = None, layout: RenderLayout = RenderLayout.FILL
 ) -> str:
-    if layout == RenderLayout.FIT:
+    if layout == RenderLayout.STAGE:
+        # Whole frame centred on black: room for a headline above and a caption below.
+        chain = (
+            f"scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=decrease,"
+            f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+        )
+    elif layout == RenderLayout.FIT:
         # Keep the whole source frame (so its own captions and framing survive) and
         # fill the rest of the 9:16 canvas with a blurred, enlarged copy of itself.
         # The background is blurred at a quarter size: same look, far less work.

@@ -60,10 +60,12 @@ class StubShortPipeline:
         captions=None,
         template=None,
         layout=None,
+        title=None,
     ):
         self.calls.append(
             {
                 "layout": layout,
+                "title": title,
                 "job_id": job_id,
                 "url": source_url,
                 "start": start_seconds,
@@ -190,8 +192,9 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "end": 185,
             "captions": None,
             "raw_captions": None,
-            "template": None,
+            "template": "CLEAN_CAPTION",
             "layout": "FILL",
+            "title": None,
         }
     ]
 
@@ -565,3 +568,65 @@ def test_layout_can_be_overridden_per_render_and_set_on_manual_ranges(
     assert manual["layout_id"] == "FIT" and manual["template_id"] == "NEON_GLOW"
     assert _run_worker(manual["id"]).status_code == 200
     assert pipeline.calls[0]["layout"] == "FIT"
+
+
+def test_candidate_render_titles_from_a_short_hook_unless_the_user_typed_one(
+    monkeypatch, isolated_jobs, tmp_path
+) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+    analysis = _completed_analysis_job(isolated_jobs)
+    items = analysis.result["candidates"]["items"]
+    items[0]["hook_text"] = "독립을 위해 목숨을 건 여자"
+    items[1]["hook_text"] = "이 문장은 서른 글자를 훌쩍 넘기는 긴 설명이라 제목으로 쓰기에는 어울리지 않습니다"
+    isolated_jobs.save(analysis)
+
+    short_hook = client.post(
+        "/shorts",
+        json={"processing_job_id": str(analysis.id), "candidate_id": "cand-a", "rights_confirmed": True},
+    ).json()
+    long_hook = client.post(
+        "/shorts",
+        json={"processing_job_id": str(analysis.id), "candidate_id": "cand-b", "rights_confirmed": True},
+    ).json()
+    typed = client.post(
+        "/shorts",
+        json={
+            "processing_job_id": str(analysis.id),
+            "candidate_id": "cand-b",
+            "rights_confirmed": True,
+            "title": "  암표 수수료도 [이제 다 제 겁니다]  ",
+        },
+    ).json()
+
+    assert short_hook["title"] == "독립을 위해 목숨을 건 여자"
+    assert long_hook["title"] is None
+    assert typed["title"] == "암표 수수료도 [이제 다 제 겁니다]"
+
+    assert _run_worker(typed["id"]).status_code == 200
+    assert pipeline.calls[0]["title"] == "암표 수수료도 [이제 다 제 겁니다]"
+
+
+def test_manual_range_carries_its_title_to_the_render(monkeypatch, isolated_jobs, tmp_path) -> None:
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+
+    created = client.post(
+        "/shorts",
+        json={
+            "youtube_url": "https://www.youtube.com/watch?v=abc123",
+            "start_seconds": 10,
+            "end_seconds": 40,
+            "rights_confirmed": True,
+            "template_id": "HEADLINE_YELLOW",
+            "layout_id": "STAGE",
+            "title": "첫 영유아 건강검진, 왜 받아야 할까?",
+        },
+    ).json()
+
+    assert created["title"] == "첫 영유아 건강검진, 왜 받아야 할까?"
+    assert created["layout_id"] == "STAGE"
+    assert _run_worker(created["id"]).status_code == 200
+    call = pipeline.calls[0]
+    assert call["title"] == "첫 영유아 건강검진, 왜 받아야 할까?"
+    assert call["template"] == "HEADLINE_YELLOW" and call["layout"] == "STAGE"

@@ -15,11 +15,13 @@ export type CaptionTemplate = {
     weight?: string;
     font?: string;
     glow?: string;
+    headlineAccent?: string;
+    headlineBox?: string;
   };
 };
 
 export type FrameLayout = {
-  id: "FILL" | "FIT";
+  id: "STAGE" | "FIT" | "FILL";
   name: string;
   description: string;
 };
@@ -29,6 +31,26 @@ export type RenderOptions = {
   layouts: FrameLayout[];
 };
 
+export const DEFAULT_TEMPLATE_ID = "HEADLINE_YELLOW";
+export const DEFAULT_LAYOUT_ID: FrameLayout["id"] = "STAGE";
+
+function headline(
+  id: string,
+  name: string,
+  description: string,
+  headlineAccent: string,
+  extra: Partial<CaptionTemplate["preview"]> = {},
+): CaptionTemplate {
+  return {
+    id,
+    name,
+    description,
+    tag: "요즘 감성",
+    karaoke: false,
+    preview: { color: "#FFFFFF", stroke: "#000000", weight: "800", headlineAccent, headlineBox: "false", ...extra },
+  };
+}
+
 /**
  * Built-in copy of the catalog so the pickers render before (or without) the
  * server answer. The server list wins once it arrives; keep ids in sync with
@@ -36,90 +58,71 @@ export type RenderOptions = {
  */
 export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   templates: [
-    {
-      id: "CLEAN_CAPTION",
-      name: "Clean Caption",
-      description: "읽기 쉬운 기본 자막. 흰 글씨에 검은 외곽선.",
-      tag: "기본",
-      karaoke: false,
-      preview: { color: "#FFFFFF", stroke: "#000000", weight: "700" },
-    },
-    {
-      id: "BOLD_HIGHLIGHT",
-      name: "Bold Highlight",
-      description: "형광 글씨를 검은 박스 위에. 핵심 문장을 강하게.",
-      tag: "강조",
-      karaoke: false,
-      preview: { color: "#D7FF4F", background: "#111111", weight: "800" },
-    },
-    {
-      id: "MINIMAL",
-      name: "Minimal",
-      description: "화면을 가리지 않는 작은 자막.",
-      tag: "미니멀",
-      karaoke: false,
-      preview: { color: "#FFFFFF", stroke: "#000000", weight: "400" },
-    },
+    headline("HEADLINE_YELLOW", "헤드라인 옐로", "큰 제목에 노란 키워드, 아래에 작은 자막. 요즘 쇼츠의 기본형.", "#FFE600"),
+    headline("HEADLINE_RED", "헤드라인 레드", "빨간 키워드로 긴장감을 주는 제목. 다큐·이슈 영상에.", "#FF3C3C"),
+    headline("HEADLINE_LIME", "헤드라인 라임", "형광 연두 키워드. 정보·꿀팁 영상에 잘 맞아요.", "#D7FF4F"),
+    headline("HEADLINE_SKY", "헤드라인 뉴스", "하늘색 키워드와 박스 자막. 뉴스·시사 느낌.", "#4FD2FF", {
+      background: "#000000",
+    }),
+    headline("HEADLINE_BOX", "헤드라인 박스", "제목을 검은 박스 위에 얹어 어떤 배경에서도 또렷하게.", "#FFE600", {
+      headlineBox: "true",
+    }),
     {
       id: "IMPACT_YELLOW",
-      name: "Impact Yellow",
-      description: "두꺼운 흰 글씨, 말하는 단어만 노란색. 요즘 쇼츠의 정석.",
-      tag: "유행",
+      name: "임팩트 옐로",
+      description: "두꺼운 자막, 말하는 단어만 노란색으로 바뀌어요.",
+      tag: "단어 강조",
       karaoke: true,
-      preview: { color: "#FFFFFF", stroke: "#000000", accent: "#FFE600", weight: "900" },
+      preview: { color: "#FFFFFF", stroke: "#000000", accent: "#FFE600", weight: "900", headlineAccent: "#FFE600" },
     },
     {
       id: "KARAOKE_POP",
-      name: "Karaoke Pop",
-      description: "검은 박스 위 흰 글씨, 말하는 단어만 형광색으로. 캡컷 스타일.",
-      tag: "유행",
+      name: "카라오케 팝",
+      description: "검은 박스 위 흰 글씨, 말하는 단어만 형광색으로.",
+      tag: "단어 강조",
       karaoke: true,
-      preview: { color: "#FFFFFF", background: "#111111", accent: "#D7FF4F", weight: "900" },
+      preview: { color: "#FFFFFF", background: "#111111", accent: "#D7FF4F", weight: "900", headlineAccent: "#D7FF4F" },
     },
     {
-      id: "NEWS_BAR",
-      name: "News Bar",
-      description: "뉴스 하단 자막처럼 가로 띠 위에 또렷하게.",
-      tag: "정보",
+      id: "CLEAN_CAPTION",
+      name: "클린",
+      description: "읽기 쉬운 기본 자막. 흰 글씨에 검은 외곽선.",
+      tag: "기본",
       karaoke: false,
-      preview: { color: "#FFFFFF", background: "#202020", weight: "700" },
+      preview: { color: "#FFFFFF", stroke: "#000000", weight: "700", headlineAccent: "#FFE600" },
     },
     {
-      id: "NEON_GLOW",
-      name: "Neon Glow",
-      description: "어두운 영상 위에 빛나는 네온 글씨.",
-      tag: "감성",
+      id: "BOLD_HIGHLIGHT",
+      name: "볼드 박스",
+      description: "형광 글씨를 검은 박스 위에. 핵심 문장을 강하게.",
+      tag: "기본",
       karaoke: false,
-      preview: { color: "#4FE1FF", stroke: "#D74FFF", weight: "800", glow: "true" },
+      preview: { color: "#D7FF4F", background: "#111111", weight: "800", headlineAccent: "#D7FF4F" },
     },
     {
-      id: "HANDWRITING",
-      name: "Handwriting",
-      description: "손글씨 느낌의 따뜻한 자막. 브이로그와 감성 영상에.",
-      tag: "감성",
+      id: "MINIMAL",
+      name: "미니멀",
+      description: "화면을 가리지 않는 작은 자막.",
+      tag: "기본",
       karaoke: false,
-      preview: { color: "#FFFFFF", stroke: "#303030", weight: "400", font: "cursive" },
-    },
-    {
-      id: "TYPEWRITER",
-      name: "Typewriter",
-      description: "고정폭 글씨와 검은 박스. 설명·튜토리얼 영상에.",
-      tag: "정보",
-      karaoke: false,
-      preview: { color: "#D7FF4F", background: "#000000", weight: "700", font: "monospace" },
+      preview: { color: "#FFFFFF", stroke: "#000000", weight: "400", headlineAccent: "#FFFFFF" },
     },
   ],
   layouts: [
     {
-      id: "FILL",
-      name: "가득 채우기",
-      description: "화면을 꽉 채우고 양옆을 잘라냅니다. 인물 중심 영상에 좋아요.",
+      id: "STAGE",
+      name: "제목 + 원본",
+      description: "검은 배경 가운데에 원본 화면을 그대로 두고, 위에는 제목, 아래에는 자막을 넣습니다.",
     },
     {
       id: "FIT",
-      name: "원본 그대로",
-      description:
-        "원본 화면을 전부 보여 주고 위아래는 흐린 배경으로 채웁니다. 원본 자막이나 화면 구성이 잘리지 않아요.",
+      name: "원본 + 흐린 배경",
+      description: "원본 화면을 전부 보여 주고 위아래는 흐린 배경으로 채웁니다.",
+    },
+    {
+      id: "FILL",
+      name: "가득 채우기",
+      description: "화면을 꽉 채우고 양옆을 잘라냅니다. 인물 중심 영상에 좋아요.",
     },
   ],
 };
@@ -136,4 +139,30 @@ export async function fetchRenderOptions(signal?: AbortSignal): Promise<RenderOp
 
 export function templateName(options: RenderOptions, id: string | null | undefined) {
   return options.templates.find((template) => template.id === id)?.name ?? id ?? "";
+}
+
+/**
+ * Same rule as the backend: a `[bracketed]` phrase is the coloured keyword, otherwise
+ * the longest word when the title has at least two words.
+ */
+export function headlineKeyword(title: string): string | null {
+  const marked = /\[([^[\]]+)\]/.exec(title);
+  if (marked) return marked[1].trim() || null;
+  const words = title.trim().split(/\s+/).filter((word) => word.length >= 2);
+  if (words.length < 2) return null;
+  return words.reduce((longest, word) => (word.length > longest.length ? word : longest), "");
+}
+
+/** Title split into plain and keyword runs for rendering with an accent colour. */
+export function headlineRuns(title: string): Array<{ text: string; accent: boolean }> {
+  const plain = title.replace(/[[\]]/g, "");
+  const keyword = headlineKeyword(title);
+  if (!keyword) return [{ text: plain, accent: false }];
+  const at = plain.indexOf(keyword);
+  if (at < 0) return [{ text: plain, accent: false }];
+  return [
+    { text: plain.slice(0, at), accent: false },
+    { text: keyword, accent: true },
+    { text: plain.slice(at + keyword.length), accent: false },
+  ].filter((run) => run.text.length > 0);
 }

@@ -84,6 +84,8 @@ class CreateProcessingJobRequest(BaseModel):
     rights_confirmed: bool = False
     template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
     layout_id: RenderLayout = RenderLayout.FILL
+    # Optional headline for renders made from this analysis; [brackets] mark the keyword.
+    title: str | None = Field(default=None, max_length=80)
     transcript_language: str = Field(
         default="ko",
         pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",
@@ -102,6 +104,7 @@ class ProcessingJobResponse(BaseModel):
     duration_seconds: float
     template_id: RenderTemplate
     layout_id: RenderLayout = RenderLayout.FILL
+    title: str | None = None
     transcript_language: str = "ko"
     attempt_count: int = Field(ge=0)
     stage: str | None = None
@@ -716,8 +719,9 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             end_seconds=job.end_seconds,
             report=report,
             captions=captions,
-            template=job.template_id if captions else None,
+            template=job.template_id,
             layout=job.layout_id,
+            title=render_input.get("title") if isinstance(render_input.get("title"), str) else None,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
@@ -864,6 +868,7 @@ def create_processing_job(
         duration_seconds=duration,
         template_id=payload.template_id,
         layout_id=payload.layout_id,
+        title=payload.title.strip() if payload.title and payload.title.strip() else None,
         transcript_language=payload.transcript_language,
         attempt_count=0,
         error_message=None,

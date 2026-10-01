@@ -225,3 +225,28 @@ def test_local_storage_moves_file_into_root(tmp_path: Path) -> None:
     assert stored.local_path == tmp_path / "artifacts" / "shorts" / "job.mp4"
     assert stored.local_path.read_bytes() == b"short"
     assert not source.exists()
+
+
+def test_pipeline_writes_the_headline_even_without_captions() -> None:
+    from app.templates import RenderLayout
+
+    processor = StubProcessor(duration=100)
+    pipeline = ShortPipeline(StubProvider(), processor, StubStorage())
+
+    artifact = pipeline.run(
+        job_id="job-title",
+        source_url="https://www.youtube.com/watch?v=abc",
+        start_seconds=10,
+        end_seconds=40,
+        report=lambda stage, progress: None,
+        captions=None,
+        template=RenderTemplate.HEADLINE_YELLOW,
+        layout=RenderLayout.STAGE,
+        title="이 장면 하나로 [채널]이 달라집니다",
+    )
+
+    assert artifact.captions_applied == 0
+    assert artifact.title == "이 장면 하나로 [채널]이 달라집니다"
+    ass = processor.calls[0]["subtitles"]
+    assert ass is not None and ",Headline,," in ass
+    assert processor.calls[0]["layout"] == RenderLayout.STAGE

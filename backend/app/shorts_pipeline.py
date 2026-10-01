@@ -216,6 +216,7 @@ class ShortArtifact(BaseModel):
     expires_at: datetime | None
     template_id: str | None = None
     layout_id: str = RenderLayout.FILL.value
+    title: str | None = None
     captions_applied: int = 0
     source_title: str | None
     source_duration_seconds: float
@@ -257,6 +258,7 @@ class ShortPipeline:
         captions: list[CaptionCue] | None = None,
         template: RenderTemplate | None = None,
         layout: RenderLayout = RenderLayout.FILL,
+        title: str | None = None,
     ) -> ShortArtifact:
         try:
             return self._run(
@@ -265,6 +267,7 @@ class ShortPipeline:
                 captions=captions,
                 template=template,
                 layout=layout,
+                title=title,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -300,6 +303,7 @@ class ShortPipeline:
         captions: list[CaptionCue] | None,
         template: RenderTemplate | None,
         layout: RenderLayout,
+        title: str | None,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -328,11 +332,11 @@ class ShortPipeline:
             clip_end = min(end_seconds, info.duration_seconds)
             subtitles_path = None
             captions_applied = 0
-            if captions and template is not None:
+            if template is not None and (captions or title):
                 selected = select_cues(
-                    captions, start_seconds=start_seconds, end_seconds=clip_end
+                    captions or [], start_seconds=start_seconds, end_seconds=clip_end
                 )
-                if selected:
+                if selected or title:
                     subtitles_path = temp_path / "captions.ass"
                     subtitles_path.write_text(
                         build_ass(
@@ -341,6 +345,7 @@ class ShortPipeline:
                             clip_start_seconds=start_seconds,
                             clip_end_seconds=clip_end,
                             layout=layout,
+                            title=title,
                         ),
                         encoding="utf-8",
                     )
@@ -378,6 +383,7 @@ class ShortPipeline:
             expires_at=stored.expires_at,
             template_id=template.value if template is not None else None,
             layout_id=layout.value,
+            title=title,
             captions_applied=captions_applied,
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,

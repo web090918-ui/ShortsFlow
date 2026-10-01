@@ -134,3 +134,22 @@ def test_fit_layout_keeps_the_whole_frame_over_a_blurred_background(
     assert "[bgs][fgs]overlay=(W-w)/2:(H-h)/2" in video_filter
     # Captions are burnt onto the composed frame, so their 1080x1920 positions hold.
     assert video_filter.index("overlay=") < video_filter.index(",subtitles=filename=")
+
+
+def test_stage_layout_pads_the_whole_frame_on_black(fake_tools, tmp_path: Path) -> None:
+    from app.templates import RenderLayout
+
+    FfmpegVideoProcessor().trim_to_vertical(
+        tmp_path / "input.mp4",
+        tmp_path / "output.mp4",
+        start_seconds=0,
+        end_seconds=10,
+        subtitles_path=tmp_path / "captions.ass",
+        layout=RenderLayout.STAGE,
+    )
+
+    video_filter = fake_tools[0][fake_tools[0].index("-vf") + 1]
+    assert video_filter.startswith(
+        "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+    )
+    assert video_filter.index("pad=") < video_filter.index(",subtitles=filename=")

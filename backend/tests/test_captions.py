@@ -61,19 +61,23 @@ def test_build_ass_uses_clip_relative_times_and_template_style() -> None:
     ]
 
 
-def test_templates_differ_only_in_style_values() -> None:
-    styles = {
-        template: next(
-            line
-            for line in build_ass(
-                _cues(), template=template, clip_start_seconds=100, clip_end_seconds=120
-            ).splitlines()
-            if line.startswith("Style:")
+def test_every_template_renders_a_distinct_document() -> None:
+    documents = {
+        template: build_ass(
+            _cues(),
+            template=template,
+            clip_start_seconds=100,
+            clip_end_seconds=120,
+            title="이 장면 하나로 [채널]이 달라집니다",
         )
         for template in RenderTemplate
     }
+    styles = {
+        template: next(line for line in doc.splitlines() if line.startswith("Style: Default"))
+        for template, doc in documents.items()
+    }
 
-    assert len(set(styles.values())) == len(RenderTemplate)
+    assert len(set(documents.values())) == len(RenderTemplate)
     assert ",64,&H00FFFFFF," in styles[RenderTemplate.CLEAN_CAPTION]
     assert ",48,&H00FFFFFF," in styles[RenderTemplate.MINIMAL]
     assert styles[RenderTemplate.MINIMAL].endswith(",1,2,0,2,90,90,180,1")
@@ -104,7 +108,7 @@ def test_fit_layout_moves_captions_below_the_source_picture() -> None:
     # Bottom-centre (2) with MarginV 440 sits in the blurred band under a 1080x607 picture
     # instead of the template's own middle-of-frame alignment.
     assert style.endswith(",2,90,90,440,1")
-    assert "Style: Default,NanumSquareRound,86," in style
+    assert "Style: Default,NanumSquareRound,74," in style
 
 
 def test_karaoke_template_emits_one_event_per_word_with_the_spoken_word_coloured() -> None:
@@ -192,3 +196,56 @@ def test_news_bar_draws_a_full_width_band_under_each_cue() -> None:
     )
     assert "m 0 0 l 1080 0 l 1080 130 l 0 130" in bars[0]
     assert texts[0].startswith("Dialogue: 1,0:00:00.00,0:00:01.00,")
+
+
+def test_headline_is_drawn_for_the_whole_clip_with_the_keyword_coloured() -> None:
+    from app.templates import RenderLayout
+
+    document = build_ass(
+        _cues(),
+        template=RenderTemplate.HEADLINE_RED,
+        clip_start_seconds=100,
+        clip_end_seconds=120,
+        layout=RenderLayout.STAGE,
+        title="독립을 위해 [목숨]을 건 여자",
+    )
+    lines = document.splitlines()
+    headline = next(line for line in lines if ",Headline,," in line)
+
+    assert "Style: Headline,NanumSquareRound,84,&H00FFFFFF," in document
+    # Layer 2, full clip, centred in the band above the picture (y = 328).
+    assert headline.startswith("Dialogue: 2,0:00:00.00,0:00:20.00,Headline,,0,0,0,,{\\an5\\pos(540,328)}")
+    assert headline.endswith("독립을 위해 {\\1c&H003C3CFF}목숨{\\1c&H00FFFFFF}을 건 여자")
+    # Captions still sit in the band under the picture.
+    assert ",2,90,90,440,1" in next(line for line in lines if line.startswith("Style: Default"))
+
+
+def test_headline_colours_the_longest_word_when_nothing_is_marked() -> None:
+    from app.captions import headline_keyword
+    from app.templates import RenderLayout
+
+    assert headline_keyword("엘니뇨 현상으로 유럽과 한국 여름이 바뀌었다?") == "바뀌었다?"
+    assert headline_keyword("한단어") is None
+    assert headline_keyword("암표 수수료도\n이제 다 [제 겁니다]") == "제 겁니다"
+
+    document = build_ass(
+        [],
+        template=RenderTemplate.HEADLINE_YELLOW,
+        clip_start_seconds=0,
+        clip_end_seconds=30,
+        layout=RenderLayout.FILL,
+        title="엘니뇨 현상으로\n여름이 바뀌었다",
+    )
+    headline = next(line for line in document.splitlines() if ",Headline,," in line)
+    # FILL overlays the headline near the top; user line breaks become \\N.
+    assert "{\\an5\\pos(540,230)}엘니뇨 {\\1c&H0000E6FF}현상으로{\\1c&H00FFFFFF}\\N여름이 바뀌었다" in headline
+
+
+def test_headline_box_template_uses_an_opaque_box_style() -> None:
+    document = build_ass(
+        _cues(), template=RenderTemplate.HEADLINE_BOX, clip_start_seconds=100, clip_end_seconds=120
+    )
+    headline_style = next(line for line in document.splitlines() if line.startswith("Style: Headline"))
+
+    assert ",-1,0,0,0,100,100,0,0,3,18,0,5,70,70,0,1" in headline_style
+    assert ",Headline,," not in document  # no title, no headline event
