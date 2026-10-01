@@ -76,11 +76,12 @@ def _vertical_filter(
     stage_color: str = "#000000",
 ) -> str:
     if layout == RenderLayout.STAGE:
-        # Whole frame centred on the template's stage colour: room for a headline
-        # above and a caption below.
+        # Fill the stage picture band edge to edge, cropping centrally as needed.
+        # Keep the headline and caption bands outside the picture.
         color = "0x" + stage_color.lstrip("#")
         chain = (
-            f"scale={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT}:force_original_aspect_ratio=decrease,"
+            f"scale={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT}:force_original_aspect_ratio=increase,"
+            f"crop={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT},"
             f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:{color},setsar=1"
         )
     elif layout == RenderLayout.FIT:

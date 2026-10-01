@@ -806,9 +806,12 @@ h2 {
   background-size: cover;
 }
 
-.caption-sample-fit .caption-sample-frame,
-.caption-sample-stage .caption-sample-frame {
+.caption-sample-fit .caption-sample-frame {
   background-size: contain;
+}
+
+.caption-sample-stage .caption-sample-frame {
+  background-size: cover;
 }
 
 .caption-sample-stage {

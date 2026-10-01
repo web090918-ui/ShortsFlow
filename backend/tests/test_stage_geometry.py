@@ -22,11 +22,12 @@ def test_stage_keeps_source_out_of_text_bands(size: str) -> None:
         check=True, capture_output=True, timeout=30,
     ).stdout
 
-    def pixel(y: int) -> tuple[int, ...]:
-        offset = (y * 1080 + 540) * 3
+    def pixel(y: int, x: int = 540) -> tuple[int, ...]:
+        offset = (y * 1080 + x) * 3
         return tuple(frame[offset:offset + 3])
 
     for y in (520, 620, 1300, 1740):
         assert min(pixel(y)) >= 245, (size, y, pixel(y))
-    red, green, blue = pixel(960)
-    assert red > 240 and green < 15 and blue < 15
+    for x in (0, 540, 1079):
+        red, green, blue = pixel(960, x)
+        assert red > 240 and green < 15 and blue < 15, (size, x)
