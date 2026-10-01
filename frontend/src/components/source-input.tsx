@@ -867,7 +867,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
               </label>
 
               <button
-                className="submit-button"
+                className="submit-button video-create-action"
                 type="button"
                 onClick={handleAnalyze}
                 disabled={
@@ -886,7 +886,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
               </button>
 
               <button
-                className="submit-button secondary-button"
+                className="submit-button secondary-button video-create-action"
                 type="button"
                 onClick={handleDirectRender}
                 disabled={

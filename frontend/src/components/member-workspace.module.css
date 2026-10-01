@@ -155,6 +155,9 @@
 .workspace :global(.project-status-processing) { background:#fce6df; }
 .workspace :global(.submit-button) { background:#c92810; color:#fff; }
 .workspace :global(.secondary-button) { background:#fff; color:#b52418; border-color:#d8b5ae; }
+.workspace .studio :global(.video-create-action) { background:var(--accent); color:#fff; border:1px solid var(--accent); }
+.workspace .studio :global(.video-create-action.secondary-button) { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+.workspace .studio :global(.video-create-action:disabled) { opacity:1; cursor:not-allowed; }
 .workspace :global(.credit-card) { margin-top:28px; }
 .workspace :global(.credit-heading),.workspace :global(.section-label) { color:#b52418; }
 @media(max-width:1000px) { .workspace { grid-template-columns:205px minmax(0,1fr); } .sidebar { padding-inline:14px; } .content { padding:24px; } .welcome { padding:24px; } }
