@@ -252,15 +252,16 @@ h2 {
   margin-top: 0.3rem;
 }
 
-.source-result-header span {
+.source-result-header > span {
   color: var(--accent);
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-/* Preview text is styled inline by the picker; keep page rules out of it. */
-.caption-sample span,
-.caption-sample b {
+/* Only text runs inherit typography; each preview block owns its own size/weight. */
+.caption-sample-headline-line,
+.caption-sample-headline-line > span,
+.caption-sample-caption > span {
   color: inherit;
   font-size: inherit;
   font-weight: inherit;

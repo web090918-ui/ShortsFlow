@@ -192,20 +192,20 @@ h1, h2, h3, p { word-break: keep-all; overflow-wrap: anywhere; }
 .template-card[aria-pressed="true"] .template-selection-mark { color: var(--accent); }
 .template-card:focus-visible, .template-browse button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* Use the same 1080 × 1920 stage coordinates as the renderer. */
-.caption-sample { container-type: inline-size; }
+.caption-sample { container-type: inline-size; line-height: 1.3; letter-spacing: normal; }
 .caption-sample .caption-sample-headline { font-size: 7.04cqw; }
 .caption-sample .caption-sample-caption { position: absolute; margin: 0; bottom: 22.9167%; }
 .caption-sample-fill .caption-sample-caption { bottom: 15.625%; }
 .caption-sample-middle .caption-sample-caption { bottom: auto; top: 50%; transform: translateY(-50%); }
-.caption-sample .caption-sample-channel { top: 69.43%; font-size: 3.15cqw; gap: 2cqw; max-width: 88%; overflow: hidden; }
+.caption-sample .caption-sample-channel { top: 69.43%; font-size: 3.15cqw; gap: 2cqw; max-width: 84%; overflow: hidden; white-space: nowrap; }
 .caption-sample-channel i { width: 4cqw; height: 4cqw; flex-shrink: 0; }
 .caption-sample-social .caption-sample-headline { top: 20.8333%; font-size: 5.74cqw; }
 .caption-sample-social .caption-sample-channel { top: 17.1875%; }
-.caption-sample-social .caption-sample-tags { top: 30.2083%; font-size: 3.15cqw; }
+.caption-sample-social .caption-sample-tags { top: 30.2083%; right: 8%; font-size: 3.15cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .caption-sample-community .caption-sample-headline { top: 15.625%; font-size: 5.56cqw; }
 .caption-sample-community .caption-sample-channel { top: 23.9583%; }
 .caption-sample .caption-sample-band { height: 10.4167%; display: grid; place-items: center; padding: 0; font-size: 5.56cqw; }
-.caption-sample .caption-sample-kicker { top: 13.02%; font-size: 3.52cqw; }
+.caption-sample .caption-sample-kicker { top: 13.02%; font-size: 3.52cqw; line-height: 1; }
 .caption-sample .caption-sample-pill { top: 10.4167%; width: 57.4%; height: 4.375%; display: grid; place-items: center; padding: 0; font-size: 4.26cqw; border-radius: 1.2cqw; }
 .caption-sample-stage .caption-sample-placeholder, .caption-sample-fit .caption-sample-placeholder { top: 34.1667%; bottom: 34.21875%; }
 .caption-sample-placeholder { background: linear-gradient(135deg, #647078, #30383e); }
