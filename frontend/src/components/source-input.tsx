@@ -17,7 +17,9 @@ import {
   LayoutPicker,
   TemplatePicker,
 } from "@/components/template-picker";
+import { CandidateScene } from "@/components/candidate-scene";
 import { useRenderOptions } from "@/lib/render-options-context";
+import { youtubeVideoId } from "@/lib/youtube-player";
 import {
   DEFAULT_BRAND_COLOR,
   DEFAULT_CAPTION_POSITION,
@@ -247,6 +249,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
   const topCandidates = analysisJob?.result?.ranking?.top_3 ?? [];
+  const sceneVideoId = source?.type === "YOUTUBE" ? youtubeVideoId(url.trim()) : null;
 
   useEffect(() => {
     if (!file || topCandidates.length === 0) return;
@@ -990,8 +993,15 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                               captionPosition={captionPosition}
                               channelName={channelName}
                               captionText={candidate.hook_text}
+                              scene={
+                                sceneVideoId ? (
+                                  <CandidateScene videoId={sceneVideoId} startSeconds={candidate.start_seconds} />
+                                ) : undefined
+                              }
                             />
-                            <small>{selectedTemplate.name} · 선택한 옵션 기준</small>
+                            <small>
+                              {selectedTemplate.name} · {sceneVideoId ? "시작 장면 · 누르면 재생" : "선택한 옵션 기준"}
+                            </small>
                           </div>
                         ) : null}
                         <div className="candidate-body">

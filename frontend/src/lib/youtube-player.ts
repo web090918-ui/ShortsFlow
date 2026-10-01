@@ -5,6 +5,7 @@ export type YouTubePlayer = {
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   playVideo(): void;
   pauseVideo(): void;
+  mute(): void;
   destroy(): void;
 };
 
@@ -13,7 +14,15 @@ export type YouTubeAPI = {
     videoId: string;
     width: string;
     height: string;
-    playerVars: { origin: string; playsinline: number; rel: number };
+    playerVars: {
+      origin: string;
+      playsinline: number;
+      rel: number;
+      controls?: number;
+      mute?: number;
+      start?: number;
+      modestbranding?: number;
+    };
     events: {
       onReady(event: { target: YouTubePlayer }): void;
       onError(): void;

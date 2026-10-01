@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, type CSSProperties } from "react";
+import { useId, useRef, type CSSProperties, type ReactNode } from "react";
 
 import { headlineLines, isLightColor, longestWord } from "@/lib/render-options";
 import type { BrandSwatch, CaptionPosition, CaptionTemplate, FrameLayout } from "@/lib/render-options";
@@ -29,6 +29,8 @@ type SampleProps = {
   channelName?: string | null;
   /** Caption line to show instead of the demo words (e.g. a candidate's hook). */
   captionText?: string | null;
+  /** Live scene (e.g. a paused YouTube player) drawn in the picture band over the still frame. */
+  scene?: ReactNode;
 };
 
 function Frame({ imageUrl, layout }: { imageUrl: string | null; layout: LayoutId }) {
@@ -58,6 +60,7 @@ export function CaptionSample({
   captionPosition = "BOTTOM",
   channelName,
   captionText,
+  scene,
 }: SampleProps) {
   const { preview } = template;
   const words = captionText?.trim() ? captionText.trim().split(/\s+/).slice(0, 8) : SAMPLE_WORDS;
@@ -96,6 +99,7 @@ export function CaptionSample({
       aria-hidden="true"
     >
       <Frame imageUrl={imageUrl} layout={layout} />
+      {scene ? <span className="caption-sample-scene">{scene}</span> : null}
       {onStage && preview.headerBand ? (
         <span className="caption-sample-band" style={{ background: brandColor, color: "#222" }}>
           {preview.headerBand}
