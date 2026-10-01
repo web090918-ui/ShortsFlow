@@ -66,7 +66,11 @@ export async function putUpload(target: UploadTarget, file: File): Promise<void>
  * show the viewer's own footage before anything is uploaded. Resolves null when
  * the browser cannot decode the file (the pickers then show a neutral frame).
  */
-export function captureVideoFrame(file: File, timeoutMs = 8000): Promise<string | null> {
+export function captureVideoFrame(
+  file: File,
+  atSeconds: number | null = null,
+  timeoutMs = 8000,
+): Promise<string | null> {
   return new Promise((resolve) => {
     if (typeof document === "undefined") {
       resolve(null);
@@ -87,8 +91,12 @@ export function captureVideoFrame(file: File, timeoutMs = 8000): Promise<string 
     video.muted = true;
     video.playsInline = true;
     video.onloadedmetadata = () => {
-      // Skip the first frames, which are often black or a title card.
-      const target = Number.isFinite(video.duration) ? Math.min(1.5, video.duration / 3) : 0;
+      // A requested time wins; otherwise skip the first frames, which are often black.
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const target =
+        atSeconds !== null && Number.isFinite(atSeconds)
+          ? Math.min(Math.max(0, atSeconds), Math.max(0, duration - 0.1))
+          : Math.min(1.5, duration / 3);
       video.currentTime = target;
     };
     video.onseeked = () => {

@@ -1052,8 +1052,13 @@ h2 {
   .layout-options,
   .position-options,
   .language-grid,
-  .field-row {
+  .field-row,
+  .candidate-card.with-preview {
     grid-template-columns: 1fr;
+  }
+
+  .candidate-preview {
+    max-width: 180px;
   }
 
   .project-hero {
@@ -1193,6 +1198,45 @@ h2 {
   float: right;
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.candidate-card.with-preview {
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: start;
+}
+
+.candidate-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.candidate-preview .caption-sample {
+  border-radius: 10px;
+}
+
+.candidate-preview small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-align: center;
+}
+
+.candidate-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.candidate-title {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.4;
+}
+
+.candidate-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .candidate-card.selected {

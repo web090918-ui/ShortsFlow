@@ -27,6 +27,8 @@ type SampleProps = {
   brandColor?: string;
   captionPosition?: PositionId;
   channelName?: string | null;
+  /** Caption line to show instead of the demo words (e.g. a candidate's hook). */
+  captionText?: string | null;
 };
 
 function Frame({ imageUrl, layout }: { imageUrl: string | null; layout: LayoutId }) {
@@ -55,8 +57,12 @@ export function CaptionSample({
   brandColor = DEFAULT_BRAND,
   captionPosition = "BOTTOM",
   channelName,
+  captionText,
 }: SampleProps) {
   const { preview } = template;
+  const words = captionText?.trim() ? captionText.trim().split(/\s+/).slice(0, 8) : SAMPLE_WORDS;
+  const spokenIndex = captionText?.trim() ? Math.min(1, words.length - 1) : SPOKEN_INDEX;
+  const popWord = longestWord(words.join(" "));
   const onStage = layout === "STAGE";
   const stageColor = onStage ? (preview.stage ?? "#000000") : "#000000";
   const light = onStage && isLightColor(stageColor);
@@ -68,9 +74,8 @@ export function CaptionSample({
   const channel = channelName?.trim() || SAMPLE_CHANNEL;
   const channelLabel = channel.length > 20 ? `${channel.slice(0, 20)}…` : channel;
   const captionWordStyle = (index: number): CSSProperties | undefined => {
-    if (captionKind === "karaoke" && index === SPOKEN_INDEX) return { color: brandColor };
-    if (captionKind === "pop" && SAMPLE_WORDS[index] === longestWord(SAMPLE_WORDS.join(" ")))
-      return { color: brandColor };
+    if (captionKind === "karaoke" && index === spokenIndex) return { color: brandColor };
+    if (captionKind === "pop" && words[index] === popWord) return { color: brandColor };
     return undefined;
   };
   const captionBase: CSSProperties = {
@@ -138,10 +143,10 @@ export function CaptionSample({
       ) : null}
       {captionKind !== "none" ? (
         <b className="caption-sample-caption" style={captionBase}>
-          {SAMPLE_WORDS.map((word, index) => (
-            <span key={word} style={captionWordStyle(index)}>
+          {words.map((word, index) => (
+            <span key={`${index}-${word}`} style={captionWordStyle(index)}>
               {word}
-              {index < SAMPLE_WORDS.length - 1 ? " " : ""}
+              {index < words.length - 1 ? " " : ""}
             </span>
           ))}
         </b>

@@ -13,6 +13,7 @@ import { useAuthStatus } from "@/lib/auth-context";
 import {
   BrandColorPicker,
   CaptionPositionPicker,
+  CaptionSample,
   LayoutPicker,
   TemplatePicker,
 } from "@/components/template-picker";
@@ -216,6 +217,8 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const [title, setTitle] = useState("");
   // One frame of the chosen file, shown inside the template previews.
   const [sampleFrame, setSampleFrame] = useState<string | null>(null);
+  // Frames at each Top 3 candidate's start (uploads only; YouTube falls back to the thumbnail).
+  const [candidateFrames, setCandidateFrames] = useState<Record<string, string>>({});
   const renderOptions = useRenderOptions();
   const [transcriptLanguage, setTranscriptLanguage] = useState("ko");
   const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
@@ -244,6 +247,26 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
   const topCandidates = analysisJob?.result?.ranking?.top_3 ?? [];
+
+  useEffect(() => {
+    if (!file || topCandidates.length === 0) return;
+    let cancelled = false;
+    const capture = currentFrameCapturer();
+    (async () => {
+      const frames: Record<string, string> = {};
+      for (const candidate of topCandidates) {
+        const frame = await capture(file, candidate.start_seconds + 1).catch(() => null);
+        if (cancelled) return;
+        if (frame) frames[candidate.candidate_id] = frame;
+      }
+      if (!cancelled) setCandidateFrames(frames);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Re-run only when a new Top 3 arrives for the chosen file.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, analysisJob?.id, topCandidates.length]);
 
   useEffect(() => {
     if (isTerminalAnalysis(analysisJob)) return;
@@ -950,11 +973,28 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                     const isSelected =
                       renderJob?.candidate_id === candidate.candidate_id ||
                       (!renderJob && pickedCandidate?.candidate_id === candidate.candidate_id);
+                    const suggestedTitle = candidate.title?.trim() || title.trim() || candidate.hook_text;
                     return (
                       <article
                         key={candidate.candidate_id}
-                        className={isSelected ? "candidate-card selected" : "candidate-card"}
+                        className={isSelected ? "candidate-card with-preview selected" : "candidate-card with-preview"}
                       >
+                        {selectedTemplate ? (
+                          <div className="candidate-preview" aria-label={`${candidate.rank}위 미리보기`}>
+                            <CaptionSample
+                              template={selectedTemplate}
+                              layout={layoutId}
+                              imageUrl={candidateFrames[candidate.candidate_id] ?? sampleImageUrl}
+                              title={suggestedTitle}
+                              brandColor={brandColor}
+                              captionPosition={captionPosition}
+                              channelName={channelName}
+                              captionText={candidate.hook_text}
+                            />
+                            <small>{selectedTemplate.name} · 선택한 옵션 기준</small>
+                          </div>
+                        ) : null}
+                        <div className="candidate-body">
                         <header>
                           <span className="candidate-rank">#{candidate.rank}</span>
                           <span className="ai-score">
@@ -966,6 +1006,12 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                             {Math.round(candidate.duration_seconds)}초
                           </span>
                         </header>
+                        {candidate.title ? (
+                          <h4 className="candidate-title">{candidate.title.replace(/[[\]]/g, "")}</h4>
+                        ) : null}
+                        {candidate.description ? (
+                          <p className="candidate-description">{candidate.description}</p>
+                        ) : null}
                         <p className="candidate-hook">“{candidate.hook_text}”</p>
                         <p className="candidate-reason">{candidate.reason}</p>
                         {candidate.strengths.length > 0 ? (
@@ -988,6 +1034,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
                               ? "선택됨 · 아래에서 제목 확인"
                               : "이 구간 선택"}
                         </button>
+                        </div>
                       </article>
                     );
                   })}
