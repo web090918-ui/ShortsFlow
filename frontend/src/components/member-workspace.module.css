@@ -41,6 +41,17 @@
 .studioFormat { position:absolute; top:4px; right:0; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; font-size:12px; font-weight:700; color:var(--muted); }
 .studio :global(.source-panel),.studio :global(.range-picker),.studio :global(.candidate-card),.studio :global(.template-card),.studio :global(.position-card),.studio :global(.language-card),.studio :global(.render-options-row),.studio :global(.short-meta),.studio :global(.download-status) { background:#fff; color:var(--text); }
 .studio :global(.rights-confirmation) { background:#fff; }
+.workspace :global(.source-result) { background:#fff; color:var(--text); border:1px solid var(--line); }
+.workspace :global(.source-player) { background:#f8f8fa; color:var(--text); border-color:var(--line); }
+.workspace :global(.source-player-heading strong),.workspace :global(.source-metadata strong) { color:var(--text); }
+.workspace :global(.source-player-heading a),.workspace :global(.source-player-help),.workspace :global(.source-player-actions > span) { color:#68666c; }
+.workspace :global(.source-player-actions button) { background:#fff; color:#242326; border-color:#c9c6cc; }
+.workspace :global(.source-player-actions button:last-child) { background:#c92810; border-color:#c92810; color:#fff; }
+.workspace :global(.source-player-actions button:not(:disabled):hover) { background:#fff1ed; border-color:#c92810; color:#9f2815; }
+.workspace :global(.source-player-actions button:disabled) { background:#eeeef1; color:#85818a; border-color:#dedce1; opacity:1; }
+.studio :global(.source-range-workspace) { background:#fff; }
+.studio :global(.output-ratio-label),.studio :global(.stepper li.done span) { background:#fff0ed; color:#a72613; }
+.workspace :global(.range-error),.workspace :global(.error-message) { color:#a72613; }
 .studio :global(.stepper li.current) { color:#b52418; }
 .studio :global(.ai-score),.studio :global(.work-kind),.studio :global(.template-card > strong em) { background:#fff0ed; color:#b52418; }
 .studio :global(.template-card[aria-pressed="true"]),.studio :global(.position-card[aria-pressed="true"]),.studio :global(.candidate-card.selected),.studio :global(.short-meta) { border-color:#c92810; box-shadow:0 0 0 1px #c92810; }
