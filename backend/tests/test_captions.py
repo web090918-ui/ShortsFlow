@@ -304,7 +304,7 @@ def test_stage_compositions_draw_brand_chrome_and_channel_line() -> None:
 
     # Brand red (#FF4D4F -> &H004F4DFF) colours the second title line and the spoken word.
     assert headline.endswith("AI가 고른 오늘의\\N{\\1c&H004F4DFF}핵심 장면{\\1c&H00FFFFFF}")
-    assert channel.startswith("Dialogue: 2,0:00:00.00,0:00:10.00,Chrome,,0,0,0,,{\\an5\\pos(540,1333)}")
+    assert channel.startswith("Dialogue: 2,0:00:00.00,0:00:10.00,Chrome,,0,0,0,,{\\an5\\pos(540,1740)\\q2}")
     assert "{\\1c&H004F4DFF}바로{\\1c&H00FFFFFF}" in karaoke[1]
     # MIDDLE puts the caption style at the frame centre.
     assert next(line for line in lines if line.startswith("Style: Default")).endswith(",5,90,90,0,1")
@@ -331,6 +331,8 @@ def test_light_stage_templates_use_dark_text_and_chrome() -> None:
     assert "\\1c&H00E1E14F&" in pill  # default aqua brand behind the tag pill
     assert any("다시 보게 되는 순간" in line for line in lines)
     assert any("#하이라이트 #오늘의영상 #쇼츠" in line for line in lines)
+    assert any("\\pos(90,520)" in line and "#하이라이트" in line for line in lines)
+    assert any("\\pos(540,1740)" in line and "컷픽" in line for line in lines)
     # Over video (FILL) the same template falls back to white text with a dark outline.
     over_video = build_ass(
         _cues(), template=RenderTemplate.SNS_CARD, clip_start_seconds=100, clip_end_seconds=120, layout=RenderLayout.FILL

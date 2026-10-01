@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from app.templates import RenderLayout
+from app.templates import RenderLayout, STAGE_PICTURE_HEIGHT
 
 
 SHORT_WIDTH = 1080
@@ -76,7 +76,7 @@ def _vertical_filter(
         # above and a caption below.
         color = "0x" + stage_color.lstrip("#")
         chain = (
-            f"scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=decrease,"
+            f"scale={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT}:force_original_aspect_ratio=decrease,"
             f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:{color},setsar=1"
         )
     elif layout == RenderLayout.FIT:

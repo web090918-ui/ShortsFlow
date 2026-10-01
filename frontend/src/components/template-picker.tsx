@@ -65,6 +65,8 @@ export function CaptionSample({
   const captionKind = preview.caption ?? "plain";
   const headlineText = (title && title.trim()) || SAMPLE_TITLE;
   const leftAligned = onStage && Boolean(preview.tagline || preview.kicker);
+  const channel = channelName?.trim() || SAMPLE_CHANNEL;
+  const channelLabel = channel.length > 20 ? `${channel.slice(0, 20)}…` : channel;
   const captionWordStyle = (index: number): CSSProperties | undefined => {
     if (captionKind === "karaoke" && index === SPOKEN_INDEX) return { color: brandColor };
     if (captionKind === "pop" && SAMPLE_WORDS[index] === longestWord(SAMPLE_WORDS.join(" ")))
@@ -131,7 +133,7 @@ export function CaptionSample({
       ) : null}
       {preview.channel === "true" && layout !== "FILL" ? (
         <span className="caption-sample-channel" style={{ color: textColor }}>
-          <i /> {channelName?.trim() || SAMPLE_CHANNEL}
+          <i /> {channelLabel}
         </span>
       ) : null}
       {captionKind !== "none" ? (

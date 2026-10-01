@@ -225,17 +225,15 @@ h1, h2, h3, p { word-break: keep-all; overflow-wrap: anywhere; }
 .caption-sample .caption-sample-caption { position: absolute; margin: 0; bottom: 22.9167%; }
 .caption-sample-fill .caption-sample-caption { bottom: 15.625%; }
 .caption-sample-middle .caption-sample-caption { bottom: auto; top: 50%; transform: translateY(-50%); }
-.caption-sample .caption-sample-channel { top: 69.43%; font-size: 3.15cqw; gap: 2cqw; max-width: 84%; overflow: hidden; white-space: nowrap; }
+.caption-sample .caption-sample-channel { top: 90.625%; left: 50%; transform: translate(-50%, -50%); font-size: 4.07cqw; gap: 2cqw; max-width: 84%; overflow: hidden; white-space: nowrap; }
 .caption-sample-channel i { width: 4cqw; height: 4cqw; flex-shrink: 0; }
-.caption-sample-social .caption-sample-headline { top: 20.8333%; font-size: 5.74cqw; }
-.caption-sample-social .caption-sample-channel { top: 17.1875%; }
-.caption-sample-social .caption-sample-tags { top: 30.2083%; right: 8%; font-size: 3.15cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption-sample-social .caption-sample-headline { top: 17.7083%; font-size: 5.74cqw; }
+.caption-sample-social .caption-sample-tags { top: 27.0833%; right: 8%; font-size: 3.33cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .caption-sample-community .caption-sample-headline { top: 15.625%; font-size: 5.56cqw; }
-.caption-sample-community .caption-sample-channel { top: 23.9583%; }
 .caption-sample .caption-sample-band { height: 10.4167%; display: grid; place-items: center; padding: 0; font-size: 5.56cqw; }
 .caption-sample .caption-sample-kicker { top: 13.02%; font-size: 3.52cqw; line-height: 1; }
 .caption-sample .caption-sample-pill { top: 10.4167%; width: 57.4%; height: 4.375%; display: grid; place-items: center; padding: 0; font-size: 4.26cqw; border-radius: 1.2cqw; }
-.caption-sample-stage .caption-sample-placeholder, .caption-sample-fit .caption-sample-placeholder { top: 34.1667%; bottom: 34.21875%; }
+.caption-sample-stage .caption-sample-frame, .caption-sample-fit .caption-sample-placeholder { top: 34.1667%; bottom: 34.1667%; }
 .caption-sample-placeholder { background: linear-gradient(135deg, #647078, #30383e); }
 .caption-sample-placeholder::after { content: "영상 미리보기"; position: absolute; inset: 0; display: grid; place-items: center; color: #e0e4e8; font-size: 5cqw; }
 @media (max-width: 600px) { .template-scroll .template-card { flex-basis: 196px; padding: 10px; } }

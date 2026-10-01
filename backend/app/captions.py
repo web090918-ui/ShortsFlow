@@ -14,21 +14,21 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.templates import CaptionPosition, RenderLayout, RenderTemplate
+from app.templates import CaptionPosition, RenderLayout, RenderTemplate, STAGE_PICTURE_HEIGHT
 
 
 PLAY_RES_X = 1080
 PLAY_RES_Y = 1920
 MIN_CUE_SECONDS = 0.3
-# A 16:9 source placed whole in the 9:16 frame is 1080x607, centred: y 656..1263.
-PICTURE_TOP = 656
-PICTURE_BOTTOM = 1263
+# Keep all source aspect ratios inside the reserved picture band.
+PICTURE_TOP = (PLAY_RES_Y - STAGE_PICTURE_HEIGHT) // 2
+PICTURE_BOTTOM = PICTURE_TOP + STAGE_PICTURE_HEIGHT
 # Captions in the band under the picture (bottom edge at 1920-440 = 1480).
 BAND_CAPTION_MARGIN_V = 440
 # Headline centred in the band above the picture; overlaid near the top on FILL.
 BAND_HEADLINE_Y = PICTURE_TOP // 2
 FILL_HEADLINE_Y = 230
-CHANNEL_LINE_Y = PICTURE_BOTTOM + 70
+CHANNEL_LINE_Y = 1740
 FILL_CHANNEL_LINE_Y = 1800
 HEADLINE_MARGIN_X = 70
 MAX_TITLE_CHARS = 100
@@ -817,8 +817,8 @@ def _chrome_events(
         keyword = headline_keyword(title)
         text = _coloured(title, keyword, accent, palette.text)
         if palette.on_stage and style.headline_align_left:
-            # Card layouts: kicker (250) or pill (200..284) and channel line sit above.
-            y = 300 if style.kicker else (400 if style.tagline else 280)
+            # Leave space for two title lines and hashtags above the picture.
+            y = 300 if style.kicker else (340 if style.tagline else 280)
             events.append(
                 f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an7\\pos({left_x},{y})}}{text}"
             )
@@ -832,23 +832,20 @@ def _chrome_events(
             )
 
     if palette.on_stage and style.hashtags and description:
-        tags = " ".join(_HASHTAG.findall(description))[:60]
+        tags = " ".join(_HASHTAG.findall(description))
+        tags = tags if len(tags) <= 24 else tags[:24] + "…"
         if tags:
             events.append(
-                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},580)\\1c{palette.brand}}}"
+                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},520)\\q2\\1c{palette.brand}}}"
                 f"{_ass_text(tags)}"
             )
 
     if channel_name and style.channel_line and layout != RenderLayout.FILL:
-        label = f"{{\\fs30}}●{{\\fs36}}  {_ass_text(channel_name)}"
-        if palette.on_stage and (style.tagline or style.kicker):
-            # Card templates: left-aligned under the pill (SNS) or under the title (community).
-            y = 330 if style.tagline else 460
-            events.append(f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},{y})}}{label}")
-        else:
-            events.append(
-                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{CHANNEL_LINE_Y})}}{label}"
-            )
+        channel = channel_name if len(channel_name) <= 20 else channel_name[:20] + "…"
+        label = f"{{\\fs30}}●{{\\fs44}}  {_ass_text(channel)}"
+        events.append(
+            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{CHANNEL_LINE_Y})\\q2}}{label}"
+        )
     return events
 
 

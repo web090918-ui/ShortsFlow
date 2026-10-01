@@ -1,5 +1,8 @@
 from enum import Enum
 
+# Reserved source-picture band within a 1080 x 1920 STAGE composition.
+STAGE_PICTURE_HEIGHT = 608
+
 
 class RenderTemplate(str, Enum):
     """Caption presets carried from selection to rendering.
