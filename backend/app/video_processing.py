@@ -54,6 +54,7 @@ class VideoProcessor(Protocol):
         end_seconds: float,
         subtitles_path: Path | None = None,
         layout: RenderLayout = RenderLayout.FILL,
+        stage_color: str = "#000000",
     ) -> None: ...
 
 
@@ -66,13 +67,17 @@ def _escape_filter_path(path: Path) -> str:
 
 
 def _vertical_filter(
-    subtitles_path: Path | None = None, layout: RenderLayout = RenderLayout.FILL
+    subtitles_path: Path | None = None,
+    layout: RenderLayout = RenderLayout.FILL,
+    stage_color: str = "#000000",
 ) -> str:
     if layout == RenderLayout.STAGE:
-        # Whole frame centred on black: room for a headline above and a caption below.
+        # Whole frame centred on the template's stage colour: room for a headline
+        # above and a caption below.
+        color = "0x" + stage_color.lstrip("#")
         chain = (
             f"scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=decrease,"
-            f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+            f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:{color},setsar=1"
         )
     elif layout == RenderLayout.FIT:
         # Keep the whole source frame (so its own captions and framing survive) and
@@ -236,6 +241,7 @@ class FfmpegVideoProcessor:
         end_seconds: float,
         subtitles_path: Path | None = None,
         layout: RenderLayout = RenderLayout.FILL,
+        stage_color: str = "#000000",
     ) -> None:
         # One encode pass instead of trim followed by convert: same result, half the time.
         self._encode(
@@ -243,7 +249,7 @@ class FfmpegVideoProcessor:
             output_path,
             start_seconds=start_seconds,
             end_seconds=end_seconds,
-            video_filter=_vertical_filter(subtitles_path, layout),
+            video_filter=_vertical_filter(subtitles_path, layout, stage_color),
         )
 
     def _run(self, command: list[str], *, failure: str) -> None:

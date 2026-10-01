@@ -200,7 +200,7 @@ describe("SourceInput", () => {
 
     expect(await screen.findByText("분석할 영상 구간")).toBeTruthy();
     expect(screen.getByText("선택 15:00")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /볼드 박스/ }));
+    await user.click(screen.getByRole("button", { name: /자막 팝형/ }));
     const analyzeButton = screen.getByRole("button", { name: "AI 추천 구간 찾기" });
     expect((analyzeButton as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: /원본 영상 권리 확인/ }));
@@ -222,9 +222,12 @@ describe("SourceInput", () => {
           start_seconds: 0,
           end_seconds: 900,
           rights_confirmed: true,
-          template_id: "BOLD_HIGHLIGHT",
+          template_id: "CAPTION_POP",
           layout_id: "STAGE",
+          brand_color: "#4FE1E1",
+          caption_position: "BOTTOM",
           transcript_language: "ko",
+          output_language: "ko",
         }),
       }),
     );
@@ -324,8 +327,10 @@ describe("SourceInput", () => {
           source_id: "3d81a939-9f07-4a2a-864f-d027b55caec1",
           start_seconds: 0,
           end_seconds: 120,
-          template_id: "HEADLINE_YELLOW",
+          template_id: "CAPTION_ACCENT",
           layout_id: "STAGE",
+          brand_color: "#4FE1E1",
+          caption_position: "BOTTOM",
           rights_confirmed: true,
         }),
       }),

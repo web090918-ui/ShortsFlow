@@ -61,11 +61,19 @@ class StubShortPipeline:
         template=None,
         layout=None,
         title=None,
+        brand_color=None,
+        caption_position=None,
+        channel_name=None,
+        description=None,
     ):
         self.calls.append(
             {
                 "layout": layout,
                 "title": title,
+                "brand_color": brand_color,
+                "caption_position": caption_position,
+                "channel_name": channel_name,
+                "description": description,
                 "job_id": job_id,
                 "url": source_url,
                 "start": start_seconds,
@@ -195,6 +203,10 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "template": "CLEAN_CAPTION",
             "layout": "FILL",
             "title": None,
+            "brand_color": None,
+            "caption_position": "BOTTOM",
+            "channel_name": None,
+            "description": None,
         }
     ]
 

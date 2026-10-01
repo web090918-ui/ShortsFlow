@@ -9,10 +9,24 @@ import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
-import { LayoutPicker, TemplatePicker } from "@/components/template-picker";
+import {
+  AspectRatioChips,
+  BrandColorPicker,
+  CaptionPositionPicker,
+  LayoutPicker,
+  TemplatePicker,
+} from "@/components/template-picker";
 import { useRenderOptions } from "@/lib/render-options-context";
-import { DEFAULT_LAYOUT_ID, DEFAULT_TEMPLATE_ID } from "@/lib/render-options";
-import type { FrameLayout } from "@/lib/render-options";
+import {
+  ASPECT_RATIOS,
+  DEFAULT_BRAND_COLOR,
+  DEFAULT_CAPTION_POSITION,
+  DEFAULT_LAYOUT_ID,
+  DEFAULT_TEMPLATE_ID,
+  OUTPUT_LANGUAGES,
+  SOURCE_LANGUAGES,
+} from "@/lib/render-options";
+import type { CaptionPosition, FrameLayout } from "@/lib/render-options";
 import { currentDurationReader, currentFrameCapturer, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
 
@@ -196,6 +210,9 @@ export function SourceInput() {
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [layoutId, setLayoutId] = useState<FrameLayout["id"]>(DEFAULT_LAYOUT_ID);
+  const [brandColor, setBrandColor] = useState(DEFAULT_BRAND_COLOR);
+  const [captionPosition, setCaptionPosition] = useState<CaptionPosition["id"]>(DEFAULT_CAPTION_POSITION);
+  const [outputLanguage, setOutputLanguage] = useState("ko");
   // Headline drawn on top of the Short; [brackets] mark the coloured keyword.
   const [title, setTitle] = useState("");
   // One frame of the chosen file, shown inside the template previews.
@@ -219,6 +236,8 @@ export function SourceInput() {
     source?.metadata?.upload?.duration_seconds ??
     null;
   const sampleImageUrl = source?.metadata?.youtube?.thumbnail_url ?? sampleFrame;
+  const channelName = source?.metadata?.youtube?.channel_title ?? authStatus.user?.name ?? null;
+  const selectedTemplate = renderOptions.templates.find((template) => template.id === templateId);
   const [uploadStep, setUploadStep] = useState<string | null>(null);
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
@@ -320,6 +339,8 @@ export function SourceInput() {
           template_id: templateId,
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
+          brand_color: brandColor,
+          caption_position: captionPosition,
           rights_confirmed: true,
         }),
       });
@@ -456,7 +477,10 @@ export function SourceInput() {
           template_id: templateId,
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
+          brand_color: brandColor,
+          caption_position: captionPosition,
           transcript_language: transcriptLanguage,
+          output_language: outputLanguage,
         }),
       });
       setAnalysisJob(await readJsonResponse<AnalysisJob>(response));
@@ -739,18 +763,46 @@ export function SourceInput() {
                 {costHint(authStatus, rangeDuration)}
               </p>
 
-              <label className="field language-field">
-                <span>영상 언어</span>
-                <select
-                  aria-label="영상 언어"
-                  value={transcriptLanguage}
-                  onChange={(event) => setTranscriptLanguage(event.target.value)}
-                >
-                  <option value="ko">한국어</option>
-                  <option value="en">English</option>
-                  <option value="ja">日本語</option>
-                </select>
-              </label>
+              <section className="language-card" aria-labelledby="language-heading">
+                <h4 id="language-heading">언어 선택</h4>
+                <div className="language-grid">
+                  <label className="field language-field">
+                    <span>
+                      영상 언어
+                      <small>원본 영상에서 사용하는 음성 언어</small>
+                    </span>
+                    <select
+                      aria-label="영상 언어"
+                      value={transcriptLanguage}
+                      onChange={(event) => setTranscriptLanguage(event.target.value)}
+                    >
+                      {SOURCE_LANGUAGES.map((language) => (
+                        <option key={language.id} value={language.id}>
+                          {language.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field language-field">
+                    <span>
+                      제작 언어
+                      <small>제목·설명·AI 추천 이유에 사용할 언어</small>
+                    </span>
+                    <select
+                      aria-label="제작 언어"
+                      value={outputLanguage}
+                      onChange={(event) => setOutputLanguage(event.target.value)}
+                    >
+                      {OUTPUT_LANGUAGES.map((language) => (
+                        <option key={language.id} value={language.id}>
+                          {language.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <p className="range-help">원본 음성과 영상에 이미 들어간 글자는 유지됩니다.</p>
+              </section>
 
               <label className="field title-field">
                 <span>쇼츠 제목 (선택)</span>
@@ -764,13 +816,6 @@ export function SourceInput() {
                 />
               </label>
 
-              <LayoutPicker
-                layouts={renderOptions.layouts}
-                value={layoutId}
-                onChange={setLayoutId}
-                imageUrl={sampleImageUrl}
-              />
-
               <TemplatePicker
                 templates={renderOptions.templates}
                 value={templateId}
@@ -778,6 +823,32 @@ export function SourceInput() {
                 layout={layoutId}
                 imageUrl={sampleImageUrl}
                 title={title}
+                brandColor={brandColor}
+                captionPosition={captionPosition}
+                channelName={channelName}
+              />
+
+              <div className="render-options-row">
+                <AspectRatioChips ratios={ASPECT_RATIOS} />
+                <BrandColorPicker
+                  swatches={renderOptions.brand_colors}
+                  value={brandColor}
+                  onChange={setBrandColor}
+                />
+              </div>
+
+              <CaptionPositionPicker
+                positions={renderOptions.caption_positions}
+                value={captionPosition}
+                onChange={setCaptionPosition}
+              />
+
+              <LayoutPicker
+                layouts={renderOptions.layouts}
+                value={layoutId}
+                onChange={setLayoutId}
+                imageUrl={sampleImageUrl}
+                stageColor={selectedTemplate?.preview.stage ?? "#000000"}
               />
 
               <label className="rights-confirmation">

@@ -136,3 +136,36 @@ Short is made.
 - `/video`: a Top 3 card now says "이 구간 선택"; picking one opens a "제목과 설명" panel
   prefilled with the suggestions (counters 100 / 500), and "이 제목으로 쇼츠 만들기"
   sends the edited values. The title doubles as the on-video headline.
+
+## Compositions, brand colour, caption position, languages (same day, fourth pass)
+
+The owner compared the options screen with EasyCut's and asked for its template set
+and controls. What changed:
+
+- **Templates** are now compositions on a stage: `CAPTION_POP` (big caption, longest
+  word in brand colour), `CAPTION_ACCENT` (karaoke: spoken word in brand colour),
+  `DARK_MINIMAL` (no caption), `PAPER` (cream stage, dark text), `SNS_CARD` (white
+  stage, tag pill, channel line, left-aligned title, hashtags from the description) and
+  `COMMUNITY` (white stage, "오늘의 화제" band, "실시간 베스트" kicker). Every earlier id
+  stays valid but unlisted. A channel line (YouTube channel or the signed-in creator's
+  name) is drawn under the picture for the new templates.
+- **Stage colour** comes from the template (`CaptionStyle.stage_color`) and is passed to
+  the FFmpeg `pad` filter; over video (`FIT`/`FILL`) light-stage text falls back to
+  white with a dark outline so it stays readable.
+- **Brand colour** (`brand_color`, hex) replaces the fixed keyword colours: headline
+  keyword, karaoke/pop word, pill and band. Swatches (레드, 코랄, 골드, 아쿠아 default,
+  블루) plus a custom colour input; served in `GET /templates` as `brand_colors`.
+- **Caption position** (`caption_position`: `BOTTOM` under the picture, `MIDDLE` over
+  its centre) on analysis and render jobs; catalog in `caption_positions`.
+- **Languages**: `transcript_language` accepts `auto` (Titan default caption track, then
+  Whisper language detection) and `output_language` drives the AI's title, description
+  and reasons per job (ranker `reason_language` override).
+- **Aspect ratio**: only 9:16 renders; the picker shows 16:9/5:4/1:1/4:5 as 준비 중.
+  Supporting them means generalising `SHORT_WIDTH/HEIGHT`, ASS PlayRes and the
+  compositions; left for a later task.
+- `/video` options panel: 언어 선택 card, horizontal template strip with live previews
+  (brand colour, caption position, channel line, typed title), 영상 비율 chips, 브랜드
+  컬러 swatches, 자막 위치 cards, then 화면 배치 and the rights checkbox.
+- Checks: backend 181 `pytest`, frontend 30 `vitest`, lint and `next build`; all six
+  compositions rendered with real FFmpeg (brand red/aqua, karaoke, middle caption,
+  light stages) and inspected.

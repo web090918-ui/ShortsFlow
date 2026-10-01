@@ -42,11 +42,14 @@ def test_select_cues_trims_overlaps_so_one_cue_shows_at_a_time() -> None:
 
 
 def test_build_ass_uses_clip_relative_times_and_template_style() -> None:
+    from app.templates import RenderLayout
+
     document = build_ass(
         _cues(),
         template=RenderTemplate.BOLD_HIGHLIGHT,
         clip_start_seconds=100,
         clip_end_seconds=120,
+        layout=RenderLayout.FILL,
     )
 
     assert "PlayResX: 1080" in document and "PlayResY: 1920" in document
@@ -62,12 +65,15 @@ def test_build_ass_uses_clip_relative_times_and_template_style() -> None:
 
 
 def test_every_template_renders_a_distinct_document() -> None:
+    from app.templates import RenderLayout
+
     documents = {
         template: build_ass(
             _cues(),
             template=template,
             clip_start_seconds=100,
             clip_end_seconds=120,
+            layout=RenderLayout.FILL,
             title="이 장면 하나로 [채널]이 달라집니다",
         )
         for template in RenderTemplate
@@ -86,8 +92,14 @@ def test_every_template_renders_a_distinct_document() -> None:
 def test_build_ass_with_long_clip_formats_hours() -> None:
     cues = [CaptionCue(start_seconds=3700, end_seconds=3705, text="한 시간 뒤")]
 
+    from app.templates import RenderLayout
+
     document = build_ass(
-        cues, template=RenderTemplate.CLEAN_CAPTION, clip_start_seconds=0, clip_end_seconds=3800
+        cues,
+        template=RenderTemplate.CLEAN_CAPTION,
+        clip_start_seconds=0,
+        clip_end_seconds=3800,
+        layout=RenderLayout.FILL,
     )
 
     assert "Dialogue: 1,1:01:40.00,1:01:45.00,Default,,0,0,0,,한 시간 뒤" in document
@@ -131,9 +143,9 @@ def test_karaoke_template_emits_one_event_per_word_with_the_spoken_word_coloured
     dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
 
     assert dialogues == [
-        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H003FD2FF}오늘{\\r} 핵심 장면",
-        "Dialogue: 1,0:00:01.00,0:00:02.00,Default,,0,0,0,,오늘 {\\1c&H003FD2FF}핵심{\\r} 장면",
-        "Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0,0,0,,오늘 핵심 {\\1c&H003FD2FF}장면{\\r}",
+        "Dialogue: 1,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\1c&H003FD2FF}오늘{\\1c&H00FFFFFF} 핵심 장면",
+        "Dialogue: 1,0:00:01.00,0:00:02.00,Default,,0,0,0,,오늘 {\\1c&H003FD2FF}핵심{\\1c&H00FFFFFF} 장면",
+        "Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0,0,0,,오늘 핵심 {\\1c&H003FD2FF}장면{\\1c&H00FFFFFF}",
     ]
 
 
@@ -144,7 +156,8 @@ def test_karaoke_template_without_word_timings_falls_back_to_whole_cue() -> None
     dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
 
     assert len(dialogues) == 3
-    assert dialogues[0].endswith(",,앞부분 자막")
+    # No word timings: the whole cue shows, with its longest word in the highlight colour.
+    assert dialogues[0].endswith(",,{\\1c&H004FFFD7}앞부분{\\1c&H00FFFFFF} 자막")
 
 
 def test_neon_template_applies_blur_to_every_event() -> None:
@@ -182,8 +195,14 @@ def test_select_cues_clamps_word_timings_to_the_clip() -> None:
 
 
 def test_news_bar_draws_a_full_width_band_under_each_cue() -> None:
+    from app.templates import RenderLayout
+
     document = build_ass(
-        _cues(), template=RenderTemplate.NEWS_BAR, clip_start_seconds=100, clip_end_seconds=120
+        _cues(),
+        template=RenderTemplate.NEWS_BAR,
+        clip_start_seconds=100,
+        clip_end_seconds=120,
+        layout=RenderLayout.FILL,
     )
     dialogues = [line for line in document.splitlines() if line.startswith("Dialogue:")]
 
@@ -192,7 +211,7 @@ def test_news_bar_draws_a_full_width_band_under_each_cue() -> None:
     assert len(bars) == len(texts) == 3
     # Band: layer 0, full PlayResX width, centred on the text (MarginV 240, font 58).
     assert bars[0].startswith(
-        r"Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\an7\pos(0,1586)\1c&H202020&"
+        r"Dialogue: 0,0:00:00.00,0:00:01.00,Chrome,,0,0,0,,{\an7\pos(0,1586)\1c&H202020&"
     )
     assert "m 0 0 l 1080 0 l 1080 130 l 0 130" in bars[0]
     assert texts[0].startswith("Dialogue: 1,0:00:00.00,0:00:01.00,")
@@ -251,3 +270,79 @@ def test_headline_box_template_uses_an_opaque_box_style() -> None:
 
     assert ",-1,0,0,0,100,100,0,0,3,18,0,5,70,70,0,1" in headline_style
     assert ",Headline,," not in document  # no title, no headline event
+
+
+def test_stage_compositions_draw_brand_chrome_and_channel_line() -> None:
+    from app.captions import CaptionWord
+    from app.templates import CaptionPosition, RenderLayout
+
+    cue = CaptionCue(
+        start_seconds=10.0,
+        end_seconds=13.0,
+        text="이게 바로 자막입니다",
+        words=[
+            CaptionWord(start_seconds=10.0, end_seconds=11.0, text="이게"),
+            CaptionWord(start_seconds=11.0, end_seconds=12.0, text="바로"),
+            CaptionWord(start_seconds=12.0, end_seconds=13.0, text="자막입니다"),
+        ],
+    )
+    document = build_ass(
+        [cue],
+        template=RenderTemplate.CAPTION_ACCENT,
+        clip_start_seconds=10,
+        clip_end_seconds=20,
+        layout=RenderLayout.STAGE,
+        title="AI가 고른 오늘의\n핵심 장면",
+        brand_color="#FF4D4F",
+        caption_position=CaptionPosition.MIDDLE,
+        channel_name="강철 멘탈 동기부여_박민호",
+    )
+    lines = document.splitlines()
+    headline = next(line for line in lines if ",Headline,," in line)
+    channel = next(line for line in lines if "강철 멘탈" in line)
+    karaoke = [line for line in lines if line.startswith("Dialogue: 1,")]
+
+    # Brand red (#FF4D4F -> &H004F4DFF) colours the second title line and the spoken word.
+    assert headline.endswith("AI가 고른 오늘의\\N{\\1c&H004F4DFF}핵심 장면{\\1c&H00FFFFFF}")
+    assert channel.startswith("Dialogue: 2,0:00:00.00,0:00:10.00,Chrome,,0,0,0,,{\\an5\\pos(540,1333)}")
+    assert "{\\1c&H004F4DFF}바로{\\1c&H00FFFFFF}" in karaoke[1]
+    # MIDDLE puts the caption style at the frame centre.
+    assert next(line for line in lines if line.startswith("Style: Default")).endswith(",5,90,90,0,1")
+
+
+def test_light_stage_templates_use_dark_text_and_chrome() -> None:
+    from app.templates import RenderLayout
+
+    document = build_ass(
+        _cues(),
+        template=RenderTemplate.SNS_CARD,
+        clip_start_seconds=100,
+        clip_end_seconds=120,
+        layout=RenderLayout.STAGE,
+        title="무심코 넘기려다가 끝까지 보게 되는 장면",
+        channel_name="컷픽",
+        description="가장 재미있던 순간만 모았어요 #하이라이트 #오늘의영상 #쇼츠",
+    )
+    lines = document.splitlines()
+
+    assert "Style: Default,NanumSquareRound,56,&H00222222,&H000000FF,&H00FFFFFF," in document
+    assert "Style: Headline,NanumSquareRound,62,&H00222222," in document
+    pill = next(line for line in lines if "\\p1}" in line)
+    assert "\\1c&H00E1E14F&" in pill  # default aqua brand behind the tag pill
+    assert any("다시 보게 되는 순간" in line for line in lines)
+    assert any("#하이라이트 #오늘의영상 #쇼츠" in line for line in lines)
+    # Over video (FILL) the same template falls back to white text with a dark outline.
+    over_video = build_ass(
+        _cues(), template=RenderTemplate.SNS_CARD, clip_start_seconds=100, clip_end_seconds=120, layout=RenderLayout.FILL
+    )
+    assert "Style: Default,NanumSquareRound,56,&H00FFFFFF,&H000000FF,&H00000000," in over_video
+    assert "다시 보게 되는 순간" not in over_video
+
+
+def test_dark_minimal_draws_no_captions() -> None:
+    document = build_ass(
+        _cues(), template=RenderTemplate.DARK_MINIMAL, clip_start_seconds=100, clip_end_seconds=120, title="제목만"
+    )
+
+    assert not [line for line in document.splitlines() if line.startswith("Dialogue: 1,")]
+    assert ",Headline,," in document

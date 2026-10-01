@@ -60,6 +60,7 @@ class StubProcessor:
         end_seconds,
         subtitles_path=None,
         layout=None,
+        stage_color="#000000",
     ):
         if self.fail:
             raise VideoProcessingError("boom")
@@ -68,6 +69,7 @@ class StubProcessor:
                 "start": start_seconds,
                 "end": end_seconds,
                 "layout": layout,
+                "stage_color": stage_color,
                 "subtitles": subtitles_path.read_text(encoding="utf-8")
                 if subtitles_path is not None
                 else None,
@@ -123,7 +125,13 @@ def test_pipeline_acquires_renders_stores_and_cleans_up() -> None:
     assert artifact.captions_applied == 0
     assert artifact.template_id is None
     assert processor.calls == [
-        {"start": 10.0, "end": 40.0, "layout": RenderLayout.FILL, "subtitles": None}
+        {
+            "start": 10.0,
+            "end": 40.0,
+            "layout": RenderLayout.FILL,
+            "stage_color": "#000000",
+            "subtitles": None,
+        }
     ]
     assert [stage for stage, _ in stages][:1] == [ShortStage.DOWNLOADING]
     assert ShortStage.PROCESSING in {stage for stage, _ in stages}

@@ -25,9 +25,9 @@ from app.acquisition import (
     YtDlpProvider,
     titan_acquirer_from_settings,
 )
-from app.captions import CaptionCue, build_ass, select_cues
+from app.captions import TEMPLATE_STYLES, CaptionCue, build_ass, select_cues
 from app.config import Settings
-from app.templates import RenderLayout, RenderTemplate
+from app.templates import CaptionPosition, RenderLayout, RenderTemplate
 from app.source_media import SourceMediaRepository
 from app.video_processing import FfmpegVideoProcessor, VideoProcessingError, VideoProcessor
 
@@ -217,6 +217,8 @@ class ShortArtifact(BaseModel):
     template_id: str | None = None
     layout_id: str = RenderLayout.FILL.value
     title: str | None = None
+    brand_color: str | None = None
+    caption_position: str = CaptionPosition.BOTTOM.value
     captions_applied: int = 0
     source_title: str | None
     source_duration_seconds: float
@@ -259,6 +261,10 @@ class ShortPipeline:
         template: RenderTemplate | None = None,
         layout: RenderLayout = RenderLayout.FILL,
         title: str | None = None,
+        brand_color: str | None = None,
+        caption_position: CaptionPosition = CaptionPosition.BOTTOM,
+        channel_name: str | None = None,
+        description: str | None = None,
     ) -> ShortArtifact:
         try:
             return self._run(
@@ -268,6 +274,10 @@ class ShortPipeline:
                 template=template,
                 layout=layout,
                 title=title,
+                brand_color=brand_color,
+                caption_position=caption_position,
+                channel_name=channel_name,
+                description=description,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -304,6 +314,10 @@ class ShortPipeline:
         template: RenderTemplate | None,
         layout: RenderLayout,
         title: str | None,
+        brand_color: str | None,
+        caption_position: CaptionPosition,
+        channel_name: str | None,
+        description: str | None,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -332,11 +346,13 @@ class ShortPipeline:
             clip_end = min(end_seconds, info.duration_seconds)
             subtitles_path = None
             captions_applied = 0
-            if template is not None and (captions or title):
+            style = TEMPLATE_STYLES[template] if template is not None else None
+            chrome = bool(title) or bool(channel_name and style is not None and style.channel_line)
+            if template is not None and (captions or chrome):
                 selected = select_cues(
                     captions or [], start_seconds=start_seconds, end_seconds=clip_end
                 )
-                if selected or title:
+                if selected or chrome:
                     subtitles_path = temp_path / "captions.ass"
                     subtitles_path.write_text(
                         build_ass(
@@ -346,10 +362,14 @@ class ShortPipeline:
                             clip_end_seconds=clip_end,
                             layout=layout,
                             title=title,
+                            brand_color=brand_color,
+                            caption_position=caption_position,
+                            channel_name=channel_name,
+                            description=description,
                         ),
                         encoding="utf-8",
                     )
-                    captions_applied = len(selected)
+                    captions_applied = len(selected) if style is None or style.show_caption else 0
             self._processor.trim_to_vertical(
                 acquired.path,
                 output_path,
@@ -357,6 +377,7 @@ class ShortPipeline:
                 end_seconds=clip_end,
                 subtitles_path=subtitles_path,
                 layout=layout,
+                stage_color=style.stage_color if style is not None else "#000000",
             )
             output_bytes = output_path.stat().st_size
 
@@ -384,6 +405,8 @@ class ShortPipeline:
             template_id=template.value if template is not None else None,
             layout_id=layout.value,
             title=title,
+            brand_color=brand_color,
+            caption_position=caption_position.value,
             captions_applied=captions_applied,
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,

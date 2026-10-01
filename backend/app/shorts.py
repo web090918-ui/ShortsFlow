@@ -20,7 +20,7 @@ from app.auth import UserRecord, credits, require_user
 from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
-from app.templates import RenderLayout
+from app.templates import CaptionPosition, RenderLayout
 from app.processing_jobs import (
     ProcessingJobRecord,
     ProcessingJobStatus,
@@ -64,6 +64,9 @@ class CreateShortRequest(BaseModel):
     title: str | None = Field(default=None, max_length=100)
     # Upload description kept with the job for publishing later; None takes the AI suggestion.
     description: str | None = Field(default=None, max_length=500)
+    # None keeps the analysis job's brand colour / caption position (or the defaults).
+    brand_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    caption_position: CaptionPosition | None = None
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -100,6 +103,8 @@ class ShortJobResponse(BaseModel):
     layout_id: RenderLayout = RenderLayout.FILL
     title: str | None = None
     description: str | None = None
+    brand_color: str | None = None
+    caption_position: CaptionPosition = CaptionPosition.BOTTOM
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -189,6 +194,8 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         description=render_input.get("description")
         if isinstance(render_input.get("description"), str)
         else None,
+        brand_color=job.brand_color,
+        caption_position=job.caption_position,
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
         download_url=download_url,
@@ -297,8 +304,19 @@ def _unprocessable(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail)
 
 
+def _channel_name(source_id: UUID | None, user: UserRecord | None) -> str | None:
+    """Channel line under the picture: the YouTube channel, else the signed-in creator."""
+    source = source_repository.get(source_id) if source_id is not None else None
+    if source is not None:
+        channel = source.metadata.get("youtube", {}).get("channel_title")
+        if isinstance(channel, str) and channel.strip():
+            return channel.strip()
+    return user.name.strip() if user is not None and user.name and user.name.strip() else None
+
+
 def _resolve_candidate(
     payload: CreateShortRequest,
+    user: UserRecord | None = None,
 ) -> tuple[str, float, float, RenderTemplate, RenderLayout, UUID, dict[str, Any]]:
     """Derive URL, range, template, layout, and captions from a completed analysis job."""
     analysis = jobs.repository.get(payload.processing_job_id)  # type: ignore[arg-type]
@@ -375,6 +393,9 @@ def _resolve_candidate(
         "captions": captions,
         "title": title,
         "description": description,
+        "channel_name": _channel_name(analysis.source_id, user),
+        "brand_color": payload.brand_color or analysis.brand_color,
+        "caption_position": (payload.caption_position or analysis.caption_position).value,
     }
     return (
         analysis.source_url,
@@ -410,7 +431,7 @@ def create_short(
     render_input: dict[str, Any] | None = None
     if payload.processing_job_id is not None:
         source_url, start, end, template, layout, source_id, render_input = _resolve_candidate(
-            payload
+            payload, user
         )
     else:
         assert payload.start_seconds is not None and payload.end_seconds is not None
@@ -433,12 +454,14 @@ def create_short(
         start, end = payload.start_seconds, payload.end_seconds
         template = payload.template_id or RenderTemplate.CLEAN_CAPTION
         layout = payload.layout_id or RenderLayout.FILL
-        if _clean_title(payload.title) or _clean_title(payload.description):
-            render_input = {
-                "title": _clean_title(payload.title),
-                "description": _clean_title(payload.description),
-            }
         source_id = payload.source_id or uuid4()
+        render_input = {
+            "title": _clean_title(payload.title),
+            "description": _clean_title(payload.description),
+            "channel_name": _channel_name(payload.source_id, user),
+            "brand_color": payload.brand_color,
+            "caption_position": (payload.caption_position or CaptionPosition.BOTTOM).value,
+        }
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)
             if (
@@ -483,6 +506,8 @@ def create_short(
         template_id=template,
         layout_id=layout,
         title=(render_input or {}).get("title"),
+        brand_color=(render_input or {}).get("brand_color"),
+        caption_position=CaptionPosition((render_input or {}).get("caption_position") or "BOTTOM"),
         attempt_count=0,
         error_message=None,
         result=None,

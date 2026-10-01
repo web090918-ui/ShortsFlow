@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.config import Settings, get_settings
 from app.downloads import MAX_RANGE_SECONDS, RenderTemplate
-from app.templates import RenderLayout
+from app.templates import CaptionPosition, RenderLayout
 from app.shorts_pipeline import (
     ArtifactStorage,
     ShortPipeline,
@@ -86,10 +86,16 @@ class CreateProcessingJobRequest(BaseModel):
     layout_id: RenderLayout = RenderLayout.FILL
     # Optional headline for renders made from this analysis; [brackets] mark the keyword.
     title: str | None = Field(default=None, max_length=100)
+    # Accent for the headline keyword, karaoke word, pill and band; None = template default.
+    brand_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    caption_position: CaptionPosition = CaptionPosition.BOTTOM
+    # Spoken language of the source ("auto" lets captions/Whisper decide) and the
+    # language for titles, descriptions, and AI reasons.
     transcript_language: str = Field(
         default="ko",
-        pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$",
+        pattern=r"^(?:auto|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$",
     )
+    output_language: str = Field(default="ko", pattern=r"^[A-Za-z]{2,3}$")
 
 
 class ProcessingJobResponse(BaseModel):
@@ -105,7 +111,10 @@ class ProcessingJobResponse(BaseModel):
     template_id: RenderTemplate
     layout_id: RenderLayout = RenderLayout.FILL
     title: str | None = None
+    brand_color: str | None = None
+    caption_position: CaptionPosition = CaptionPosition.BOTTOM
     transcript_language: str = "ko"
+    output_language: str = "ko"
     attempt_count: int = Field(ge=0)
     stage: str | None = None
     error_code: str | None = None
@@ -722,6 +731,14 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             template=job.template_id,
             layout=job.layout_id,
             title=render_input.get("title") if isinstance(render_input.get("title"), str) else None,
+            brand_color=job.brand_color,
+            caption_position=job.caption_position,
+            channel_name=render_input.get("channel_name")
+            if isinstance(render_input.get("channel_name"), str)
+            else None,
+            description=render_input.get("description")
+            if isinstance(render_input.get("description"), str)
+            else None,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
@@ -733,7 +750,7 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
         job.source_url,
         start_seconds=job.start_seconds,
         end_seconds=job.end_seconds,
-        language=job.transcript_language,
+        language=None if job.transcript_language == "auto" else job.transcript_language,
     )
     # Task 06 runs in the same Worker attempt: the transcript is already in memory
     # and candidate generation is deterministic and cheap.
@@ -741,7 +758,9 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
     candidates = candidate_generator.generate(transcript)
     # Task 07: generic AI ranking of those candidates, still in the same attempt.
     _save_step_progress(job, step=ProcessingStep.RANKING, progress=85)
-    ranking = candidate_ranker.rank(candidates, video_title=_source_title(job))
+    ranking = candidate_ranker.rank(
+        candidates, video_title=_source_title(job), reason_language=job.output_language
+    )
     return {
         "next_step": "RENDER",
         "transcript": transcript.model_dump(mode="json"),
@@ -869,7 +888,10 @@ def create_processing_job(
         template_id=payload.template_id,
         layout_id=payload.layout_id,
         title=payload.title.strip() if payload.title and payload.title.strip() else None,
+        brand_color=payload.brand_color,
+        caption_position=payload.caption_position,
         transcript_language=payload.transcript_language,
+        output_language=payload.output_language,
         attempt_count=0,
         error_message=None,
         result=None,

@@ -59,7 +59,11 @@ class RankingResult(BaseModel):
 
 class CandidateRanker(Protocol):
     def rank(
-        self, candidates: CandidateSet, *, video_title: str | None = None
+        self,
+        candidates: CandidateSet,
+        *,
+        video_title: str | None = None,
+        reason_language: str | None = None,
     ) -> RankingResult: ...
 
 
@@ -261,10 +265,15 @@ class OpenAIRanker:
         self._top_count = top_count
 
     def rank(
-        self, candidates: CandidateSet, *, video_title: str | None = None
+        self,
+        candidates: CandidateSet,
+        *,
+        video_title: str | None = None,
+        reason_language: str | None = None,
     ) -> RankingResult:
         if not candidates.items:
             raise RankingError("랭킹할 후보가 없습니다.", retryable=False)
+        language = reason_language or self._reason_language
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
@@ -275,7 +284,7 @@ class OpenAIRanker:
                         "role": "user",
                         "content": build_user_prompt(
                             candidates,
-                            reason_language=self._reason_language,
+                            reason_language=language,
                             video_title=video_title,
                         ),
                     },
@@ -318,7 +327,7 @@ class OpenAIRanker:
             scored,
             candidates,
             ranker=f"openai:{self._model}",
-            reason_language=self._reason_language,
+            reason_language=language,
             top_count=self._top_count,
         )
 
@@ -335,7 +344,11 @@ class HeuristicRanker:
         self._top_count = top_count
 
     def rank(
-        self, candidates: CandidateSet, *, video_title: str | None = None
+        self,
+        candidates: CandidateSet,
+        *,
+        video_title: str | None = None,
+        reason_language: str | None = None,
     ) -> RankingResult:
         if not candidates.items:
             raise RankingError("랭킹할 후보가 없습니다.", retryable=False)
@@ -361,6 +374,6 @@ class HeuristicRanker:
             scored,
             candidates,
             ranker="heuristic_structural",
-            reason_language=self._reason_language,
+            reason_language=reason_language or self._reason_language,
             top_count=self._top_count,
         )

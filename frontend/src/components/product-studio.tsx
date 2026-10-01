@@ -8,6 +8,7 @@ import type { RenderJob } from "@/components/render-result";
 import { TemplatePicker } from "@/components/template-picker";
 import { creditBudget, creditCost } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
+import { isLightColor } from "@/lib/render-options";
 import { useRenderOptions } from "@/lib/render-options-context";
 
 export type ProductFacts = {
@@ -65,7 +66,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
   const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAngleId, setSelectedAngleId] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState("KARAOKE_POP");
+  const [templateId, setTemplateId] = useState("CAPTION_ACCENT");
   const renderOptions = useRenderOptions();
   const [ctaUrl, setCtaUrl] = useState("");
   const [termsConfirmed, setTermsConfirmed] = useState(false);
@@ -252,7 +253,7 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
           </section>
 
           <TemplatePicker
-            templates={renderOptions.templates}
+            templates={renderOptions.templates.filter((template) => !isLightColor(template.preview.stage))}
             value={templateId}
             onChange={setTemplateId}
             layout="FILL"
