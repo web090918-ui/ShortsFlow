@@ -67,11 +67,15 @@ class StubShortPipeline:
         description=None,
         remove_silence=False,
         title_intro=False,
+        style=None,
+        custom_template_id=None,
     ):
         self.calls.append(
             {
                 "remove_silence": remove_silence,
                 "title_intro": title_intro,
+                "style": style,
+                "custom_template_id": custom_template_id,
                 "layout": layout,
                 "title": title,
                 "brand_color": brand_color,
@@ -213,6 +217,8 @@ def test_worker_completes_short_and_serves_file(monkeypatch, tmp_path: Path) -> 
             "description": None,
             "remove_silence": False,
             "title_intro": False,
+            "style": None,
+            "custom_template_id": None,
         }
     ]
 
@@ -782,3 +788,33 @@ def test_candidate_render_inherits_edit_options_from_the_analysis(
 
     _run_worker(inherited["id"])
     assert pipeline.calls[0]["remove_silence"] is True
+
+
+def test_custom_template_style_travels_with_the_render(monkeypatch, isolated_jobs, tmp_path) -> None:
+    from app import render_options as render_options_module
+    from app import shorts as shorts_module
+    from app.user_templates import InMemoryUserTemplateRepository, TemplateSpec, create_template
+
+    class Extractor:
+        def extract(self, image_data_url):
+            return TemplateSpec(name="내 것", picture_top=0.34, picture_bottom=0.66, caption_box=True)
+
+    repo = InMemoryUserTemplateRepository()
+    monkeypatch.setattr(render_options_module, "user_templates", repo)
+    monkeypatch.setattr(shorts_module, "user_templates", repo)
+    template = create_template(repo, Extractor(), user_id=None, image_data_url="data:image/png;base64," + "iVBORw0KGgo" * 8)
+    pipeline = StubShortPipeline(tmp_path)
+    monkeypatch.setattr(jobs_module, "short_pipeline", pipeline)
+
+    created = client.post("/shorts", json=_payload(custom_template_id=template.id)).json()
+    assert created["custom_template_id"] == template.id
+    assert created["template_id"] == "CLEAN_CAPTION"
+
+    _run_worker(created["id"])
+    call = pipeline.calls[0]
+    assert call["custom_template_id"] == template.id
+    assert call["style"].picture_height == 608 and call["style"].border_style == 3
+
+    # An id that is not the caller's (or does not exist) falls back to the preset silently.
+    plain = client.post("/shorts", json=_payload(custom_template_id="user-missing")).json()
+    assert plain["custom_template_id"] is None

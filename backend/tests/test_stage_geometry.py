@@ -26,7 +26,8 @@ def test_stage_keeps_source_out_of_text_bands(size: str) -> None:
         offset = (y * 1080 + x) * 3
         return tuple(frame[offset:offset + 3])
 
-    for y in (520, 620, 1300, 1740):
+    # Picture band is 1180 px tall, centred: 370-1550. Stage colour above and below.
+    for y in (100, 300, 1600, 1800):
         assert min(pixel(y)) >= 245, (size, y, pixel(y))
     for x in (0, 540, 1079):
         red, green, blue = pixel(960, x)

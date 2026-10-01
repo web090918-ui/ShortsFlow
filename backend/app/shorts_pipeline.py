@@ -25,9 +25,9 @@ from app.acquisition import (
     YtDlpProvider,
     titan_acquirer_from_settings,
 )
-from app.captions import TEMPLATE_STYLES, CaptionCue, build_ass, remap_cues, select_cues
+from app.captions import TEMPLATE_STYLES, CaptionCue, CaptionStyle, build_ass, remap_cues, select_cues
 from app.config import Settings
-from app.templates import CaptionPosition, RenderLayout, RenderTemplate
+from app.templates import STAGE_PICTURE_HEIGHT, CaptionPosition, RenderLayout, RenderTemplate
 from app.source_media import SourceMediaRepository
 from app.video_processing import (
     FfmpegVideoProcessor,
@@ -232,6 +232,8 @@ class ShortArtifact(BaseModel):
     # Seconds of pauses cut out by silence removal (0 when off or nothing to cut).
     silence_removed_seconds: float = 0.0
     title_intro: bool = False
+    # Set when the render used a creator's own template instead of the preset.
+    custom_template_id: str | None = None
     source_title: str | None
     source_duration_seconds: float
     source_width: int | None
@@ -279,6 +281,8 @@ class ShortPipeline:
         description: str | None = None,
         remove_silence: bool = False,
         title_intro: bool = False,
+        style: CaptionStyle | None = None,
+        custom_template_id: str | None = None,
     ) -> ShortArtifact:
         try:
             return self._run(
@@ -294,6 +298,8 @@ class ShortPipeline:
                 description=description,
                 remove_silence=remove_silence,
                 title_intro=title_intro,
+                style=style,
+                custom_template_id=custom_template_id,
                 start_seconds=start_seconds,
                 end_seconds=end_seconds,
                 report=report,
@@ -336,6 +342,8 @@ class ShortPipeline:
         description: str | None,
         remove_silence: bool,
         title_intro: bool,
+        style: CaptionStyle | None = None,
+        custom_template_id: str | None = None,
     ) -> ShortArtifact:
         # Temporary media lives only for this attempt and is removed on success or failure.
         with tempfile.TemporaryDirectory(
@@ -382,7 +390,8 @@ class ShortPipeline:
                     silence_removed = removed
             subtitles_path = None
             captions_applied = 0
-            style = TEMPLATE_STYLES[template] if template is not None else None
+            if style is None:
+                style = TEMPLATE_STYLES[template] if template is not None else None
             chrome = bool(title) or bool(channel_name and style is not None and style.channel_line)
             if template is not None and (captions or chrome):
                 selected = select_cues(
@@ -409,6 +418,7 @@ class ShortPipeline:
                             channel_name=channel_name,
                             description=description,
                             title_intro=title_intro,
+                            style=style,
                         ),
                         encoding="utf-8",
                     )
@@ -422,6 +432,7 @@ class ShortPipeline:
                 layout=layout,
                 stage_color=style.stage_color if style is not None else "#000000",
                 keep_segments=keep_segments,
+                picture_height=style.picture_height if style is not None else STAGE_PICTURE_HEIGHT,
             )
             output_bytes = output_path.stat().st_size
 
@@ -454,6 +465,7 @@ class ShortPipeline:
             captions_applied=captions_applied,
             silence_removed_seconds=silence_removed,
             title_intro=bool(title and title_intro),
+            custom_template_id=custom_template_id,
             source_title=acquired.title,
             source_duration_seconds=info.duration_seconds,
             source_width=info.width,

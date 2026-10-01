@@ -28,7 +28,15 @@ export type CaptionTemplate = {
     tagline?: string;
     headerBand?: string;
     kicker?: string;
+    /** "true" when the description's hashtags are drawn as part of the layout. */
+    hashtags?: string;
+    /** Picture band height as a fraction of the frame ("0.615"); STAGE layout only. */
+    picture?: string;
   };
+  /** Set on a creator's own template made from a screenshot. */
+  custom?: boolean;
+  /** Built-in preset the custom template is sent as (`template_id`). */
+  base?: string;
 };
 
 export type FrameLayout = {
@@ -47,6 +55,8 @@ export type BrandSwatch = { id: string; name: string; hex: string };
 
 export type RenderOptions = {
   templates: CaptionTemplate[];
+  /** The signed-in creator's own templates; empty when logged out. */
+  user_templates: CaptionTemplate[];
   layouts: FrameLayout[];
   caption_positions: CaptionPosition[];
   brand_colors: BrandSwatch[];
@@ -104,6 +114,7 @@ function stage(
  * `backend/app/templates.py`.
  */
 export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
+  user_templates: [],
   templates: [
     stage("CAPTION_POP", "자막 팝형", "핵심 어절을 크고 리듬감 있게. 검은 배경에 제목과 큰 자막.", "자막", {
       caption: "pop",
@@ -178,11 +189,12 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
 };
 
 export async function fetchRenderOptions(signal?: AbortSignal): Promise<RenderOptions> {
-  const response = await fetch(`${API_URL}/templates`, { signal });
+  const response = await fetch(`${API_URL}/templates`, { signal, credentials: "include" });
   if (!response.ok) throw new Error("템플릿 목록을 불러오지 못했습니다.");
   const payload = (await response.json()) as Partial<RenderOptions>;
   return {
     templates: payload.templates?.length ? payload.templates : DEFAULT_RENDER_OPTIONS.templates,
+    user_templates: payload.user_templates ?? [],
     layouts: payload.layouts?.length ? payload.layouts : DEFAULT_RENDER_OPTIONS.layouts,
     caption_positions: payload.caption_positions?.length
       ? payload.caption_positions

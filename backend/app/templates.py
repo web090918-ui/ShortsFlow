@@ -1,7 +1,13 @@
 from enum import Enum
 
-# Reserved source-picture band within a 1080 x 1920 STAGE composition.
-STAGE_PICTURE_HEIGHT = 608
+# Source-picture band heights within a 1080 x 1920 STAGE composition. The default is
+# the tall band (about 61% of the frame, centre-cropped) that popular Shorts use;
+# the smaller presets keep a 16:9 frame whole or nearly whole.
+STAGE_PICTURE_HEIGHTS = (608, 900, 1180)
+STAGE_PICTURE_HEIGHT = 1180
+# From this height on, captions sit over the lower edge of the picture and hashtags
+# move to the band below it; smaller pictures keep captions in the band.
+TALL_PICTURE_HEIGHT = 900
 
 
 class RenderTemplate(str, Enum):

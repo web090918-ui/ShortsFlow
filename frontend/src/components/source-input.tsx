@@ -20,7 +20,7 @@ import {
 } from "@/components/template-picker";
 import { BackgroundNotice } from "@/components/background-notice";
 import { CandidateScene } from "@/components/candidate-scene";
-import { useRenderOptions } from "@/lib/render-options-context";
+import { useRenderOptions, useUserTemplates } from "@/lib/render-options-context";
 import { youtubeVideoId } from "@/lib/youtube-player";
 import {
   DEFAULT_BRAND_COLOR,
@@ -30,7 +30,7 @@ import {
   OUTPUT_LANGUAGES,
   SOURCE_LANGUAGES,
 } from "@/lib/render-options";
-import type { CaptionPosition, FrameLayout } from "@/lib/render-options";
+import type { CaptionPosition, CaptionTemplate, FrameLayout } from "@/lib/render-options";
 import { currentDurationReader, currentFrameCapturer, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
 
@@ -238,6 +238,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   // Frames at each Top 3 candidate's start (uploads only; YouTube falls back to the thumbnail).
   const [candidateFrames, setCandidateFrames] = useState<Record<string, string>>({});
   const renderOptions = useRenderOptions();
+  const userTemplates = useUserTemplates();
   const [transcriptLanguage, setTranscriptLanguage] = useState("ko");
   const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
@@ -259,7 +260,13 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const heatmap = source?.metadata?.youtube?.heatmap ?? [];
   const recommendedRanges = source?.metadata?.youtube?.recommended_ranges ?? [];
   const channelName = source?.metadata?.youtube?.channel_title ?? authStatus.user?.name ?? null;
-  const selectedTemplate = renderOptions.templates.find((template) => template.id === templateId);
+  const selectedTemplate =
+    renderOptions.user_templates.find((template) => template.id === templateId) ??
+    renderOptions.templates.find((template) => template.id === templateId);
+  // A creator's own template is sent as its built-in base plus its id.
+  const templateRequest = selectedTemplate?.custom
+    ? { template_id: selectedTemplate.base ?? DEFAULT_TEMPLATE_ID, custom_template_id: selectedTemplate.id }
+    : { template_id: templateId };
   const supportsCaptionPosition = selectedTemplate?.preview.positionable === "true"
     && selectedTemplate.preview.caption !== "none";
   const effectiveCaptionPosition = supportsCaptionPosition ? captionPosition : "BOTTOM";
@@ -382,7 +389,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           source_id: source.id,
           start_seconds: rangeStart,
           end_seconds: rangeEnd,
-          template_id: templateId,
+          ...templateRequest,
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
@@ -532,7 +539,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           start_seconds: rangeStart,
           end_seconds: rangeEnd,
           rights_confirmed: true,
-          template_id: templateId,
+          ...templateRequest,
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
@@ -577,7 +584,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           processing_job_id: analysisJob.id,
           candidate_id: candidate.candidate_id,
           rights_confirmed: true,
-          template_id: templateId,
+          ...templateRequest,
           layout_id: layoutId,
           brand_color: brandColor,
           caption_position: effectiveCaptionPosition,
@@ -595,6 +602,30 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
     } finally {
       setIsStartingRender(false);
     }
+  }
+
+  async function createTemplateFromScreenshot(file: File): Promise<CaptionTemplate> {
+    const imageDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+      reader.readAsDataURL(file);
+    });
+    const response = await fetch(`${API_URL}/templates/from-image`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_data_url: imageDataUrl }),
+    });
+    const created = await readJsonResponse<CaptionTemplate>(response);
+    userTemplates.add(created);
+    return created;
+  }
+
+  async function deleteUserTemplate(id: string) {
+    await fetch(`${API_URL}/templates/${id}`, { method: "DELETE", credentials: "include" });
+    userTemplates.remove(id);
+    if (templateId === id) setTemplateId(DEFAULT_TEMPLATE_ID);
   }
 
   function applyRecommendation(index: number) {
@@ -933,6 +964,9 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
 
               <TemplatePicker
                 templates={renderOptions.templates}
+                userTemplates={renderOptions.user_templates}
+                onCreateFromImage={createTemplateFromScreenshot}
+                onDeleteUserTemplate={deleteUserTemplate}
                 value={templateId}
                 onChange={setTemplateId}
                 layout={layoutId}

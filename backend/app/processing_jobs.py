@@ -34,7 +34,9 @@ from app.source_media import (
     SourceMediaRepository,
     source_media_repository_from_settings,
 )
-from app.captions import CaptionCue
+from app.captions import CaptionCue, CaptionStyle
+from app.render_options import user_templates
+from app.user_templates import resolve_style
 from app.product_content import ContentAngle
 from app.product_pipeline import ProductShortPipeline
 from app.products import ProductFacts
@@ -92,6 +94,8 @@ class CreateProcessingJobRequest(BaseModel):
     # Edit options renders made from this analysis start from.
     remove_silence: bool = False
     title_intro: bool = False
+    # A creator's own template (made from a screenshot) that overrides template_id's look.
+    custom_template_id: str | None = Field(default=None, max_length=64)
     # Spoken language of the source ("auto" lets captions/Whisper decide) and the
     # language for titles, descriptions, and AI reasons.
     transcript_language: str = Field(
@@ -119,6 +123,7 @@ class ProcessingJobResponse(BaseModel):
     # Jump-cut pauses out of the Short / open with a full-frame title for ~2.4 s.
     remove_silence: bool = False
     title_intro: bool = False
+    custom_template_id: str | None = None
     transcript_language: str = "ko"
     output_language: str = "ko"
     attempt_count: int = Field(ge=0)
@@ -730,6 +735,8 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             if isinstance(raw_captions, list)
             else None
         )
+        raw_style = render_input.get("style")
+        style = CaptionStyle(**raw_style) if isinstance(raw_style, dict) else None
         artifact = short_pipeline.run(
             job_id=str(job.id),
             source_url=job.source_url,
@@ -750,6 +757,8 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             else None,
             remove_silence=job.remove_silence,
             title_intro=job.title_intro,
+            style=style,
+            custom_template_id=job.custom_template_id,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
@@ -875,6 +884,12 @@ def create_processing_job(
             detail="처리 구간은 0초보다 길고 최대 60분이어야 합니다.",
         )
 
+    custom_style = resolve_style(
+        user_templates,
+        template=payload.template_id,
+        custom_template_id=payload.custom_template_id,
+        user_id=user.id if user else None,
+    )
     now = _now()
     job_id = uuid4()
     charged = charge_or_402(
@@ -903,6 +918,7 @@ def create_processing_job(
         caption_position=payload.caption_position,
         remove_silence=payload.remove_silence,
         title_intro=payload.title_intro,
+        custom_template_id=payload.custom_template_id if custom_style is not None else None,
         transcript_language=payload.transcript_language,
         output_language=payload.output_language,
         attempt_count=0,

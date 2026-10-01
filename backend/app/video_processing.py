@@ -134,6 +134,7 @@ class VideoProcessor(Protocol):
         layout: RenderLayout = RenderLayout.FILL,
         stage_color: str = "#000000",
         keep_segments: list[Segment] | None = None,
+        picture_height: int = STAGE_PICTURE_HEIGHT,
     ) -> None: ...
 
     def detect_silences(
@@ -153,14 +154,15 @@ def _vertical_filter(
     subtitles_path: Path | None = None,
     layout: RenderLayout = RenderLayout.FILL,
     stage_color: str = "#000000",
+    picture_height: int = STAGE_PICTURE_HEIGHT,
 ) -> str:
     if layout == RenderLayout.STAGE:
         # Fill the stage picture band edge to edge, cropping centrally as needed.
         # Keep the headline and caption bands outside the picture.
         color = "0x" + stage_color.lstrip("#")
         chain = (
-            f"scale={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={SHORT_WIDTH}:{STAGE_PICTURE_HEIGHT},"
+            f"scale={SHORT_WIDTH}:{picture_height}:force_original_aspect_ratio=increase,"
+            f"crop={SHORT_WIDTH}:{picture_height},"
             f"pad={SHORT_WIDTH}:{SHORT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:{color},setsar=1"
         )
     elif layout == RenderLayout.FIT:
@@ -369,8 +371,9 @@ class FfmpegVideoProcessor:
         layout: RenderLayout = RenderLayout.FILL,
         stage_color: str = "#000000",
         keep_segments: list[Segment] | None = None,
+        picture_height: int = STAGE_PICTURE_HEIGHT,
     ) -> None:
-        vertical = _vertical_filter(subtitles_path, layout, stage_color)
+        vertical = _vertical_filter(subtitles_path, layout, stage_color, picture_height)
         if keep_segments and keep_segments != [(start_seconds, end_seconds)]:
             # Jump-cut render: keep only the listed stretches (absolute times), joined in
             # order, then reframe. Input seeking to the range start keeps decoding short,

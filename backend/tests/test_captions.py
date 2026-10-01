@@ -118,9 +118,9 @@ def test_fit_layout_moves_captions_below_the_source_picture() -> None:
     )
     style = next(line for line in document.splitlines() if line.startswith("Style:"))
 
-    # Bottom-centre (2) with MarginV 440 sits in the blurred band under a 1080x607 picture
+    # Bottom-centre (2) with MarginV 480 overlaps the lower edge of the tall picture band
     # instead of the template's own middle-of-frame alignment.
-    assert style.endswith(",2,90,90,440,1")
+    assert style.endswith(",2,90,90,480,1")
     assert "Style: Default,NanumSquareRound,74," in style
 
 
@@ -233,11 +233,11 @@ def test_headline_is_drawn_for_the_whole_clip_with_the_keyword_coloured() -> Non
     headline = next(line for line in lines if ",Headline,," in line)
 
     assert "Style: Headline,NanumSquareRound,84,&H00FFFFFF," in document
-    # Layer 2, full clip, centred in the band above the picture (y = 328).
-    assert headline.startswith("Dialogue: 2,0:00:00.00,0:00:20.00,Headline,,0,0,0,,{\\an5\\pos(540,328)}")
+    # Layer 2, full clip, centred in the 370 px band above the picture (y = 185).
+    assert headline.startswith("Dialogue: 2,0:00:00.00,0:00:20.00,Headline,,0,0,0,,{\\an5\\pos(540,185)}")
     assert headline.endswith("독립을 위해 {\\1c&H002B35E8}목숨{\\1c&H00FFFFFF}을 건 여자")
     # Captions still sit in the band under the picture.
-    assert ",2,90,90,440,1" in next(line for line in lines if line.startswith("Style: Default"))
+    assert ",2,90,90,480,1" in next(line for line in lines if line.startswith("Style: Default"))
 
 
 def test_headline_colours_the_second_line_or_the_longest_word_when_nothing_is_marked() -> None:
@@ -305,7 +305,7 @@ def test_stage_compositions_draw_brand_chrome_and_channel_line() -> None:
 
     # Brand red (#FF4D4F -> &H004F4DFF) colours the second title line and the spoken word.
     assert headline.endswith("AI가 고른 오늘의\\N{\\1c&H004F4DFF}핵심 장면{\\1c&H00FFFFFF}")
-    assert channel.startswith("Dialogue: 2,0:00:00.00,0:00:10.00,Chrome,,0,0,0,,{\\an5\\pos(540,1740)\\q2}")
+    assert channel.startswith("Dialogue: 2,0:00:00.00,0:00:10.00,Chrome,,0,0,0,,{\\an5\\pos(540,1735)\\q2}")
     assert "{\\1c&H004F4DFF}바로{\\1c&H00FFFFFF}" in karaoke[1]
     # MIDDLE puts the caption style at the frame centre.
     assert next(line for line in lines if line.startswith("Style: Default")).endswith(",5,90,90,0,1")
@@ -332,8 +332,9 @@ def test_light_stage_templates_use_dark_text_and_chrome() -> None:
     assert "\\1c&H00E1E14F&" in pill  # default aqua brand behind the tag pill
     assert any("다시 보게 되는 순간" in line for line in lines)
     assert any("#하이라이트 #오늘의영상 #쇼츠" in line for line in lines)
-    assert any("\\pos(90,520)" in line and "#하이라이트" in line for line in lines)
-    assert any("\\pos(540,1740)" in line and "컷픽" in line for line in lines)
+    # Tall picture: hashtags and the channel line share the band under the picture.
+    assert any("\\pos(540,1695)" in line and "#하이라이트" in line for line in lines)
+    assert any("\\pos(540,1785)" in line and "컷픽" in line for line in lines)
     # Over video (FILL) the same template falls back to white text with a dark outline.
     over_video = build_ass(
         _cues(), template=RenderTemplate.SNS_CARD, clip_start_seconds=100, clip_end_seconds=120, layout=RenderLayout.FILL
@@ -368,8 +369,8 @@ def test_caption_position_only_moves_captions_on_caption_templates() -> None:
     # 자막 팝형 / 자막 강조형 honour 중앙; card and paper templates keep the band under the picture.
     assert default_style(RenderTemplate.CAPTION_POP).endswith(",5,90,90,0,1")
     assert default_style(RenderTemplate.CAPTION_ACCENT).endswith(",5,90,90,0,1")
-    assert default_style(RenderTemplate.PAPER).endswith(",2,90,90,440,1")
-    assert default_style(RenderTemplate.SNS_CARD).endswith(",2,90,90,440,1")
+    assert default_style(RenderTemplate.PAPER).endswith(",2,90,90,480,1")
+    assert default_style(RenderTemplate.SNS_CARD).endswith(",2,90,90,480,1")
 
 
 def test_remap_cues_follows_the_output_clock_after_cuts() -> None:

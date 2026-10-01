@@ -78,6 +78,7 @@ class StubProcessor:
         layout=None,
         stage_color="#000000",
         keep_segments=None,
+        picture_height=1180,
     ):
         if self.fail:
             raise VideoProcessingError("boom")
@@ -86,6 +87,7 @@ class StubProcessor:
                 "start": start_seconds,
                 "end": end_seconds,
                 "keep_segments": keep_segments,
+                "picture_height": picture_height,
                 "layout": layout,
                 "stage_color": stage_color,
                 "subtitles": subtitles_path.read_text(encoding="utf-8")
@@ -147,6 +149,7 @@ def test_pipeline_acquires_renders_stores_and_cleans_up() -> None:
             "start": 10.0,
             "end": 40.0,
             "keep_segments": None,
+            "picture_height": 1180,
             "layout": RenderLayout.FILL,
             "stage_color": "#000000",
             "subtitles": None,

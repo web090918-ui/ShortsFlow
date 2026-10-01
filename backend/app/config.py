@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Task 10 product Shorts: content angles use the ranking model; speech uses OpenAI TTS.
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "nova"
+    # Screenshot -> template extraction (vision); the ranking model family handles images.
+    openai_vision_model: str = "gpt-4.1-mini"
     product_short_max_seconds: int = 60
     job_repository_backend: Literal["memory", "firestore"] = "memory"
     task_dispatcher_backend: Literal["local", "cloud_tasks"] = "local"

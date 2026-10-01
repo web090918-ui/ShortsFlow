@@ -14,21 +14,23 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.templates import CaptionPosition, RenderLayout, RenderTemplate, STAGE_PICTURE_HEIGHT
+from app.templates import (
+    STAGE_PICTURE_HEIGHT,
+    TALL_PICTURE_HEIGHT,
+    CaptionPosition,
+    RenderLayout,
+    RenderTemplate,
+)
 
 
 PLAY_RES_X = 1080
 PLAY_RES_Y = 1920
 MIN_CUE_SECONDS = 0.3
-# Keep all source aspect ratios inside the reserved picture band.
-PICTURE_TOP = (PLAY_RES_Y - STAGE_PICTURE_HEIGHT) // 2
-PICTURE_BOTTOM = PICTURE_TOP + STAGE_PICTURE_HEIGHT
-# Captions in the band under the picture (bottom edge at 1920-440 = 1480).
-BAND_CAPTION_MARGIN_V = 440
-# Headline centred in the band above the picture; overlaid near the top on FILL.
-BAND_HEADLINE_Y = PICTURE_TOP // 2
+# Stage geometry depends on the template's picture height; see picture_band().
+# The chrome positions below were designed for a 656 px band above a 608 px picture
+# and are scaled to the actual band height.
+DESIGN_BAND_HEIGHT = 656
 FILL_HEADLINE_Y = 230
-CHANNEL_LINE_Y = 1740
 FILL_CHANNEL_LINE_Y = 1800
 # Product Shorts: a taller picture box for square product photos.
 PRODUCT_PICTURE_TOP = 330
@@ -98,6 +100,8 @@ class CaptionStyle:
     header_band: str | None = None  # full-width band at the very top (community)
     kicker: str | None = None  # small brand-coloured line above the headline
     hashtags: bool = False  # draw the description's hashtags under the headline
+    # Height of the source picture band in the STAGE layout (see templates.py presets).
+    picture_height: int = STAGE_PICTURE_HEIGHT
     listed: bool = True
     # Hints for the picker preview; the frontend uses them, the renderer does not.
     preview: dict[str, str] | None = None
@@ -114,6 +118,42 @@ LIME = "&H0042F5C6"  # #C6F542 yellow-green
 SKY = "&H00F5C758"  # #58C7F5 light blue
 MAGENTA = "&H00FF4FD7"  # #D74FFF
 CYAN = "&H00FFE14F"  # #4FE1FF
+
+
+def picture_band(style: "CaptionStyle") -> tuple[int, int]:
+    """Top and bottom edge of the source picture in the STAGE layout."""
+    top = (PLAY_RES_Y - style.picture_height) // 2
+    return top, top + style.picture_height
+
+
+def is_tall_picture(style: "CaptionStyle") -> bool:
+    return style.picture_height >= TALL_PICTURE_HEIGHT
+
+
+def band_caption_margin_v(style: "CaptionStyle") -> int:
+    """MarginV for captions on FIT/STAGE: over the picture's lower edge when the
+    picture is tall, in the band under it otherwise."""
+    _, bottom = picture_band(style)
+    if is_tall_picture(style):
+        return PLAY_RES_Y - bottom + 110
+    return PLAY_RES_Y - (bottom + 216)
+
+
+def band_headline_y(style: "CaptionStyle") -> int:
+    top, _ = picture_band(style)
+    return top // 2
+
+
+def channel_line_y(style: "CaptionStyle") -> int:
+    _, bottom = picture_band(style)
+    centre = (bottom + PLAY_RES_Y) // 2
+    return centre + 50 if is_tall_picture(style) and style.hashtags else centre
+
+
+def _band_y(value: int, style: "CaptionStyle") -> int:
+    """Scale a y designed for the 656 px band to this style's band above the picture."""
+    top, _ = picture_band(style)
+    return round(value * top / DESIGN_BAND_HEIGHT)
 
 
 def ass_color(hex_color: str) -> str:
@@ -504,21 +544,28 @@ BRAND_SWATCHES: list[dict[str, str]] = [
 ]
 
 
+def template_catalog_entry(template_id: str, style: CaptionStyle) -> dict[str, Any]:
+    """What the picker needs for one template: id, names, tag, preview hints, flags."""
+    return {
+        "id": template_id,
+        "name": style.name,
+        "description": style.description,
+        "tag": style.tag,
+        "karaoke": style.highlight is not None,
+        "preview": {
+            **(style.preview or {}),
+            "stage": style.stage_color,
+            "channel": "true" if style.channel_line else "false",
+            "hashtags": "true" if style.hashtags else "false",
+            # Picture band as a fraction of the frame height; the preview draws it there.
+            "picture": f"{style.picture_height / PLAY_RES_Y:.3f}",
+        },
+    }
+
+
 def template_catalog() -> list[dict[str, Any]]:
-    """What the picker needs for listed templates: id, names, tag, preview hints, flags."""
     return [
-        {
-            "id": template.value,
-            "name": style.name,
-            "description": style.description,
-            "tag": style.tag,
-            "karaoke": style.highlight is not None,
-            "preview": {
-                **(style.preview or {}),
-                "stage": style.stage_color,
-                "channel": "true" if style.channel_line else "false",
-            },
-        }
+        template_catalog_entry(template.value, style)
         for template, style in TEMPLATE_STYLES.items()
         if style.listed
     ]
@@ -778,12 +825,14 @@ def _header(
     layout: RenderLayout,
     palette: _Palette,
     caption_position: CaptionPosition,
+    band_margin_v: int | None = None,
 ) -> tuple[list[str], str, int]:
     """ASS header, the global override prefix (blur) for every event, and the MarginV used."""
     if caption_position == CaptionPosition.MIDDLE:
         alignment, margin_v = 5, 0
     elif layout in (RenderLayout.FIT, RenderLayout.STAGE):
-        alignment, margin_v = 2, BAND_CAPTION_MARGIN_V
+        alignment = 2
+        margin_v = band_margin_v if band_margin_v is not None else band_caption_margin_v(style)
     else:
         alignment, margin_v = style.alignment, style.margin_v
     lines = [
@@ -859,26 +908,31 @@ def _chrome_events(
     accent = palette.resolve(style.headline_accent)
     dark_on_brand = INK
     left_x = HEADLINE_MARGIN_X + 20
-    headline_y = FILL_HEADLINE_Y if layout == RenderLayout.FILL else BAND_HEADLINE_Y
+    headline_y = FILL_HEADLINE_Y if layout == RenderLayout.FILL else band_headline_y(style)
+    tall = is_tall_picture(style)
+    _, picture_bottom = picture_band(style)
+    bottom_band_centre = (picture_bottom + PLAY_RES_Y) // 2
 
     if palette.on_stage and style.header_band:
-        events.append(_rect(0, 0, PLAY_RES_X, 200, palette.brand, start=start, end=end))
+        band_h = _band_y(200, style)
+        events.append(_rect(0, 0, PLAY_RES_X, band_h, palette.brand, start=start, end=end))
         events.append(
-            f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},100)"
+            f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{band_h // 2})"
             f"\\1c{dark_on_brand}\\bord0}}{_ass_text(style.header_band)}"
         )
     if palette.on_stage and style.kicker:
         events.append(
-            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},250)\\1c{palette.brand}}}"
+            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},{_band_y(250, style)})\\1c{palette.brand}}}"
             f"{_ass_text(style.kicker)}"
         )
     if palette.on_stage and style.tagline:
         pill_w, pill_h = 620, 84
+        pill_y = _band_y(200, style)
         events.append(
-            _rect((PLAY_RES_X - pill_w) // 2, 200, pill_w, pill_h, palette.brand, start=start, end=end)
+            _rect((PLAY_RES_X - pill_w) // 2, pill_y, pill_w, pill_h, palette.brand, start=start, end=end)
         )
         events.append(
-            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{200 + pill_h // 2})"
+            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{pill_y + pill_h // 2})"
             f"\\fs40\\1c{dark_on_brand}}}{_ass_text(style.tagline)}"
         )
 
@@ -888,13 +942,13 @@ def _chrome_events(
         fade = "\\fad(200,0)" if headline_start != start else ""
         if palette.on_stage and style.headline_align_left:
             # Leave space for two title lines and hashtags above the picture.
-            y = 300 if style.kicker else (340 if style.tagline else 280)
+            y = _band_y(300 if style.kicker else (340 if style.tagline else 280), style)
             events.append(
                 f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an7\\pos({left_x},{y}){fade}}}{text}"
             )
         elif palette.on_stage and style.tagline:
             events.append(
-                f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},440){fade}}}{text}"
+                f"Dialogue: 2,{headline_start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{_band_y(440, style)}){fade}}}{text}"
             )
         else:
             events.append(
@@ -904,9 +958,16 @@ def _chrome_events(
     if palette.on_stage and style.hashtags and description:
         tags = " ".join(_HASHTAG.findall(description))
         tags = tags if len(tags) <= 24 else tags[:24] + "…"
-        if tags:
+        if tags and tall:
+            # Tall picture: the hashtags live in the band under the picture.
+            tag_y = bottom_band_centre - (40 if style.channel_line and channel_name else 0)
             events.append(
-                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},520)\\q2\\1c{palette.brand}}}"
+                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{tag_y})\\q2\\fs44\\1c{palette.text}}}"
+                f"{_ass_text(tags)}"
+            )
+        elif tags:
+            events.append(
+                f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an7\\pos({left_x},{_band_y(520, style)})\\q2\\1c{palette.brand}}}"
                 f"{_ass_text(tags)}"
             )
 
@@ -914,7 +975,7 @@ def _chrome_events(
         channel = channel_name if len(channel_name) <= 20 else channel_name[:20] + "…"
         label = f"{{\\fs30}}●{{\\fs44}}  {_ass_text(channel)}"
         events.append(
-            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{CHANNEL_LINE_Y})\\q2}}{label}"
+            f"Dialogue: 2,{start},{end},Chrome,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{channel_line_y(style)})\\q2}}{label}"
         )
     return events
 
@@ -968,9 +1029,14 @@ def build_ass(
     channel_name: str | None = None,
     description: str | None = None,
     title_intro: bool = False,
+    style: CaptionStyle | None = None,
 ) -> str:
-    """Return an ASS document whose times are relative to the clip start."""
-    style = TEMPLATE_STYLES[template]
+    """Return an ASS document whose times are relative to the clip start.
+
+    ``style`` overrides the template's preset (a creator's own template); ``template``
+    is still recorded on the job for the catalog and defaults.
+    """
+    style = style or TEMPLATE_STYLES[template]
     palette = _palette(style, layout=layout, brand_color=brand_color)
     if not style.positionable:
         # Card and paper layouts keep the caption in the band under the picture.
@@ -1046,8 +1112,13 @@ def build_product_ass(
     palette = _palette(style, layout=RenderLayout.STAGE, brand_color=brand_color)
     if not style.positionable:
         caption_position = CaptionPosition.BOTTOM
+    # Product Shorts keep their own 900 px picture box; captions sit in the band under it.
     lines, prefix, _ = _header(
-        style, layout=RenderLayout.STAGE, palette=palette, caption_position=caption_position
+        style,
+        layout=RenderLayout.STAGE,
+        palette=palette,
+        caption_position=caption_position,
+        band_margin_v=440,
     )
     light = _is_light(style.stage_color)
     badge_back = "&H40FFFFFF" if light else "&H40000000"

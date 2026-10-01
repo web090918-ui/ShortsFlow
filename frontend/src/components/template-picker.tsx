@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { headlineLines, isLightColor, longestWord } from "@/lib/render-options";
 import type { BrandSwatch, CaptionPosition, CaptionTemplate, FrameLayout } from "@/lib/render-options";
@@ -15,6 +15,15 @@ export const SAMPLE_TITLE = "AI가 고른 오늘의\n핵심 장면";
 const SAMPLE_CHANNEL = "내 채널";
 const SAMPLE_TAGS = "#하이라이트 #오늘의영상 #쇼츠";
 const DEFAULT_BRAND = "#4FE1E1";
+/** Default picture band (1180 of 1920 px) when a template carries no hint. */
+const DEFAULT_PICTURE = 0.615;
+/** From this fraction on, captions sit over the picture and hashtags move under it. */
+const TALL_PICTURE = 900 / 1920;
+
+function pictureFraction(template: CaptionTemplate) {
+  const value = Number(template.preview.picture);
+  return Number.isFinite(value) && value > 0 && value <= 1 ? value : DEFAULT_PICTURE;
+}
 
 type SampleProps = {
   template: CaptionTemplate;
@@ -74,6 +83,8 @@ export function CaptionSample({
   const captionKind = preview.caption ?? "plain";
   const headlineText = (title && title.trim()) || SAMPLE_TITLE;
   const leftAligned = onStage && Boolean(preview.tagline || preview.kicker);
+  const picture = pictureFraction(template);
+  const tall = picture >= TALL_PICTURE;
   const channel = channelName?.trim() || SAMPLE_CHANNEL;
   const channelLabel = channel.length > 20 ? `${channel.slice(0, 20)}…` : channel;
   const captionWordStyle = (index: number): CSSProperties | undefined => {
@@ -94,8 +105,8 @@ export function CaptionSample({
   }
   return (
     <span
-      className={`caption-sample caption-sample-${layout.toLowerCase()} caption-sample-${preview.positionable === "true" ? captionPosition.toLowerCase() : "bottom"}${leftAligned ? " caption-sample-left" : ""}${onStage && preview.tagline ? " caption-sample-social" : ""}${onStage && preview.kicker ? " caption-sample-community" : ""}`}
-      style={{ background: stageColor }}
+      className={`caption-sample caption-sample-${layout.toLowerCase()} caption-sample-${preview.positionable === "true" ? captionPosition.toLowerCase() : "bottom"}${leftAligned ? " caption-sample-left" : ""}${onStage && preview.tagline ? " caption-sample-social" : ""}${onStage && preview.kicker ? " caption-sample-community" : ""}${onStage && tall ? " caption-sample-tall" : ""}`}
+      style={{ background: stageColor, "--picture": `${picture * 100}%` } as CSSProperties}
       aria-hidden="true"
     >
       <Frame imageUrl={imageUrl} layout={layout} />
@@ -135,8 +146,8 @@ export function CaptionSample({
           ))}
         </b>
       ) : null}
-      {onStage && preview.tagline ? (
-        <span className="caption-sample-tags" style={{ color: brandColor }}>
+      {onStage && (preview.tagline || preview.hashtags === "true") ? (
+        <span className="caption-sample-tags" style={{ color: tall ? textColor : brandColor }}>
           {SAMPLE_TAGS}
         </span>
       ) : null}
@@ -161,6 +172,11 @@ export function CaptionSample({
 
 type TemplatePickerProps = {
   templates: CaptionTemplate[];
+  /** The creator's own templates, shown first with a card to make another. */
+  userTemplates?: CaptionTemplate[];
+  /** Turns a screenshot into a template; resolves with the new template, which gets selected. */
+  onCreateFromImage?: (file: File) => Promise<CaptionTemplate>;
+  onDeleteUserTemplate?: (id: string) => Promise<void>;
   value: string;
   onChange: (id: string) => void;
   layout?: LayoutId;
@@ -175,6 +191,9 @@ type TemplatePickerProps = {
 
 export function TemplatePicker({
   templates,
+  userTemplates = [],
+  onCreateFromImage,
+  onDeleteUserTemplate,
   value,
   onChange,
   layout = "STAGE",
@@ -186,9 +205,27 @@ export function TemplatePicker({
   captionPosition,
   channelName,
 }: TemplatePickerProps) {
-  const selected = templates.find((template) => template.id === value);
+  const everyTemplate = [...userTemplates, ...templates];
+  const selected = everyTemplate.find((template) => template.id === value);
   const strip = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const stripId = useId();
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  async function handleScreenshot(file: File | undefined) {
+    if (!file || !onCreateFromImage) return;
+    setExtractError(null);
+    setExtracting(true);
+    try {
+      const created = await onCreateFromImage(file);
+      onChange(created.id);
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : "스크린샷을 분석하지 못했습니다.");
+    } finally {
+      setExtracting(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
   const scroll = (direction: number) => {
     const element = strip.current;
     if (element) element.scrollBy({ left: direction * element.clientWidth * 0.8, behavior: "smooth" });
@@ -203,24 +240,69 @@ export function TemplatePicker({
         {imageUrl ? null : " 영상을 불러오면 그 장면이 미리보기에 들어갑니다."}
       </p>
       <div className="template-browse">
-        <span>{templates.length}가지 스타일 · 옆으로 넘겨 비교하세요</span>
+        <span>{everyTemplate.length}가지 스타일 · 옆으로 넘겨 비교하세요</span>
         <div>
           <button type="button" aria-label="이전 스타일 보기" aria-controls={stripId} onClick={() => scroll(-1)}>←</button>
           <button type="button" aria-label="다음 스타일 보기" aria-controls={stripId} onClick={() => scroll(1)}>→</button>
         </div>
       </div>
       <div ref={strip} id={stripId} className="template-options template-scroll">
-        {templates.map((template) => (
+        {onCreateFromImage ? (
+          <div className="template-card template-card-create">
+            <label className="template-create-label">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                aria-label="쇼츠 스크린샷 올리기"
+                disabled={extracting}
+                onChange={(event) => void handleScreenshot(event.target.files?.[0])}
+              />
+              <span className="template-create-art" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <strong>{extracting ? "스크린샷 분석 중…" : "스크린샷으로 만들기"}</strong>
+              <small>
+                {extractError ??
+                  "마음에 드는 쇼츠를 캡처해 올리면 배치·색·자막 스타일을 읽어 내 템플릿으로 저장해요. 로고와 스티커는 제외돼요."}
+              </small>
+            </label>
+          </div>
+        ) : null}
+        {everyTemplate.map((template) => (
           <button
             key={template.id}
             type="button"
-            className="template-card"
+            className={template.custom ? "template-card template-card-custom" : "template-card"}
             aria-pressed={value === template.id}
             aria-label={`${template.name} 템플릿`}
             onClick={() => onChange(template.id)}
             onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" })}
           >
             <span className="template-selection-mark" aria-hidden="true">{value === template.id ? "✓ 선택됨" : "선택"}</span>
+            {template.custom && onDeleteUserTemplate ? (
+              <span
+                role="button"
+                tabIndex={0}
+                className="template-delete"
+                aria-label={`${template.name} 템플릿 삭제`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onDeleteUserTemplate(template.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void onDeleteUserTemplate(template.id);
+                  }
+                }}
+              >
+                삭제
+              </span>
+            ) : null}
             <CaptionSample
               template={template}
               layout={layout}

@@ -155,7 +155,7 @@ def test_stage_layout_fills_picture_band_on_black(fake_tools, tmp_path: Path) ->
 
     video_filter = fake_tools[0][fake_tools[0].index("-vf") + 1]
     assert video_filter.startswith(
-        "scale=1080:608:force_original_aspect_ratio=increase,crop=1080:608,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:0x000000,setsar=1"
+        "scale=1080:1180:force_original_aspect_ratio=increase,crop=1080:1180,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:0x000000,setsar=1"
     )
     assert video_filter.index("pad=") < video_filter.index(",subtitles=filename=")
 

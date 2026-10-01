@@ -172,3 +172,82 @@ describe("BrandColorPicker and CaptionPositionPicker", () => {
     expect(onPosition).toHaveBeenCalledWith("MIDDLE");
   });
 });
+
+describe("TemplatePicker screenshot templates", () => {
+  afterEach(cleanup);
+
+  it("turns an uploaded screenshot into a selected custom template and can delete it", async () => {
+    const user = userEvent.setup();
+    const created = {
+      id: "user-abc123",
+      name: "솔로파티",
+      description: "스크린샷에서 만든 내 템플릿",
+      tag: "내 템플릿",
+      karaoke: false,
+      custom: true,
+      base: "CAPTION_ACCENT",
+      preview: { stage: "#000000", caption: "plain", picture: "0.615", hashtags: "true", channel: "false" },
+    };
+    const onCreateFromImage = vi.fn().mockResolvedValue(created);
+    const onDeleteUserTemplate = vi.fn().mockResolvedValue(undefined);
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <TemplatePicker
+        templates={DEFAULT_RENDER_OPTIONS.templates}
+        userTemplates={[]}
+        onCreateFromImage={onCreateFromImage}
+        onDeleteUserTemplate={onDeleteUserTemplate}
+        value="CAPTION_ACCENT"
+        onChange={onChange}
+        imageUrl={IMAGE}
+      />,
+    );
+
+    const file = new File(["png"], "short.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("쇼츠 스크린샷 올리기"), file);
+
+    expect(onCreateFromImage).toHaveBeenCalledWith(file);
+    expect(onChange).toHaveBeenCalledWith("user-abc123");
+
+    rerender(
+      <TemplatePicker
+        templates={DEFAULT_RENDER_OPTIONS.templates}
+        userTemplates={[created]}
+        onCreateFromImage={onCreateFromImage}
+        onDeleteUserTemplate={onDeleteUserTemplate}
+        value="user-abc123"
+        onChange={onChange}
+        imageUrl={IMAGE}
+      />,
+    );
+    const card = screen.getByRole("button", { name: "솔로파티 템플릿" });
+    expect(card.getAttribute("aria-pressed")).toBe("true");
+    // The preview draws the picture band at the template's own height.
+    const sample = card.querySelector<HTMLElement>(".caption-sample");
+    expect(sample?.style.getPropertyValue("--picture")).toBe("61.5%");
+    expect(sample?.className).toContain("caption-sample-tall");
+
+    await user.click(screen.getByRole("button", { name: "솔로파티 템플릿 삭제" }));
+    expect(onDeleteUserTemplate).toHaveBeenCalledWith("user-abc123");
+  });
+
+  it("shows the extraction error on the card", async () => {
+    const user = userEvent.setup();
+    render(
+      <TemplatePicker
+        templates={DEFAULT_RENDER_OPTIONS.templates}
+        onCreateFromImage={vi.fn().mockRejectedValue(new Error("이미지가 너무 큽니다."))}
+        value="CAPTION_ACCENT"
+        onChange={vi.fn()}
+        imageUrl={null}
+      />,
+    );
+
+    await user.upload(
+      screen.getByLabelText("쇼츠 스크린샷 올리기"),
+      new File(["png"], "big.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByText("이미지가 너무 큽니다.")).toBeTruthy();
+  });
+});

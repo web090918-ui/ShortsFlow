@@ -1,3 +1,4 @@
+from dataclasses import asdict
 """Public API for rendering a Short: manual range or a ranked candidate -> 9:16 MP4.
 
 This router is a thin facade over the Task 04 processing-job infrastructure. It
@@ -17,6 +18,8 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 from app import processing_jobs as jobs
 from app.auth import UserRecord, credits, require_user
+from app.render_options import user_templates
+from app.user_templates import resolve_style
 from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
@@ -70,6 +73,8 @@ class CreateShortRequest(BaseModel):
     # None keeps the analysis job's edit options (or off for a manual range).
     remove_silence: bool | None = None
     title_intro: bool | None = None
+    # A creator's own template; None keeps the analysis job's choice.
+    custom_template_id: str | None = Field(default=None, max_length=64)
     source_id: UUID | None = None
     processing_job_id: UUID | None = None
     candidate_id: str | None = Field(default=None, max_length=64)
@@ -111,6 +116,7 @@ class ShortJobResponse(BaseModel):
     remove_silence: bool = False
     title_intro: bool = False
     silence_removed_seconds: float = 0.0
+    custom_template_id: str | None = None
     candidate_id: str | None
     processing_job_id: UUID | None
     download_url: str | None
@@ -204,6 +210,7 @@ def _to_response(job: ProcessingJobRecord) -> ShortJobResponse:
         caption_position=job.caption_position,
         remove_silence=job.remove_silence,
         title_intro=job.title_intro,
+        custom_template_id=job.custom_template_id,
         silence_removed_seconds=float(_short_result(job).get("silence_removed_seconds") or 0.0),
         candidate_id=render_input.get("candidate_id"),
         processing_job_id=UUID(processing_job_id) if isinstance(processing_job_id, str) else None,
@@ -425,6 +432,18 @@ def _resolve_candidate(
         else payload.remove_silence,
         "title_intro": analysis.title_intro if payload.title_intro is None else payload.title_intro,
     }
+    custom_id = (
+        analysis.custom_template_id if payload.custom_template_id is None else payload.custom_template_id
+    )
+    custom_style = resolve_style(
+        user_templates,
+        template=template,
+        custom_template_id=custom_id,
+        user_id=user.id if user else None,
+    )
+    if custom_style is not None:
+        render_input["custom_template_id"] = custom_id
+        render_input["style"] = asdict(custom_style)
     return (
         analysis.source_url,
         clip_start,
@@ -492,6 +511,15 @@ def create_short(
             "remove_silence": bool(payload.remove_silence),
             "title_intro": bool(payload.title_intro),
         }
+        custom_style = resolve_style(
+            user_templates,
+            template=template,
+            custom_template_id=payload.custom_template_id,
+            user_id=user.id if user else None,
+        )
+        if custom_style is not None:
+            render_input["custom_template_id"] = payload.custom_template_id
+            render_input["style"] = asdict(custom_style)
         if payload.source_id is not None:
             source = source_repository.get(payload.source_id)
             if (
@@ -540,6 +568,7 @@ def create_short(
         caption_position=CaptionPosition((render_input or {}).get("caption_position") or "BOTTOM"),
         remove_silence=bool((render_input or {}).get("remove_silence")),
         title_intro=bool((render_input or {}).get("title_intro")),
+        custom_template_id=(render_input or {}).get("custom_template_id"),
         attempt_count=0,
         error_message=None,
         result=None,

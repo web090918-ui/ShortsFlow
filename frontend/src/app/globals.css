@@ -910,7 +910,14 @@ h2 {
   background-size: contain;
 }
 
+/* STAGE: the picture band is --picture of the frame height, centred, centre-cropped. */
+.caption-sample-stage {
+  --picture: 61.5%;
+}
+
 .caption-sample-stage .caption-sample-frame {
+  top: calc((100% - var(--picture)) / 2);
+  bottom: calc((100% - var(--picture)) / 2);
   background-size: cover;
 }
 
@@ -918,7 +925,7 @@ h2 {
   background: #000;
 }
 
-/* Headline centred in the band above a contained 16:9 picture (top 34% of the frame). */
+/* Headline centred in the band above the picture. */
 .caption-sample-headline {
   display: grid;
   position: absolute;
@@ -934,6 +941,10 @@ h2 {
   line-height: 1.3;
   text-align: center;
   word-break: keep-all;
+}
+
+.caption-sample-stage .caption-sample-headline {
+  top: calc((100% - var(--picture)) / 4);
 }
 
 .caption-sample-fill .caption-sample-headline {
@@ -970,8 +981,8 @@ h2 {
   z-index: 0;
   left: 0;
   right: 0;
-  top: 34.2%;
-  height: 31.6%;
+  top: calc((100% - var(--picture, 61.5%)) / 2);
+  height: var(--picture, 61.5%);
   overflow: hidden;
   background: #000;
 }
@@ -1007,8 +1018,107 @@ h2 {
 
 .caption-sample-fit .caption-sample-caption,
 .caption-sample-stage .caption-sample-caption {
-  /* The real render places captions in the band under the picture. */
-  margin-bottom: 22%;
+  /* Small picture: captions sit in the band under it. */
+  margin-bottom: calc((100% - var(--picture, 61.5%)) / 2 - 11%);
+}
+
+.caption-sample-tall .caption-sample-caption {
+  /* Tall picture: captions overlap its lower edge, as in the render. */
+  margin-bottom: calc((100% - var(--picture)) / 2 + 5%);
+}
+
+.caption-sample-stage .caption-sample-channel {
+  top: calc(100% - (100% - var(--picture)) / 4);
+  transform: translate(-50%, -50%);
+}
+
+.caption-sample-tall .caption-sample-tags {
+  top: auto;
+  bottom: calc((100% - var(--picture)) / 4 + 2%);
+  left: 50%;
+  transform: translate(-50%, 50%);
+  font-size: 0.5rem;
+  font-weight: 700;
+}
+
+/* Hashtags and the channel line share the band under a tall picture. */
+.caption-sample-tall .caption-sample-tags ~ .caption-sample-channel {
+  top: calc(100% - (100% - var(--picture)) / 4 + 5%);
+}
+
+/* "Make from a screenshot" card and custom template cards. */
+.template-card-create {
+  padding: 0;
+}
+
+.template-create-label {
+  display: grid;
+  gap: 8px;
+  height: 100%;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.template-create-label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.template-create-art {
+  display: flex;
+  aspect-ratio: 9 / 16;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  padding: 14%;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.template-create-art i {
+  display: block;
+  height: 8%;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.template-create-art i:nth-child(2) {
+  height: 46%;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.template-create-label strong {
+  font-size: 0.82rem;
+}
+
+.template-create-label small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.template-card-create:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+}
+
+.template-card-custom {
+  position: relative;
+}
+
+.template-delete {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 0.66rem;
+  cursor: pointer;
 }
 
 .layout-picker .caption-sample {
