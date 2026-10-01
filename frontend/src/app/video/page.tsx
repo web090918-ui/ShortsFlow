@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "YouTube 링크나 내 영상 파일에서 구간을 선택하고, AI 추천 Top 3로 세로 쇼츠를 만들어 다운로드하세요.",
 };
 
-export default function VideoPage() {
-  return <StudioShell kind="video"><SourceInput /></StudioShell>;
+export default async function VideoPage({ searchParams }: { searchParams: Promise<{ url?: string | string[] }> }) {
+  const params = await searchParams;
+  const initialUrl = typeof params.url === "string" ? params.url : "";
+  return <StudioShell kind="video"><SourceInput initialUrl={initialUrl} /></StudioShell>;
 }

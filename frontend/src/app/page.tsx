@@ -1,68 +1,61 @@
 import Link from "next/link";
-import { SiteNav } from "@/components/site-nav";
+import { AuthMenu } from "@/components/auth-menu";
+import { LandingSourceForm } from "@/components/landing-source-form";
 import { ShortPreview } from "@/components/short-preview";
+import styles from "./home.module.css";
 
-const steps = [
-  { title: "링크 하나, 또는 내 영상", body: "YouTube 영상과 내 파일, 쿠팡 파트너스 상품 링크 중 원하는 소스로 시작하세요.", detail: "01 / IMPORT" },
-  { title: "AI가 추천하고, 내가 선택", body: "영상의 추천 구간 Top 3 또는 상품의 콘텐츠 앵글을 확인하고 마음에 드는 것을 고르세요.", detail: "02 / PICK" },
-  { title: "세로 쇼츠로 완성", body: "스타일을 정하고 완성된 쇼츠를 확인하세요. 미리보기부터 MP4 다운로드까지 한곳에서.", detail: "03 / EXPORT" },
+const audiences = [
+  { title: "크리에이터", body: "라이브와 긴 영상에서 다시 보고 싶은 장면을. AI 추천 Top 3를 확인하고 나만의 쇼츠로 만드세요.", href: "/video", action: "영상으로 시작하기" },
+  { title: "쇼핑몰", body: "소개하고 싶은 상품의 매력을 짧게. 쿠팡 파트너스 링크에서 콘텐츠 앵글과 내레이션을 준비하세요.", href: "/affiliate", action: "상품 링크로 시작하기" },
+  { title: "교육", body: "긴 강의에서 꼭 전달할 개념만 골라보세요. 원하는 구간을 직접 정해 짧은 학습 콘텐츠로 만드세요.", href: "/video", action: "강의 영상 가져오기" },
+  { title: "기업", body: "웨비나와 인터뷰를 브랜드의 이야기로. 제목·자막 스타일을 고르고 세로 영상으로 내려받으세요.", href: "/video", action: "브랜드 영상 가져오기" },
 ];
 
 export default function Home() {
   return (
-    <>
-      <SiteNav current="home" />
-      <main className="landing" id="main-content">
-        <div className="landing-shell">
-          <section className="landing-hero">
-            <div className="hero-copy">
-              <p className="eyebrow"><span className="status-dot" /> YOUR NEXT SHORT STARTS HERE</p>
-              <h1>좋은 순간을 골라,<br /><span>쇼츠로 완성.</span></h1>
-              <p className="intro">긴 영상도, 상품 링크도.<br />AI의 추천에 내 선택을 더해 세로 쇼츠로 만드세요.</p>
-              <div className="hero-actions"><a className="primary-link" href="#start">내 쇼츠 만들기 <span aria-hidden="true">↗</span></a><a className="text-link" href="#how-it-works">어떻게 만드나요 <span aria-hidden="true">↓</span></a></div>
-              <div className="hero-facts"><span>AI 추천 구간</span><span>자막 스타일 3종</span><span>MP4 다운로드</span></div>
+    <div className={styles.home}>
+      <div className={styles.shell}>
+        <header className={styles.header}>
+          <a className={styles.skip} href="#main-content">본문으로 이동</a>
+          <Link href="/" className={styles.logo} aria-label="Cutpick 홈">cutpick.</Link>
+          <nav aria-label="주요 메뉴"><Link href="/video">영상 쇼츠</Link><Link href="/affiliate">상품 쇼츠</Link><a href="#use-cases">활용 방법</a><a href="#how-it-works">만드는 과정</a></nav>
+          <AuthMenu />
+        </header>
+        <main className={styles.main} id="main-content">
+          <section className={styles.hero} aria-labelledby="hero-title">
+            <div className={styles.copy}>
+              <h1 id="hero-title">붙이기.<br />고르기.<br />끝.</h1>
+              <p className={styles.lead}>링크 하나로 시작해,<br />AI 추천에서 나만의 쇼츠를 고르세요.</p>
+              <div id="start"><LandingSourceForm /></div>
+              <div className={styles.quickLinks}><Link href="/video">내 영상 업로드 →</Link><Link href="/affiliate">상품 링크로 만들기 →</Link></div>
             </div>
-            <div className="hero-showcase" aria-label="영상과 상품 쇼츠의 디자인 예시. 실제 생성 결과와 다를 수 있습니다.">
-              <div className="showcase-grid" />
-              <div className="showcase-label"><span className="status-dot" /> FROM SOURCE TO SHORT</div>
-              <div className="showcase-video"><ShortPreview /></div>
-              <div className="showcase-product"><ShortPreview variant="product" /></div>
-              <div className="showcase-note"><span aria-hidden="true">✦</span><div><strong>가능성을 고르는 건 AI,<br />마지막 선택은 나.</strong><small>화면 구성 예시 · 실제 결과와 다를 수 있어요</small></div></div>
-            </div>
-          </section>
-          <section className="start-section" id="start" aria-labelledby="start-heading">
-            <div className="section-heading"><div><p className="eyebrow">MAKE YOUR PICK</p><h2 id="start-heading">무엇으로 시작할까요?</h2></div><p>소스에 맞는 작업 공간으로 바로 시작하세요.</p></div>
-            <div className="entry-cards">
-              <Link href="/video" className="entry-card video-entry">
-                <div className="entry-top"><span className="entry-icon" aria-hidden="true">▷</span><span className="entry-number">01 / VIDEO</span></div>
-                <h3>영상에서 쇼츠로</h3><p>긴 영상 속 놓치기 아까운 장면.<br />AI 추천으로 찾거나 직접 구간을 골라보세요.</p>
-                <div className="source-chips"><span>YouTube</span><span>영상 업로드</span></div>
-                <div className="entry-cta">영상으로 시작하기 <span aria-hidden="true">↗</span></div>
-              </Link>
-              <Link href="/affiliate" className="entry-card affiliate-entry">
-                <div className="entry-top"><span className="entry-icon" aria-hidden="true">↗</span><span className="entry-number">02 / AFFILIATE</span></div>
-                <h3>상품 링크에서 쇼츠로</h3><p>소개하고 싶은 상품의 매력을 짧게.<br />콘텐츠 앵글부터 내레이션까지 한 흐름으로.</p>
-                <div className="source-chips"><span>쿠팡 파트너스</span><span className="planned-chip">여행 링크 · 준비 중</span></div>
-                <div className="entry-cta">상품 링크로 시작하기 <span aria-hidden="true">↗</span></div>
-              </Link>
+            <div className={styles.examples} aria-label="쇼츠 디자인 예시. 실제 생성 결과가 아닙니다.">
+              <div className={styles.filmstrip}>
+                {["핵심 장면", "상품 소개", "나만의 이야기"].map((label, index) => <div className={styles.sample} key={label}><span className={styles.sampleLabel}>0{index + 1} / {label}</span><ShortPreview variant={index === 1 ? "product" : "video"} /></div>)}
+              </div>
+              <div className={styles.exampleCaption}><span>하나의 소스 → 새로운 쇼츠</span><span>디자인 예시</span></div>
             </div>
           </section>
-          <section className="how-it-works" id="how-it-works" aria-labelledby="how-heading">
-            <div className="section-heading"><div><p className="eyebrow">LESS EDITING. MORE CREATING.</p><h2 id="how-heading">복잡한 편집 대신, 세 번의 선택.</h2></div><span className="section-aside">소스 → 선택 → 완성</span></div>
-            <ol>{steps.map((step) => <li key={step.detail}><span>{step.detail}</span><h3>{step.title}</h3><p>{step.body}</p></li>)}</ol>
+          <section className={styles.audiences} id="use-cases" aria-label="이런 콘텐츠에 활용하세요">
+            {audiences.map((item, index) => <article key={item.title}><span className={styles.index}>0{index + 1}</span><h2>{item.title}</h2><p>{item.body}</p><Link href={item.href}>{item.action} →</Link></article>)}
           </section>
-          <section className="sources-section" aria-labelledby="sources-heading">
-            <div><p className="eyebrow">YOUR SOURCE, YOUR STORY</p><h2 id="sources-heading">시작은 다양하게.<br />결과는 하나의 쇼츠로.</h2><p>이용 권한이 있는 영상과 상품 정보로 시작하세요.</p></div>
-            <ul className="source-directory">
-              <li><span className="source-letter youtube-letter" aria-hidden="true">▶</span><div><strong>YouTube</strong><small>공개 영상 링크</small></div><span className="availability">지원</span></li>
-              <li><span className="source-letter" aria-hidden="true">↑</span><div><strong>내 영상 파일</strong><small>MP4 · MOV · MKV 등</small></div><span className="availability">지원</span></li>
-              <li><span className="source-letter coupang-letter" aria-hidden="true">C</span><div><strong>쿠팡 파트너스</strong><small>상품 링크로 시작</small></div><span className="availability">지원</span></li>
-              <li className="planned-source"><span className="source-letter" aria-hidden="true">↗</span><div><strong>아고다 · 트립닷컴</strong><small>여행 어필리에이트 링크</small></div><span className="availability planned">준비 중</span></li>
-            </ul>
+          <section className={styles.facts} aria-label="컷픽의 제작 방식">
+            <div><strong>Top 3</strong><span>AI가 추천한 구간에서 직접 선택</span></div>
+            <div><strong>9:16</strong><span>쇼츠에 맞춘 세로 영상</span></div>
+            <div><strong>MP4</strong><span>완성된 영상 미리보기와 다운로드</span></div>
           </section>
-          <footer className="site-footer"><Link href="/" className="footer-brand">cutpick.</Link><p>좋은 소스에서, 나다운 쇼츠로.</p><span>영상 이용 권한을 확인해 주세요.<br />상품 쇼츠에는 파트너스 활동 고지가 포함됩니다.</span></footer>
-        </div>
-      </main>
-    </>
+          <section className={styles.details} id="how-it-works" aria-labelledby="how-title">
+            <div><span className={styles.kicker}>FROM SOURCE TO SHORT</span><h2 id="how-title">복잡한 편집 대신,<br />세 번의 선택.</h2><ol><li>영상이나 상품 링크를 가져오세요.</li><li>추천 구간 또는 콘텐츠 앵글을 고르세요.</li><li>스타일을 정하고 MP4로 내려받으세요.</li></ol></div>
+            <dl className={styles.info}>
+              <div><dt>지원 소스</dt><dd>YouTube 링크, 내 영상 파일, 쿠팡 파트너스 상품 링크로 시작할 수 있습니다. 아고다·트립닷컴은 준비 중입니다.</dd></div>
+              <div><dt>원본 권한</dt><dd>직접 소유하거나 편집·이용 허가를 받은 영상으로 제작하세요. 영상 생성 전에 원본 이용 권한을 확인합니다.</dd></div>
+              <div><dt>크레딧</dt><dd>선택한 영상 구간에 따라 분석 크레딧이 계산됩니다. 제작 화면에서 예상 사용량을 확인한 뒤 진행하세요.</dd></div>
+            </dl>
+          </section>
+          <section className={styles.cta} aria-labelledby="cta-title"><h2 id="cta-title">지금 붙이고,<br />나만의 쇼츠로.</h2><div><a href="#start">첫 쇼츠 시작하기 <span aria-hidden="true">→</span></a><p>YouTube · 영상 업로드 · 상품 링크</p></div></section>
+        </main>
+        <footer className={styles.footer}><span>© cutpick. 좋은 소스에서, 나다운 쇼츠로.</span><nav aria-label="하단 메뉴"><Link href="/video">영상 쇼츠</Link><Link href="/affiliate">상품 쇼츠</Link><Link href="/my">내 프로젝트</Link></nav></footer>
+      </div>
+    </div>
   );
 }

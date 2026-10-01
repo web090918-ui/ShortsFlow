@@ -197,9 +197,9 @@ function isTerminalRender(job: RenderJob | null) {
   return !job || job.status === "completed" || job.status === "failed";
 }
 
-export function SourceInput() {
+export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const [mode, setMode] = useState<InputMode>("url");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [playbackSource, setPlaybackSource] = useState<{ youtubeUrl?: string; file?: File }>({});

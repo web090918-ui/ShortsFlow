@@ -9,7 +9,11 @@ import { useAuthStatus } from "@/lib/auth-context";
 /** Shows the wizard when the API allows it, otherwise a sign-in card. */
 export function LoginGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const loginResult = useSearchParams()?.get("login") ?? null;
+  const searchParams = useSearchParams();
+  const loginResult = searchParams?.get("login") ?? null;
+  const nextParams = new URLSearchParams(searchParams?.toString());
+  nextParams.delete("login");
+  const returnTo = `${pathname}${nextParams.size ? `?${nextParams.toString()}` : ""}`;
   const { status, loading } = useAuthStatus();
   const loginNotice =
     loginResult === "failed"
@@ -41,7 +45,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
           로그인하면 바로 이어서 진행됩니다.
         </p>
         {status.login_available ? (
-          <a className="submit-button auth-login-button" href={loginUrl(pathname)}>
+          <a className="submit-button auth-login-button" href={loginUrl(returnTo)}>
             Google로 로그인
           </a>
         ) : (

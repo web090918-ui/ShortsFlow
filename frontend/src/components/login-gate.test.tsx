@@ -1,9 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const navigation = vi.hoisted(() => ({ query: "login=failed" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/video",
-  useSearchParams: () => new URLSearchParams("login=failed"),
+  useSearchParams: () => new URLSearchParams(navigation.query),
 }));
 
 import { AuthProvider } from "@/lib/auth-context";
@@ -21,6 +22,7 @@ describe("LoginGate", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    navigation.query = "login=failed";
   });
 
   it("shows the Google sign-in card when login is required and nobody is signed in", async () => {
@@ -42,6 +44,16 @@ describe("LoginGate", () => {
       "http://localhost:8000/auth/google/start?next=%2Fvideo",
     );
     expect(screen.queryByText("wizard")).toBeNull();
+  });
+
+  it("preserves the landing video URL through Google sign-in", async () => {
+    const url = "https://youtu.be/M7lc1UVf-VE";
+    navigation.query = new URLSearchParams({ url, login: "failed" }).toString();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(statusResponse({ auth_required: true, login_available: true, user: null }));
+    render(<AuthProvider><LoginGate><p>wizard</p></LoginGate></AuthProvider>);
+    const link = await screen.findByRole("link", { name: "Google로 로그인" });
+    const next = new URL(link.getAttribute("href")!).searchParams.get("next");
+    expect(next).toBe(`/video?${new URLSearchParams({ url }).toString()}`);
   });
 
   it("renders the wizard for a signed-in user", async () => {
