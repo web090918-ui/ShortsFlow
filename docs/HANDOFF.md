@@ -25,7 +25,7 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 
 ## Credits (added 2026-10-01)
 
-1 credit = 1 source minute analysed; signup grant 30 once per account; analysis 1 per minute, manual Short 1 per clip minute, candidate render 0, product Short 5; charged at creation, refunded once on final failure, 402 when short. Competitor research, cost drivers, pack and subscription proposals, and the payment-provider plan (Toss Payments or PortOne first, Stripe later) are in [CREDITS_PRICING.md](CREDITS_PRICING.md). Payments themselves are not implemented; the ledger already has a `purchase` reason for the webhook to use.
+1 credit = 1 source minute analysed; signup grant 30 once per account; analysis 1 per minute, manual Short 1 per clip minute, candidate render 0, product Short 5; charged at creation, refunded once on final failure, 402 when short. Competitor research, cost drivers, pack and subscription proposals, and the payment-provider plan (Toss Payments or PortOne first, Stripe later) are in [CREDITS_PRICING.md](CREDITS_PRICING.md). Payments themselves are not implemented; the ledger already has a `purchase` reason for the webhook to use. To top up one account by hand, run `python scripts/grant_credits.py --email <email> --amount <n>` from `backend/` on a machine with Application Default Credentials for the project and the Firestore env set; it writes an `adjustment` entry so the history shows it.
 
 ## Agreed next order
 
