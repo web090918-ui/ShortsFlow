@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAuthStatus } from "@/lib/auth-context";
-import { creditCost, loginUrl, logout } from "@/lib/auth";
+import { CREDIT_RULES, creditCost, loginUrl, logout, summarizeCreditBudget } from "@/lib/auth";
 import { LandingSourceForm } from "@/components/landing-source-form";
 import styles from "./member-workspace.module.css";
 
@@ -61,7 +61,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
         <Link href="/my/affiliate" aria-current={section === "affiliate" ? "page" : undefined}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
       </nav>
       <div className={styles.sidebarBottom}>
-        <Link className={styles.balance} href="/my#credit-heading"><span>남은 크레딧</span><strong>{loading ? "…" : status.credits ?? "—"}<small> C</small></strong><span>사용 내역 확인 →</span></Link>
+        <Link className={styles.balance} href="/my#credit-heading" title={summarizeCreditBudget(status) ?? undefined}><span>남은 크레딧</span><strong>{loading ? "…" : status.credits ?? "—"}<small> C</small></strong><span>사용 내역 확인 →</span></Link>
         <Link className={styles.settingsLink} href="/my/settings" aria-current={settings ? "page" : undefined}>⚙ 계정 · 제작 설정</Link>
         <Link className={styles.homeLink} href="/">서비스 소개 ↗</Link>
       </div>
@@ -69,7 +69,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
     <div className={styles.body}>
       <header className={styles.topbar}>
         <span>{topbarTitle}</span>
-        <Link href="/my#credit-heading" className={styles.topbarCredits}>크레딧 <strong>{status.credits ?? "—"}</strong></Link>
+        <Link href="/my#credit-heading" className={styles.topbarCredits} title={summarizeCreditBudget(status) ?? "남은 크레딧"}><span aria-hidden="true">◎</span> 크레딧 <strong>{status.credits ?? "—"}</strong></Link>
         <Link href="/my/settings" aria-label="계정 설정">계정 설정</Link>
       </header>
       <main className={styles.content} id="main-content">
@@ -133,7 +133,7 @@ export function MemberSettings() {
     <div><span className={styles.label}>YOUR WORKSPACE</span><h1>계정 · 제작 설정</h1><p>연결된 계정과 크레딧을 확인하고, 자주 쓰는 제작 방식을 설정하세요.</p></div>
     <section className={styles.panel}><h2>내 계정</h2><dl className={styles.info}><div><dt>로그인 방식</dt><dd>Google 계정</dd></div><div><dt>이메일</dt><dd>{status.user.email ?? "등록된 이메일 없음"}</dd></div></dl><p>계정 정보는 Google 로그인 정보를 기준으로 표시됩니다.</p></section>
     <section className={styles.panel}><h2>제작 시작 설정</h2><label htmlFor="default-source">기본 제작 방식</label><select id="default-source" value={source} onChange={event => save(event.target.value)}><option value="video">영상 쇼츠 (YouTube · 업로드)</option><option value="affiliate">상품 쇼츠 (어필리에이트)</option></select><p>작업실의 ‘내 기본 제작 방식으로 시작’에 적용됩니다. 이 브라우저에 계정별로 저장됩니다.</p><p role="status">{notice}</p></section>
-    <section className={styles.panel}><h2>크레딧</h2><strong className={styles.creditNumber}>{status.credits ?? "—"} C</strong><dl className={styles.info}>{prices.map(([label, cost, unit]) => <div key={label}><dt>{label}</dt><dd>{cost === null ? "확인 중" : cost === 0 ? "무료" : `${cost} C${unit}`}</dd></div>)}</dl><Link href="/my#credit-heading">크레딧 사용 내역 보기 →</Link></section>
+    <section className={styles.panel} id="credit-rules"><h2>크레딧</h2><strong className={styles.creditNumber} title={summarizeCreditBudget(status) ?? undefined}>{status.credits ?? "—"} C</strong><dl className={styles.info}>{prices.map(([label, cost, unit]) => <div key={label}><dt>{label}</dt><dd>{cost === null ? "확인 중" : cost === 0 ? "무료" : `${cost} C${unit}`}</dd></div>)}</dl><h3 className={styles.subheading}>차감 기준</h3><ul className={styles.rules}>{CREDIT_RULES.map(rule => <li key={rule}>{rule}</li>)}</ul><Link href="/my#credit-heading">크레딧 사용 내역 보기 →</Link></section>
     <section className={styles.panel}><h2>계정 관리</h2><div className={styles.accountAction}><div><strong>로그아웃</strong><p>이 기기의 로그인 세션을 종료합니다.</p></div><button onClick={signOut} disabled={busy}>{busy ? "처리 중..." : "Logout"}</button></div>{error ? <p role="alert">{error}</p> : null}</section>
   </div>;
 }

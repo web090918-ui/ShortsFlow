@@ -24,7 +24,9 @@
 .body { min-width:0; }
 .topbar { position:sticky; top:0; z-index:30; height:60px; display:flex; align-items:center; gap:24px; padding:0 36px; border-bottom:1px solid var(--line); background:#fff; font-size:13px; }
 .topbar > span { flex:1; font-weight:700; }
-.topbarCredits { color:#c92810; }
+.topbarCredits { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; background:#c92810; color:#fff!important; font-size:13px; font-weight:700; white-space:nowrap; }
+.topbarCredits strong { color:#fff; }
+.topbarCredits:hover { background:#b52418; }
 .studio { display:grid; gap:24px; }
 .studioHeading { position:relative; padding:0 140px 0 0; }
 .studioHeading h1 { margin:8px 0 6px; }
@@ -55,6 +57,9 @@
 .panel a { color:#b52418; }
 .panel label { display:block; font-size:14px; font-weight:700; margin-bottom:10px; }
 .panel select { width:100%; max-width:480px; color:var(--text); background:#fff; border:1px solid #aaa6a5; padding:12px; border-radius:8px; }
+.subheading { margin:24px 0 10px; font-size:14px; font-weight:800; color:var(--muted); letter-spacing:.02em; }
+.rules { margin:0 0 20px; padding-left:18px; color:var(--muted); font-size:13px; line-height:1.7; }
+.rules li + li { margin-top:4px; }
 .info { margin:20px 0; }
 .info > div { display:grid; grid-template-columns:160px 1fr; gap:20px; padding:16px 0; border-bottom:1px solid var(--line); font-size:14px; }
 .info dt { color:var(--muted); }

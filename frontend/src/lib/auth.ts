@@ -74,6 +74,24 @@ export function describeCreditBudget(status: AuthStatus): string | null {
   return parts.join(" · ");
 }
 
+/** Compact budget for a tooltip next to the balance: "AI 분석 약 2회 · 직접 쇼츠 약 14편 · 상품 쇼츠 약 5편". */
+export function summarizeCreditBudget(status: AuthStatus): string | null {
+  const budget = creditBudget(status);
+  if (!budget) return null;
+  const parts = [`AI 분석 약 ${budget.analyses10min}회 (10분 기준)`];
+  if (budget.manualShorts !== Infinity) parts.push(`직접 지정 쇼츠 약 ${budget.manualShorts}편 (2분 기준)`);
+  if (budget.productShorts !== Infinity && budget.productShorts > 0) parts.push(`상품 쇼츠 약 ${budget.productShorts}편`);
+  return parts.join(" · ");
+}
+
+/** The charging rules, shown once in 계정 · 제작 설정 rather than on every page. */
+export const CREDIT_RULES: readonly string[] = [
+  "1크레딧 = 원본 영상 1분 분석 (올림). 15분 구간이면 15크레딧.",
+  "추천 Top 3 중 하나를 렌더하는 것은 무료. 직접 지정 쇼츠는 클립 1분당 1크레딧.",
+  "상품 쇼츠는 1편 5크레딧. 콘텐츠 앵글 만들기는 무료.",
+  "작업 생성 시 차감되고, 최종 실패하면 자동으로 되돌려 드립니다.",
+];
+
 export function loginUrl(next: string) {
   return `${API_URL}/auth/google/start?next=${encodeURIComponent(next === "/" ? "/my" : next)}`;
 }

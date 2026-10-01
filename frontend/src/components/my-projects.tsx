@@ -8,7 +8,7 @@ import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { formatTimecode } from "@/lib/timecode";
-import { describeCreditBudget, loginUrl } from "@/lib/auth";
+import { loginUrl, summarizeCreditBudget } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 
 export type ProjectSummary = {
@@ -119,24 +119,25 @@ async function fetchJson<T>(path: string, failure: string): Promise<T> {
 
 function CreditCard({ credits }: { credits: CreditSummary }) {
   const { status } = useAuthStatus();
+  const summary = summarizeCreditBudget({ ...status, credits: credits.balance });
   return (
     <section className="source-panel credit-card" aria-labelledby="credit-heading">
       <div className="source-heading">
         <div>
           <p className="section-label">CREDITS</p>
-          <h2 id="credit-heading">남은 크레딧 {credits.balance}</h2>
+          <h2 id="credit-heading">
+            남은 크레딧 {credits.balance}
+            {summary ? (
+              <span className="credit-tip" tabIndex={0} role="note" aria-label={`지금 잔액으로 ${summary}`} data-tip={`지금 잔액으로 ${summary}`}>
+                ?
+              </span>
+            ) : null}
+          </h2>
         </div>
+        <Link href="/my/settings#credit-rules" className="credit-rules-link">
+          차감 기준 보기 →
+        </Link>
       </div>
-      <p className="credit-summary">
-        지금 잔액으로 {describeCreditBudget({ ...status, credits: credits.balance }) ?? "작업"}을 만들 수
-        있어요.
-      </p>
-      <ul className="credit-rules">
-        <li>1크레딧 = 원본 영상 1분 분석 (올림). 15분 구간이면 15크레딧.</li>
-        <li>추천 Top 3 중 하나를 렌더하는 것은 무료. 직접 지정 쇼츠는 클립 1분당 1크레딧.</li>
-        <li>상품 쇼츠는 1편 5크레딧. 콘텐츠 앵글 만들기는 무료.</li>
-        <li>작업 생성 시 차감되고, 최종 실패하면 자동으로 되돌려 드립니다.</li>
-      </ul>
       {credits.entries.length > 0 ? (
         <ul className="credit-entries">
           {credits.entries.slice(0, 10).map((entry) => (
