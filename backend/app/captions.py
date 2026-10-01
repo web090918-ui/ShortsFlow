@@ -76,6 +76,7 @@ class CaptionStyle:
     emphasize_longest: bool = False  # non-karaoke: colour the longest word of each cue
     bar_height: int = 0  # >0 draws a full-width band behind each cue (news lower third)
     show_caption: bool = True
+    positionable: bool = False  # the viewer may move the caption (하단/중앙)
     # Stage and headline.
     stage_color: str = "#000000"  # behind the picture in the STAGE layout; hex
     text_color: str = "&H00FFFFFF"  # headline and chrome text on the stage
@@ -130,6 +131,7 @@ def _stage_template(
     highlight: str | None = None,
     emphasize_longest: bool = False,
     show_caption: bool = True,
+    positionable: bool = False,
     text_color: str = WHITE,
     headline_size: int = 76,
     headline_align_left: bool = False,
@@ -157,6 +159,7 @@ def _stage_template(
         highlight=highlight,
         emphasize_longest=emphasize_longest,
         show_caption=show_caption,
+        positionable=positionable,
         stage_color=stage_color,
         text_color=text_color,
         headline_size=headline_size,
@@ -216,7 +219,8 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         tag="자막",
         caption_size=72,
         emphasize_longest=True,
-        preview={"caption": "pop", "weight": "900"},
+        positionable=True,
+        preview={"caption": "pop", "weight": "900", "positionable": "true"},
     ),
     RenderTemplate.CAPTION_ACCENT: _stage_template(
         name="자막 강조형",
@@ -224,7 +228,8 @@ TEMPLATE_STYLES: dict[RenderTemplate, CaptionStyle] = {
         tag="자막",
         caption_size=62,
         highlight=BRAND,
-        preview={"caption": "karaoke", "weight": "800"},
+        positionable=True,
+        preview={"caption": "karaoke", "weight": "800", "positionable": "true"},
     ),
     RenderTemplate.DARK_MINIMAL: _stage_template(
         name="다크 미니멀",
@@ -899,6 +904,9 @@ def build_ass(
     """Return an ASS document whose times are relative to the clip start."""
     style = TEMPLATE_STYLES[template]
     palette = _palette(style, layout=layout, brand_color=brand_color)
+    if not style.positionable:
+        # Card and paper layouts keep the caption in the band under the picture.
+        caption_position = CaptionPosition.BOTTOM
     lines, prefix, margin_v = _header(
         style, layout=layout, palette=palette, caption_position=caption_position
     )

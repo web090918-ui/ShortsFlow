@@ -25,7 +25,8 @@ def test_templates_endpoint_lists_every_template_and_layout() -> None:
     assert {layout.value for layout in RenderLayout} == {"STAGE", "FIT", "FILL"}
     accent = next(item for item in payload["templates"] if item["id"] == "CAPTION_ACCENT")
     assert accent["karaoke"] is True
-    assert accent["preview"]["caption"] == "karaoke"
+    assert accent["preview"]["caption"] == "karaoke" and accent["preview"]["positionable"] == "true"
+    assert "positionable" not in payload["templates"][3]["preview"]  # PAPER keeps the band
     assert accent["name"] == TEMPLATE_STYLES[RenderTemplate.CAPTION_ACCENT].name
     for item in payload["templates"]:
         assert item["name"] and item["description"] and item["tag"]

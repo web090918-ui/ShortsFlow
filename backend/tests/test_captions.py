@@ -346,3 +346,24 @@ def test_dark_minimal_draws_no_captions() -> None:
 
     assert not [line for line in document.splitlines() if line.startswith("Dialogue: 1,")]
     assert ",Headline,," in document
+
+
+def test_caption_position_only_moves_captions_on_caption_templates() -> None:
+    from app.templates import CaptionPosition, RenderLayout
+
+    def default_style(template: RenderTemplate) -> str:
+        document = build_ass(
+            _cues(),
+            template=template,
+            clip_start_seconds=100,
+            clip_end_seconds=120,
+            layout=RenderLayout.STAGE,
+            caption_position=CaptionPosition.MIDDLE,
+        )
+        return next(line for line in document.splitlines() if line.startswith("Style: Default"))
+
+    # 자막 팝형 / 자막 강조형 honour 중앙; card and paper templates keep the band under the picture.
+    assert default_style(RenderTemplate.CAPTION_POP).endswith(",5,90,90,0,1")
+    assert default_style(RenderTemplate.CAPTION_ACCENT).endswith(",5,90,90,0,1")
+    assert default_style(RenderTemplate.PAPER).endswith(",2,90,90,440,1")
+    assert default_style(RenderTemplate.SNS_CARD).endswith(",2,90,90,440,1")

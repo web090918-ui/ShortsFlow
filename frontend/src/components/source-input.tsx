@@ -837,11 +837,13 @@ export function SourceInput() {
                 />
               </div>
 
-              <CaptionPositionPicker
-                positions={renderOptions.caption_positions}
-                value={captionPosition}
-                onChange={setCaptionPosition}
-              />
+              {selectedTemplate?.preview.positionable === "true" ? (
+                <CaptionPositionPicker
+                  positions={renderOptions.caption_positions}
+                  value={captionPosition}
+                  onChange={setCaptionPosition}
+                />
+              ) : null}
 
               <LayoutPicker
                 layouts={renderOptions.layouts}

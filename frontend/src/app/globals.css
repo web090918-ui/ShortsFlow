@@ -252,13 +252,22 @@ h2 {
   margin-top: 0.3rem;
 }
 
-.source-result span {
+.source-result-header span {
   color: var(--accent);
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.source-result strong {
+/* Preview text is styled inline by the picker; keep page rules out of it. */
+.caption-sample span,
+.caption-sample b {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  justify-self: unset;
+}
+
+.source-result-header strong {
   justify-self: end;
   color: var(--muted);
   font-size: 0.76rem;
@@ -829,6 +838,7 @@ h2 {
 
 .caption-sample-headline-line {
   display: block;
+  font-size: inherit;
 }
 
 .title-field textarea {

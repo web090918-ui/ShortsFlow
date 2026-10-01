@@ -14,6 +14,8 @@ export type CaptionTemplate = {
     channel?: string;
     /** Caption treatment: pop (longest word in brand), karaoke, plain, none. */
     caption?: string;
+    /** "true" when the viewer may move the caption (하단/중앙). */
+    positionable?: string;
     color?: string;
     stroke?: string;
     background?: string;
@@ -58,11 +60,11 @@ export const DEFAULT_BRAND_COLOR = "#4FE1E1";
 
 /** Output sizes; only 9:16 Shorts render today, the rest are shown as planned. */
 export const ASPECT_RATIOS: Array<{ id: string; available: boolean }> = [
+  { id: "9:16", available: true },
   { id: "16:9", available: false },
   { id: "5:4", available: false },
   { id: "1:1", available: false },
   { id: "4:5", available: false },
-  { id: "9:16", available: true },
 ];
 
 export const SOURCE_LANGUAGES: Array<{ id: string; name: string }> = [
@@ -106,13 +108,14 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
     stage("CAPTION_POP", "자막 팝형", "핵심 어절을 크고 리듬감 있게. 검은 배경에 제목과 큰 자막.", "자막", {
       caption: "pop",
       weight: "900",
+      positionable: "true",
     }),
     stage(
       "CAPTION_ACCENT",
       "자막 강조형",
       "말하는 어절만 브랜드 컬러로. 단어 타이밍을 따라 색이 바뀝니다.",
       "자막",
-      { caption: "karaoke" },
+      { caption: "karaoke", positionable: "true" },
       true,
     ),
     stage("DARK_MINIMAL", "다크 미니멀", "제목과 영상만. 자막 없이 깔끔하게.", "미니멀", { caption: "none" }),
