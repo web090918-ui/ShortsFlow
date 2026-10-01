@@ -10,7 +10,6 @@ import type { RenderJob } from "@/components/render-result";
 import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 import {
-  AspectRatioChips,
   BrandColorPicker,
   CaptionPositionPicker,
   LayoutPicker,
@@ -18,7 +17,6 @@ import {
 } from "@/components/template-picker";
 import { useRenderOptions } from "@/lib/render-options-context";
 import {
-  ASPECT_RATIOS,
   DEFAULT_BRAND_COLOR,
   DEFAULT_CAPTION_POSITION,
   DEFAULT_LAYOUT_ID,
@@ -238,6 +236,9 @@ export function SourceInput() {
   const sampleImageUrl = source?.metadata?.youtube?.thumbnail_url ?? sampleFrame;
   const channelName = source?.metadata?.youtube?.channel_title ?? authStatus.user?.name ?? null;
   const selectedTemplate = renderOptions.templates.find((template) => template.id === templateId);
+  const supportsCaptionPosition = selectedTemplate?.preview.positionable === "true"
+    && selectedTemplate.preview.caption !== "none";
+  const effectiveCaptionPosition = supportsCaptionPosition ? captionPosition : "BOTTOM";
   const [uploadStep, setUploadStep] = useState<string | null>(null);
   const rangeDuration = Math.max(0, rangeEnd - rangeStart);
   const rangeTooLong = rangeDuration > MAX_RANGE_SECONDS;
@@ -340,7 +341,7 @@ export function SourceInput() {
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
-          caption_position: captionPosition,
+          caption_position: effectiveCaptionPosition,
           rights_confirmed: true,
         }),
       });
@@ -478,7 +479,7 @@ export function SourceInput() {
           layout_id: layoutId,
           ...(title.trim() ? { title: title.trim() } : {}),
           brand_color: brandColor,
-          caption_position: captionPosition,
+          caption_position: effectiveCaptionPosition,
           transcript_language: transcriptLanguage,
           output_language: outputLanguage,
         }),
@@ -520,7 +521,7 @@ export function SourceInput() {
           template_id: templateId,
           layout_id: layoutId,
           brand_color: brandColor,
-          caption_position: captionPosition,
+          caption_position: effectiveCaptionPosition,
           ...(meta.title.trim() ? { title: meta.title.trim() } : {}),
           ...(meta.description.trim() ? { description: meta.description.trim() } : {}),
         }),
@@ -808,6 +809,23 @@ export function SourceInput() {
                 <p className="range-help">원본 음성과 영상에 이미 들어간 글자는 유지됩니다.</p>
               </section>
 
+              <section className="video-design-options" aria-labelledby="video-design-heading">
+                <div className="video-design-heading">
+                  <div>
+                    <h4 id="video-design-heading">영상 디자인</h4>
+                    <p>화면 배치를 먼저 고르고, 아래에서 템플릿을 비교하세요.</p>
+                  </div>
+                  <span className="output-ratio-label">9:16 쇼츠</span>
+                </div>
+                <LayoutPicker
+                  layouts={renderOptions.layouts}
+                  value={layoutId}
+                  onChange={setLayoutId}
+                  imageUrl={sampleImageUrl}
+                  stageColor={selectedTemplate?.preview.stage ?? "#000000"}
+                  compact
+                />
+
               <label className="field title-field">
                 <span>쇼츠 제목 (선택)</span>
                 <textarea
@@ -833,7 +851,6 @@ export function SourceInput() {
               />
 
               <div className="render-options-row">
-                <AspectRatioChips ratios={ASPECT_RATIOS} />
                 <BrandColorPicker
                   swatches={renderOptions.brand_colors}
                   value={brandColor}
@@ -841,7 +858,7 @@ export function SourceInput() {
                 />
               </div>
 
-              {selectedTemplate?.preview.positionable === "true" ? (
+              {supportsCaptionPosition ? (
                 <CaptionPositionPicker
                   positions={renderOptions.caption_positions}
                   value={captionPosition}
@@ -849,13 +866,7 @@ export function SourceInput() {
                 />
               ) : null}
 
-              <LayoutPicker
-                layouts={renderOptions.layouts}
-                value={layoutId}
-                onChange={setLayoutId}
-                imageUrl={sampleImageUrl}
-                stageColor={selectedTemplate?.preview.stage ?? "#000000"}
-              />
+              </section>
 
               <label className="rights-confirmation">
                 <input

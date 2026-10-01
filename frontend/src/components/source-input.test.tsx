@@ -52,6 +52,16 @@ describe("SourceInput", () => {
       }),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const layoutGroup = screen.getByRole("group", { name: "화면 배치" });
+    const templateGroup = screen.getByRole("group", { name: /템플릿 자막 강조형/ });
+    expect(layoutGroup.compareDocumentPosition(templateGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "자막 중앙" }));
+    for (const name of ["페이퍼", "SNS 템플릿", "커뮤니티 템플릿", "다크 미니멀"]) {
+      await user.click(screen.getByRole("button", { name: `${name} 템플릿` }));
+      expect(screen.queryByRole("group", { name: "자막 위치" })).toBeNull();
+    }
+    await user.click(screen.getByRole("button", { name: "자막 팝형 템플릿" }));
+    expect(screen.getByRole("group", { name: "자막 위치" })).toBeTruthy();
   });
 
   it("requires a file in upload mode", async () => {

@@ -237,11 +237,12 @@ type LayoutPickerProps = {
   onChange: (id: LayoutId) => void;
   imageUrl: string | null;
   stageColor?: string;
+  compact?: boolean;
 };
 
-export function LayoutPicker({ layouts, value, onChange, imageUrl, stageColor = "#000000" }: LayoutPickerProps) {
+export function LayoutPicker({ layouts, value, onChange, imageUrl, stageColor = "#000000", compact = false }: LayoutPickerProps) {
   return (
-    <fieldset className="template-picker layout-picker">
+    <fieldset className={`template-picker layout-picker${compact ? " layout-picker-compact" : ""}`}>
       <legend>화면 배치</legend>
       <p>원본에 자막이나 중요한 화면이 양옆에 있다면 원본을 그대로 두는 배치를 고르세요.</p>
       <div className="layout-options">
