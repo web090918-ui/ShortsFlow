@@ -39,6 +39,32 @@
 .studio :global(.template-card[aria-pressed="true"]),.studio :global(.position-card[aria-pressed="true"]),.studio :global(.candidate-card.selected),.studio :global(.short-meta) { border-color:#c92810; box-shadow:0 0 0 1px #c92810; }
 .studio :global(.ratio-chip[aria-pressed="true"]) { border-color:#c92810; background:#fff0ed; color:#b52418; }
 .studio :global(.secondary-button) { background:#fff; color:#b52418; border-color:#d8b5ae; }
+.studio :global(.source-entry-form) { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:12px; }
+.studio :global(.source-entry-form > .form-intro) { grid-column:1 / -1; margin:0 0 8px; }
+.studio :global(.source-entry-form > .field) { grid-column:1; grid-row:2; min-width:0; }
+.studio :global(.source-entry-form > .source-entry-submit) { grid-column:2; grid-row:2; min-height:52px; padding:14px 24px; font-size:14px; white-space:nowrap; border-radius:8px; }
+.studio :global(.source-entry-form > .range-help),.studio :global(.source-entry-form > .input-footnote) { grid-column:1 / -1; margin:0; font-size:12px; text-align:left; justify-content:flex-start; overflow-wrap:anywhere; }
+.studio :global(.field) { color:#49454d; font-size:13px; }
+.studio :global(.field input),.studio :global(.field textarea),.studio :global(.field select),.studio :global(.range-time-fields input) { background:#fff; color:var(--text); border:1px solid #c9c6cc; border-radius:8px; }
+.studio :global(.field input[type="url"]) { height:52px; min-height:52px; padding:0 16px; font-size:14px; }
+.studio :global(.field input::placeholder),.studio :global(.field textarea::placeholder) { color:#77717c; opacity:1; }
+.studio :global(.field input:focus),.studio :global(.field textarea:focus),.studio :global(.field select:focus),.studio :global(.range-time-fields input:focus) { border-color:#c92810; outline:2px solid #c92810; outline-offset:-2px; box-shadow:none; }
+.studio :global(.mode-switch) { background:#f3f2f4; border:1px solid var(--line); padding:4px; }
+.studio :global(.mode-switch button) { color:#514b57; }
+.studio :global(.mode-switch button.active) { background:#c92810; color:#fff; }
+.studio :global(.provider-list li.ready) { background:#fff1ed; border-color:#efb7aa; color:#9f2815; }
+.studio :global(.provider-list li.ready small) { color:#9f2815; font-weight:700; }
+.studio :global(.provider-list li.planned) { background:#f8f7f9; color:#68616e; }
+.studio :global(.file-field input) { min-height:88px; padding:18px; background:#faf9fb; border:1px dashed #b7b1bc; }
+.studio :global(.file-field input::file-selector-button) { background:#fff1ed; color:#a72613; border:1px solid #efb7aa; }
+.studio :global(.source-entry-upload) { grid-template-columns:minmax(0,1fr); }
+.studio :global(.source-entry-upload > .source-entry-submit) { grid-column:1; grid-row:auto; justify-self:start; }
+.workspace .studio :global(.submit-button:not(:disabled):hover) { background:#ad230e; color:#fff; filter:none; }
+.workspace .studio :global(.secondary-button:not(:disabled):hover) { background:#fff1ed; color:#9f2815; }
+@media(max-width:900px) {
+  .studio :global(.source-entry-form) { grid-template-columns:minmax(0,1fr); }
+  .studio :global(.source-entry-form > .source-entry-submit) { grid-column:1; grid-row:3; width:100%; white-space:normal; }
+}
 .content { max-width:1360px; padding:36px; margin:auto; min-height:calc(100vh - 60px); }
 .welcome { padding:36px; border:1px solid #f1d6d0; border-radius:16px; background:linear-gradient(120deg,#fff4ed,#fff 70%); margin-bottom:40px; }
 .welcome form { max-width:760px; margin-top:24px; }

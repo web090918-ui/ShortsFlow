@@ -153,12 +153,13 @@ export function AffiliateInput() {
         ))}
       </ul>
 
-      <form onSubmit={handleSubmit}>
+      <form className="source-entry-form" onSubmit={handleSubmit}>
         <p className="form-intro">쿠팡 파트너스 링크를 넣으면 상품 정보를 먼저 확인할 수 있어요.</p>
         <label className="field">
           <span>어필리에이트 링크</span>
           <input
             type="url"
+            spellCheck={false}
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://partners.coupang.com/#affiliate/ws/linkgeneration/..."
@@ -168,7 +169,7 @@ export function AffiliateInput() {
         <p className={provider?.status === "planned" ? "range-help range-error" : "range-help"}>
           {provider ? `${provider.name} · ${provider.hint}` : AFFILIATE_PROVIDERS[0].hint}
         </p>
-        <button className="submit-button" type="submit" disabled={isSubmitting}>
+        <button className="submit-button source-entry-submit" type="submit" disabled={isSubmitting}>
           {isSubmitting ? "상품 정보 불러오는 중..." : "상품 정보 불러오기"}
         </button>
         <p className="input-footnote">상품을 확인한 뒤, 소개할 콘텐츠 앵글을 선택하세요.</p>

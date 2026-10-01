@@ -620,13 +620,14 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
         </p>
       ) : null}
 
-      <form onSubmit={handleSubmit}>
+      <form className={`source-entry-form${mode === "upload" ? " source-entry-upload" : ""}`} onSubmit={handleSubmit}>
         <p className="form-intro">{mode === "url" ? "쇼츠로 만들 YouTube 영상 링크를 붙여 넣으세요." : "내 기기에 있는 영상 파일로 쇼츠를 만들어보세요."}</p>
         {mode === "url" ? (
           <label className="field">
             <span>YouTube URL</span>
             <input
               type="url"
+              spellCheck={false}
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               placeholder="https://www.youtube.com/watch?v=..."
@@ -644,7 +645,7 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           </label>
         )}
 
-        <button className="submit-button" type="submit" disabled={isSubmitting}>
+        <button className="submit-button source-entry-submit" type="submit" disabled={isSubmitting}>
           {isSubmitting
             ? uploadStep ?? (mode === "upload" ? "업로드 중..." : "영상 정보 불러오는 중...")
             : "영상 불러오기"}
