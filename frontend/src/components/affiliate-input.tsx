@@ -4,10 +4,15 @@ import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 
 import { API_URL } from "@/config";
+import { readJsonResponse as readApiResponse } from "@/lib/api";
 import { ProductStudio } from "@/components/product-studio";
 import type { ProductContent, ProductFacts } from "@/components/product-studio";
 import { putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
+
+function readJsonResponse<T>(response: Response): Promise<T> {
+  return readApiResponse<T>(response, "요청을 처리하지 못했습니다.");
+}
 
 type Source = {
   id: string;
@@ -66,15 +71,6 @@ export function detectProvider(value: string) {
   } catch {
     return null;
   }
-}
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const payload = await response.json();
-  if (!response.ok) {
-    const detail = typeof payload.detail === "string" ? payload.detail : null;
-    throw new Error(detail ?? "요청을 처리하지 못했습니다.");
-  }
-  return payload as T;
 }
 
 function parsePrice(value: string): number | null {

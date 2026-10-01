@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 
 import { API_URL } from "@/config";
+import { readJsonResponse as readApiResponse } from "@/lib/api";
 import { formatTimecode } from "@/lib/timecode";
 import { RenderResult } from "@/components/render-result";
 import { SourcePlayer } from "@/components/source-player";
@@ -32,6 +33,10 @@ import {
 import type { CaptionPosition, FrameLayout } from "@/lib/render-options";
 import { currentDurationReader, currentFrameCapturer, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
+
+function readJsonResponse<T>(response: Response): Promise<T> {
+  return readApiResponse<T>(response, "Source를 처리하지 못했습니다.");
+}
 
 type InputMode = "url" | "upload";
 
@@ -117,15 +122,6 @@ const ANALYSIS_STEP_LABELS: Record<AnalysisJob["step"], string> = {
   RANKING: "AI가 베스트를 고르는 중",
   SHORT_RENDER: "렌더링 중",
 };
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const payload = await response.json();
-  if (!response.ok) {
-    const detail = typeof payload.detail === "string" ? payload.detail : null;
-    throw new Error(detail ?? "Source를 처리하지 못했습니다.");
-  }
-  return payload as T;
-}
 
 function formatDuration(seconds?: number | null) {
   if (typeof seconds !== "number") return null;

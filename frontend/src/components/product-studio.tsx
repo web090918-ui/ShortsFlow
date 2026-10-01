@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API_URL } from "@/config";
+import { readJsonResponse as readApiResponse } from "@/lib/api";
 import { BackgroundNotice } from "@/components/background-notice";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
@@ -45,6 +46,10 @@ export type ProductContent = {
   description?: string | null;
 };
 
+function readJsonResponse<T>(response: Response): Promise<T> {
+  return readApiResponse<T>(response, "요청을 처리하지 못했습니다.");
+}
+
 type Props = {
   sourceId: string;
   product: ProductFacts;
@@ -56,15 +61,6 @@ type Props = {
 const POLL_INTERVAL_MS = 1500;
 const MAX_TITLE = 100;
 const MAX_DESCRIPTION = 500;
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  const payload = await response.json();
-  if (!response.ok) {
-    const detail = typeof payload.detail === "string" ? payload.detail : null;
-    throw new Error(detail ?? "요청을 처리하지 못했습니다.");
-  }
-  return payload as T;
-}
 
 function won(value: number | null) {
   return value === null ? null : `${value.toLocaleString("ko-KR")}원`;
