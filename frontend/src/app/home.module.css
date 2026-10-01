@@ -9,7 +9,10 @@
 .home h1,.home h2 { color:inherit; font-family:inherit; }
 .shell { max-width:1280px; margin-inline:auto; }
 .main { padding:0; min-height:auto; }
-.header { background:#fff; color:var(--ink); padding:20px 56px; display:flex; align-items:center; flex-wrap:wrap; gap:24px 32px; border-bottom:2px solid var(--divider); }
+.header { position:sticky; top:0; z-index:50; background:#fff; color:var(--ink); padding:20px 56px; display:flex; align-items:center; flex-wrap:wrap; gap:24px 32px; border-bottom:2px solid var(--divider); }
+.home [id] { scroll-margin-top:120px; }
+@media(max-width:1100px) { .home [id] { scroll-margin-top:200px; } }
+@media(max-width:600px) { .home [id] { scroll-margin-top:300px; } }
 .home .logo { display:inline-flex; align-items:center; gap:12px; padding:8px 14px; background:transparent; color:var(--ink); font-size:25px; font-weight:900; letter-spacing:-1px; text-decoration:none; }
 .logoSymbol { display:flex; gap:3px; width:25px; height:27px; margin-right:2px; transform:skew(-18deg); }
 .logoSymbol i { display:block; width:10px; background:var(--red); border-radius:2px; }
