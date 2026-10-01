@@ -39,9 +39,14 @@ function useStartSource() {
 }
 
 export function MemberWorkspace({ children }: { children: ReactNode }) {
+  const [showUpgradeNotice, setShowUpgradeNotice] = useState(false);
   const pathname = usePathname();
   const params = useSearchParams();
   const { status, loading } = useAuthStatus();
+  const creditBalance = typeof status.credits === "number" ? status.credits : null;
+  const signupCredits = status.costs?.signup_grant;
+  const creditLimit = typeof signupCredits === "number" && signupCredits > 0 ? signupCredits : null;
+  const creditPercent = creditBalance !== null && creditLimit !== null ? Math.min(100, Math.max(0, creditBalance / creditLimit * 100)) : null;
   const settings = pathname === "/my/settings";
   const section = pathname?.startsWith("/my/video")
     ? "video"
@@ -61,7 +66,15 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
         <Link href="/my/affiliate" aria-current={section === "affiliate" ? "page" : undefined}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
       </nav>
       <div className={styles.sidebarBottom}>
-        <Link className={styles.balance} href="/my#credit-heading" title={summarizeCreditBudget(status) ?? undefined}><span>남은 크레딧</span><strong>{loading ? "…" : status.credits ?? "—"}<small> C</small></strong><span>사용 내역 확인 →</span></Link>
+        <section className={styles.balance} aria-label="내 플랜과 크레딧">
+          <strong className={styles.planName}>무료 플랜</strong>
+          <Link className={styles.creditRow} href="/my#credit-heading" title={summarizeCreditBudget(status) ?? "크레딧 사용 내역"}>
+            <span>잔여 크레딧</span><span><strong>{loading ? "…" : creditBalance ?? "—"}</strong>{creditLimit !== null ? `/${creditLimit}` : ""} C</span>
+          </Link>
+          <div className={styles.creditTrack} role="progressbar" aria-label="가입 제공량 대비 잔여 크레딧" aria-valuemin={0} aria-valuemax={100} aria-valuenow={creditPercent ?? undefined} aria-valuetext={creditPercent === null ? "크레딧 확인 중" : `잔여 ${creditBalance} C, 가입 제공량 ${creditLimit} C`}><span style={{ width: `${creditPercent ?? 0}%` }} /></div>
+          <button className={styles.upgradeButton} type="button" aria-expanded={showUpgradeNotice} aria-controls="upgrade-notice" onClick={() => setShowUpgradeNotice(!showUpgradeNotice)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z" /></svg>업그레이드</button>
+          {showUpgradeNotice ? <p id="upgrade-notice" role="status" className={styles.upgradeNotice}>유료 플랜은 준비 중입니다.</p> : null}
+        </section>
         <Link className={styles.settingsLink} href="/my/settings" aria-current={settings ? "page" : undefined}>⚙ 계정 · 제작 설정</Link>
         <Link className={styles.homeLink} href="/">서비스 소개 ↗</Link>
       </div>
