@@ -71,8 +71,14 @@ class StubComposer:
         self.concat_parts = [p.name for p in parts]
         output_path.write_bytes(b"aac")
 
-    def compose_product_short(self, image_path, audio_path, output_path, *, duration_seconds, subtitles_path=None):
-        self.compose_kwargs = {"duration": duration_seconds, "image": image_path.read_bytes()}
+    def compose_product_short(
+        self, image_paths, audio_path, output_path, *, duration_seconds, subtitles_path=None, stage_color="#000000"
+    ):
+        self.compose_kwargs = {
+            "duration": duration_seconds,
+            "images": [path.read_bytes() for path in image_paths],
+            "stage_color": stage_color,
+        }
         self.ass = subtitles_path.read_text(encoding="utf-8") if subtitles_path else ""
         output_path.write_bytes(b"video")
 
@@ -80,6 +86,11 @@ class StubComposer:
 class StubStorage:
     def __init__(self) -> None:
         self.keys: list[str] = []
+        self.fetched: list[str] = []
+
+    def fetch_to(self, key: str, destination: Path) -> None:
+        self.fetched.append(key)
+        destination.write_bytes(b"uploaded-image")
 
     def store(self, file_path, *, key, filename):
         self.keys.append(key)
@@ -124,14 +135,17 @@ def test_pipeline_narrates_each_line_and_composes_with_template_text(fake_image)
     assert composer.concat_parts.count("gap.mp3") == 4
     # 5 lines x 2.0s + 4 gaps x 0.35s + 1.2s tail
     assert composer.compose_kwargs["duration"] == pytest.approx(12.6)
-    assert composer.compose_kwargs["image"] == b"jpeg"
-    assert "Style: Speech,NanumGothic,80,&H004FFFD7" in composer.ass
-    assert "코카콜라 오리지널 무라벨, 370ml, 24개" in composer.ass
+    assert composer.compose_kwargs["images"] == [b"jpeg"]
+    assert composer.compose_kwargs["stage_color"] == "#000000"
+    assert "Style: Default,NanumGothic,80,&H004FFFD7" in composer.ass
+    headline = next(line for line in composer.ass.splitlines() if ",Headline,," in line)
+    assert "코카콜라 오리지널" in headline and "24개" in headline
+    assert "Style: Price,NanumSquareRound,52," in composer.ass
     assert "37% 할인 · 17,990원 (정가 28,600원)" in composer.ass
     assert "링크에서 확인하세요. · 링크는 설명란에" in composer.ass
     assert "쿠팡 파트너스 활동의 일환" in composer.ass
-    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Speech,,0,0,0,,코카콜라 24캔이 만 칠천 원대?" in composer.ass
-    assert "Dialogue: 1,0:00:02.35,0:00:04.35,Speech,,0,0,0,,문장 1" in composer.ass
+    assert "Dialogue: 1,0:00:00.00,0:00:02.00,Default,,0,0,0,,코카콜라 24캔이 만 칠천 원대?" in composer.ass
+    assert "Dialogue: 1,0:00:02.35,0:00:04.35,Default,,0,0,0,,문장 1" in composer.ass
     assert artifact.provider == "coupang_partners"
     assert artifact.captions_applied == 5
     assert artifact.template_id == "BOLD_HIGHLIGHT"
@@ -165,3 +179,44 @@ def test_pipeline_maps_tts_failures(fake_image) -> None:
 
     assert excinfo.value.code == ShortErrorCode.TTS_FAILED
     assert excinfo.value.retryable is False
+
+
+def test_pipeline_slides_through_uploaded_and_remote_pictures_on_the_template_stage(fake_image) -> None:
+    from app.templates import CaptionPosition
+
+    synth = StubSynth()
+    composer = StubComposer(synth)
+    storage = StubStorage()
+    pipeline = ProductShortPipeline(synth, composer, storage, max_seconds=60)
+    facts = _facts().model_copy(
+        update={
+            "provider": "manual",
+            "image_url": "upload://uploads/img-1.jpg",
+            "image_urls": ["upload://uploads/img-1.jpg", "https://images.example.com/second.png"],
+        }
+    )
+
+    artifact = pipeline.run(
+        job_id="job-manual",
+        facts=facts,
+        angle=_angle(),
+        template=RenderTemplate.PAPER,
+        report=lambda stage, progress: None,
+        headline="30캔 콜라\n[13,200원]에 쟁이기",
+        brand_color="#FF4D4F",
+        caption_position=CaptionPosition.MIDDLE,
+    )
+
+    # Uploaded picture comes from our storage, the second over HTTPS; both reach FFmpeg.
+    assert storage.fetched == ["uploads/img-1.jpg"]
+    assert composer.compose_kwargs["images"] == [b"uploaded-image", b"jpeg"]
+    assert composer.compose_kwargs["stage_color"] == "#F5F1E8"
+    # Headline keyword in brand red (#FF4D4F -> &H004F4DFF) on dark paper text.
+    assert "{\\1c&H004F4DFF}13,200원{\\1c&H00222222}" in composer.ass
+    assert "Style: Price,NanumSquareRound,52,&H004F4DFF," in composer.ass
+    # PAPER keeps captions in the band (not positionable) even when MIDDLE was asked.
+    assert next(line for line in composer.ass.splitlines() if line.startswith("Style: Default")).endswith(
+        ",2,90,90,440,1"
+    )
+    assert artifact.title == "30캔 콜라\n[13,200원]에 쟁이기"
+    assert artifact.brand_color == "#FF4D4F"

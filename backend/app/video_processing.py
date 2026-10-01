@@ -16,6 +16,10 @@ from app.templates import RenderLayout, STAGE_PICTURE_HEIGHT
 
 SHORT_WIDTH = 1080
 SHORT_HEIGHT = 1920
+# Product Shorts picture box (see captions.PRODUCT_PICTURE_TOP/BOTTOM).
+PRODUCT_BOX_WIDTH = 1080
+PRODUCT_BOX_HEIGHT = 900
+PRODUCT_BOX_TOP = 330
 FFMPEG_TIMEOUT_SECONDS = 15 * 60
 
 
@@ -313,52 +317,57 @@ class FfmpegVideoProcessor:
 
     def compose_product_short(
         self,
-        image_path: Path,
+        image_paths: "Path | list[Path]",
         audio_path: Path,
         output_path: Path,
         *,
         duration_seconds: float,
         subtitles_path: Path | None = None,
+        stage_color: str = "#000000",
         fps: int = 30,
     ) -> None:
-        """Still product image -> 1080x1920 clip: blurred cover background, the image
-        fitted in the middle with a slow zoom, template text from ASS, narration audio."""
-        frames = max(1, int(round(duration_seconds * fps)))
-        chain = (
-            # Background: cover, blur, darken slightly so text stays readable.
-            f"[0:v]scale={SHORT_WIDTH}:{SHORT_HEIGHT}:force_original_aspect_ratio=increase,"
-            f"crop={SHORT_WIDTH}:{SHORT_HEIGHT},boxblur=24:3,eq=brightness=-0.08[bg];"
-            # Foreground: fit within 1080x1080 with even dimensions.
-            "[0:v]scale=1000:1000:force_original_aspect_ratio=decrease,"
-            "scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];"
-            "[bg][fg]overlay=(W-w)/2:(H-h)/2-80[comp];"
-            # Ken Burns: zoom from 1.0 to about 1.12 across the clip.
-            f"[comp]zoompan=z='1+0.12*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d=1:s={SHORT_WIDTH}x{SHORT_HEIGHT}:fps={fps},setsar=1"
+        """Product pictures -> 1080x1920 clip on the template's stage colour.
+
+        Each picture fills a 1080x900 box in turn (equal shares of the clip) with a
+        slow zoom, the box sits at y=330 under the headline band, template text comes
+        from the ASS file, and the narration is the audio track.
+        """
+        images = [image_paths] if isinstance(image_paths, Path) else list(image_paths)
+        if not images:
+            raise VideoProcessingError("상품 이미지가 없습니다.")
+        color = "0x" + stage_color.lstrip("#")
+        total_frames = max(len(images), int(round(duration_seconds * fps)))
+        share = total_frames // len(images)
+        chain: list[str] = []
+        for index in range(len(images)):
+            frames = share if index < len(images) - 1 else total_frames - share * (len(images) - 1)
+            chain.append(
+                f"[{index}:v]scale={PRODUCT_BOX_WIDTH}:{PRODUCT_BOX_HEIGHT}:force_original_aspect_ratio=decrease,"
+                "scale=trunc(iw/2)*2:trunc(ih/2)*2,"
+                f"pad={PRODUCT_BOX_WIDTH}:{PRODUCT_BOX_HEIGHT}:(ow-iw)/2:(oh-ih)/2:{color},"
+                f"zoompan=z='1+0.10*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                f":d={frames}:s={PRODUCT_BOX_WIDTH}x{PRODUCT_BOX_HEIGHT}:fps={fps}[s{index}]"
+            )
+        inputs = "".join(f"[s{index}]" for index in range(len(images)))
+        chain.append(f"{inputs}concat=n={len(images)}:v=1:a=0[pic]")
+        tail = (
+            f"[pic]pad={SHORT_WIDTH}:{SHORT_HEIGHT}:0:{PRODUCT_BOX_TOP}:{color},setsar=1"
         )
         if subtitles_path is not None:
-            chain += f",subtitles=filename='{_escape_filter_path(subtitles_path)}'"
-        chain += "[v]"
-        command = [
-            self._executable("ffmpeg"),
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-loop",
-            "1",
-            "-framerate",
-            str(fps),
-            "-i",
-            str(image_path),
+            tail += f",subtitles=filename='{_escape_filter_path(subtitles_path)}'"
+        chain.append(tail + "[v]")
+        command = [self._executable("ffmpeg"), "-nostdin", "-hide_banner", "-loglevel", "error"]
+        for image in images:
+            command += ["-framerate", str(fps), "-i", str(image)]
+        command += [
             "-i",
             str(audio_path),
             "-filter_complex",
-            chain,
+            ";".join(chain),
             "-map",
             "[v]",
             "-map",
-            "1:a:0",
+            f"{len(images)}:a:0",
             "-t",
             f"{duration_seconds:.3f}",
             "-c:v",

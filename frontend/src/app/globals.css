@@ -1048,7 +1048,8 @@ h2 {
 
   .layout-options,
   .position-options,
-  .language-grid {
+  .language-grid,
+  .field-row {
     grid-template-columns: 1fr;
   }
 
@@ -1288,6 +1289,136 @@ h2 {
   grid-template-columns: 120px 1fr;
   gap: 14px;
   align-items: start;
+}
+
+.product-card-placeholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.manual-product-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  resize: vertical;
+}
+
+.picture-field {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.picture-field legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.picture-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.picture-item {
+  position: relative;
+  margin: 0;
+}
+
+.picture-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.picture-item figcaption {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 70%);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.picture-item button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 70%);
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.picture-add {
+  display: grid;
+  position: relative;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px dashed var(--muted);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.picture-add input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.picture-url-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.picture-url-row input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.picture-url-row .submit-button {
+  min-height: 44px;
+  padding: 0 16px;
 }
 
 .product-card img {

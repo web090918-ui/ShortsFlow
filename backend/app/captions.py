@@ -30,6 +30,10 @@ BAND_HEADLINE_Y = PICTURE_TOP // 2
 FILL_HEADLINE_Y = 230
 CHANNEL_LINE_Y = 1740
 FILL_CHANNEL_LINE_Y = 1800
+# Product Shorts: a taller picture box for square product photos.
+PRODUCT_PICTURE_TOP = 330
+PRODUCT_PICTURE_BOTTOM = 1230
+PRODUCT_HEADLINE_Y = PRODUCT_PICTURE_TOP // 2
 HEADLINE_MARGIN_X = 70
 MAX_TITLE_CHARS = 100
 DEFAULT_BRAND_COLOR = "#4FE1E1"  # aqua, the default swatch in the picker
@@ -960,64 +964,61 @@ def build_product_ass(
     price_line: str | None,
     cta: str,
     disclosure: str,
+    headline: str | None = None,
+    brand_color: str | None = None,
+    caption_position: CaptionPosition = CaptionPosition.BOTTOM,
 ) -> str:
-    """ASS for a product Short: title and price on top, spoken lines in the middle,
-    CTA and the affiliate disclosure pinned at the bottom for the whole clip."""
+    """ASS for a product Short on the template's stage.
+
+    Geometry (1080x1920): headline band 0..330, picture 330..1230, price badge
+    under the picture, spoken captions in the band below, CTA and the affiliate
+    disclosure pinned at the bottom for the whole clip.
+    """
     style = TEMPLATE_STYLES[template]
-    palette = _palette(style, layout=RenderLayout.FILL, brand_color=None)
-    speech_alignment = 2
-    speech_margin = 560
-    header = "\n".join(
-        [
-            "[Script Info]",
-            "ScriptType: v4.00+",
-            f"PlayResX: {PLAY_RES_X}",
-            f"PlayResY: {PLAY_RES_Y}",
-            "WrapStyle: 0",
-            "ScaledBorderAndShadow: yes",
-            "",
-            "[V4+ Styles]",
-            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
-            "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
-            "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
-            "MarginR, MarginV, Encoding",
-            _style_line(
-                "Speech",
-                style,
-                alignment=speech_alignment,
-                margin_v=speech_margin,
-                primary=palette.caption,
-                outline=palette.caption_outline,
-                outline_width=palette.caption_outline_width,
-            ),
-            "Style: Title,NanumGothic,56,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
-            "100,100,0,0,3,14,0,8,80,80,120,1",
-            "Style: Price,NanumGothic,68,&H004FFFD7,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
-            "100,100,0,0,3,14,0,8,80,80,260,1",
-            "Style: Cta,NanumGothic,48,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,"
-            "100,100,0,0,3,12,0,2,80,80,150,1",
-            "Style: Disclosure,NanumGothic,30,&H00DDDDDD,&H000000FF,&H00000000,&H90000000,0,0,0,0,"
-            "100,100,0,0,3,8,0,2,60,60,40,1",
-            "",
-            "[Events]",
-            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-        ]
+    palette = _palette(style, layout=RenderLayout.STAGE, brand_color=brand_color)
+    if not style.positionable:
+        caption_position = CaptionPosition.BOTTOM
+    lines, prefix, _ = _header(
+        style, layout=RenderLayout.STAGE, palette=palette, caption_position=caption_position
     )
-    end = _ass_time(total_seconds)
-    lines = [
-        header,
-        f"Dialogue: 0,{_ass_time(0)},{end},Title,,0,0,0,,{_ass_text(title)}",
+    light = _is_light(style.stage_color)
+    badge_back = "&H40FFFFFF" if light else "&H40000000"
+    badge_text = INK if light else WHITE
+    # Price badge, CTA, and disclosure styles live next to Default/Headline/Chrome.
+    styles_end = lines.index("[Events]") - 1  # the blank line that closes [V4+ Styles]
+    lines[styles_end:styles_end] = [
+        f"Style: Price,NanumSquareRound,52,{palette.brand},&H000000FF,{badge_back},{badge_back},-1,0,0,0,"
+        "100,100,0,0,3,16,0,8,80,80,0,1",
+        f"Style: Cta,NanumSquareRound,44,{badge_text},&H000000FF,{badge_back},{badge_back},-1,0,0,0,"
+        "100,100,0,0,3,12,0,2,80,80,250,1",
+        f"Style: Disclosure,NanumSquareRound,28,{MUTED},&H000000FF,&H00000000,&H00000000,0,0,0,0,"
+        "100,100,0,0,1,0,0,2,60,60,60,1",
     ]
+    start, end = _ass_time(0), _ass_time(total_seconds)
+    headline_text = (headline or "").strip() or title
+    accent = palette.resolve(style.headline_accent)
+    lines.append(
+        f"Dialogue: 2,{start},{end},Headline,,0,0,0,,{{\\an5\\pos({PLAY_RES_X // 2},{PRODUCT_HEADLINE_Y})}}"
+        f"{_coloured(headline_text[:MAX_TITLE_CHARS], headline_keyword(headline_text), accent, palette.text)}"
+    )
     if price_line:
-        lines.append(f"Dialogue: 0,{_ass_time(0)},{end},Price,,0,0,0,,{_ass_text(price_line)}")
-    lines.append(f"Dialogue: 0,{_ass_time(0)},{end},Cta,,0,0,0,,{_ass_text(cta)}")
-    lines.append(f"Dialogue: 0,{_ass_time(0)},{end},Disclosure,,0,0,0,,{_ass_text(disclosure)}")
-    prefix = f"{{\\blur{style.blur:g}}}" if style.blur else ""
+        lines.append(
+            f"Dialogue: 2,{start},{end},Price,,0,0,0,,{{\\an8\\pos({PLAY_RES_X // 2},{PRODUCT_PICTURE_BOTTOM + 36})}}"
+            f"{_ass_text(price_line)}"
+        )
+    lines.append(f"Dialogue: 2,{start},{end},Cta,,0,0,0,,{_ass_text(cta)}")
+    lines.append(f"Dialogue: 2,{start},{end},Disclosure,,0,0,0,,{_ass_text(disclosure)}")
+    if not style.show_caption:
+        return "\n".join(lines) + "\n"
+    highlight = palette.resolve(style.highlight) if style.highlight else None
     for cue in select_cues(cues, start_seconds=0, end_seconds=total_seconds):
-        text = _ass_text(cue.text)
+        if style.emphasize_longest or highlight:
+            text = _coloured(cue.text, longest_word(cue.text), highlight or palette.brand, palette.caption)
+        else:
+            text = _ass_text(cue.text)
         if text:
             lines.append(
                 f"Dialogue: 1,{_ass_time(cue.start_seconds)},{_ass_time(cue.end_seconds)},"
-                f"Speech,,0,0,0,,{prefix}{text}"
+                f"Default,,0,0,0,,{prefix}{text}"
             )
     return "\n".join(lines) + "\n"

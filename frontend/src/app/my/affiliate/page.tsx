@@ -5,8 +5,8 @@ import { AffiliateInput } from "@/components/affiliate-input";
 import { MemberStudio } from "@/components/member-workspace";
 
 export const metadata: Metadata = {
-  title: "상품 쇼츠 만들기",
-  description: "작업실에서 쿠팡 파트너스 상품 링크로 내레이션이 들어간 상품 쇼츠를 만드세요.",
+  title: "글·사진으로 만들기",
+  description: "정보·이야기·사진을 짧은 영상으로. 제목과 사진으로 내레이션이 들어간 세로 영상을 만드세요.",
 };
 
 export default function WorkspaceAffiliatePage() {

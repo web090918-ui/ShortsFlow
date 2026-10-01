@@ -225,9 +225,14 @@ class CreateProductShortRequest(BaseModel):
 
     source_id: UUID
     angle_id: str = Field(min_length=1, max_length=64)
-    template_id: RenderTemplate = RenderTemplate.CLEAN_CAPTION
+    template_id: RenderTemplate = RenderTemplate.CAPTION_ACCENT
     cta_url: HttpUrl | None = None
     terms_confirmed: bool = False
+    # Editable suggestions: None takes the AI's title/description from the content.
+    title: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+    brand_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    caption_position: CaptionPosition = CaptionPosition.BOTTOM
 
 
 @router.post("/product", response_model=ShortJobResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -264,6 +269,8 @@ def create_product_short(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Angle not found.")
     facts = ProductFacts.model_validate(source.metadata["product"])
     angle_model = ContentAngle.model_validate(angle)
+    title = _clean_title(payload.title) or _clean_title(content.get("title")) or facts.title
+    description = _clean_title(payload.description) or _clean_title(content.get("description"))
 
     now = _now()
     job_id = uuid4()
@@ -283,6 +290,10 @@ def create_product_short(
         end_seconds=1,
         duration_seconds=1,
         template_id=payload.template_id,
+        layout_id=RenderLayout.STAGE,
+        title=title,
+        brand_color=payload.brand_color,
+        caption_position=payload.caption_position,
         attempt_count=0,
         error_message=None,
         result=None,
@@ -291,6 +302,10 @@ def create_product_short(
             angle_model,
             cta_url=str(payload.cta_url) if payload.cta_url else None,
             content_generator=str(content.get("generator") or "unknown"),
+            title=title,
+            description=description,
+            brand_color=payload.brand_color,
+            caption_position=payload.caption_position.value,
         ),
         created_at=now,
         updated_at=now,

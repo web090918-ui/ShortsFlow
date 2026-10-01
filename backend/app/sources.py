@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.acquisition import (
     AcquisitionError,
+    is_upload_url,
     titan_provider_from_settings,
     upload_source_url,
 )
@@ -22,7 +23,14 @@ from app.product_content import (
     ProductContentGenerator,
     product_content_generator_from_settings,
 )
-from app.products import ProductFacts, ProductSourceError, prepare_product
+from app.products import (
+    MAX_PRODUCT_IMAGES,
+    ManualProductInput,
+    ProductFacts,
+    ProductSourceError,
+    manual_product_facts,
+    prepare_product,
+)
 from app.youtube import VideoSourceProvider, VideoSourceProviderError, YouTubeSourceProvider
 from app.config import get_settings
 
@@ -340,6 +348,112 @@ def get_source(source_id: UUID) -> SourceResponse:
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found.")
     return source
+
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024
+
+
+class ProductImageUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(default="image/jpeg", max_length=100)
+    size_bytes: int = Field(gt=0)
+
+
+class ProductImageUploadResponse(BaseModel):
+    image_id: UUID
+    image_url: str
+    upload: dict[str, Any]
+
+
+def _image_key(image_id: UUID, extension: str) -> str:
+    return f"uploads/img-{image_id}{extension or '.jpg'}"
+
+
+@router.post(
+    "/product-images",
+    response_model=ProductImageUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_product_image_upload(
+    payload: ProductImageUploadRequest, user: UserRecord | None = Depends(require_user)
+) -> ProductImageUploadResponse:
+    """Register a product picture upload; the browser then PUTs the bytes.
+
+    The returned ``image_url`` (upload://...) goes into the manual product input.
+    """
+    filename = Path(payload.filename).name
+    extension = Path(filename).suffix.lower()
+    content_type = payload.content_type or "application/octet-stream"
+    if not filename or (not content_type.startswith("image/") and extension not in IMAGE_EXTENSIONS):
+        raise HTTPException(status_code=422, detail="JPG, PNG, WEBP 이미지를 올려 주세요.")
+    if payload.size_bytes > MAX_IMAGE_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"이미지는 최대 {MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)}MB까지 가능합니다.",
+        )
+    image_id = uuid4()
+    key = _image_key(image_id, extension if extension in IMAGE_EXTENSIONS else ".jpg")
+    signed = upload_storage.upload_url(key, content_type=content_type)
+    upload = (
+        {"mode": "signed_put", "url": signed, "headers": {"Content-Type": content_type}}
+        if signed
+        else {"mode": "direct", "url": f"/sources/product-images/{image_id}/content?ext={Path(key).suffix}"}
+    )
+    return ProductImageUploadResponse(image_id=image_id, image_url=upload_source_url(key), upload=upload)
+
+
+@router.put("/product-images/{image_id}/content", status_code=status.HTTP_204_NO_CONTENT)
+async def receive_product_image(image_id: UUID, request: Request, ext: str = ".jpg") -> None:
+    """Local-development fallback: the API stores the picture itself."""
+    extension = ext if ext in IMAGE_EXTENSIONS else ".jpg"
+    key = _image_key(image_id, extension)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as handle:
+        written = 0
+        async for chunk in request.stream():
+            written += len(chunk)
+            if written > MAX_IMAGE_UPLOAD_BYTES:
+                handle.close()
+                Path(handle.name).unlink(missing_ok=True)
+                raise HTTPException(status_code=422, detail="이미지 파일이 너무 큽니다.")
+            handle.write(chunk)
+    if written == 0:
+        Path(handle.name).unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="이미지 파일이 비어 있습니다.")
+    upload_storage.store(Path(handle.name), key=key, filename=Path(key).name)
+
+
+@router.post("/product", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
+def create_manual_product_source(
+    payload: ManualProductInput, user: UserRecord | None = Depends(require_user)
+) -> SourceRecord:
+    """A READY product Source from typed facts and pictures (no site to read)."""
+    try:
+        facts = manual_product_facts(payload)
+    except ProductSourceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    for url in facts.all_image_urls:
+        if is_upload_url(url) and not upload_storage.exists(url.removeprefix("upload://")):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="업로드한 이미지를 아직 찾을 수 없습니다. 업로드가 끝난 뒤 다시 시도해 주세요.",
+            )
+    source = _new_source(
+        SourceType.PRODUCT,
+        url=facts.product_url or None,
+        user_id=user.id if user else None,
+        metadata={"product": facts.model_dump(mode="json")},
+    )
+    now = datetime.now(timezone.utc)
+    return repository.save(
+        source.model_copy(
+            update={
+                "status": SourceStatus.READY,
+                "processing_reference": {"provider": "manual", "images": len(facts.all_image_urls)},
+                "updated_at": now,
+            }
+        )
+    )
 
 
 class ProductContentRequest(BaseModel):

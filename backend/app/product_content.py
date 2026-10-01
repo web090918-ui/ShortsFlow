@@ -34,6 +34,9 @@ class ProductContent(BaseModel):
     selling_points: list[str]
     angles: list[ContentAngle]
     disclosure: str = DISCLOSURE
+    # Suggested upload metadata the creator can edit; the title is also the headline.
+    title: str | None = None
+    description: str | None = None
 
 
 class ContentGenerationError(RuntimeError):
@@ -64,7 +67,13 @@ Return JSON only:
 }
 Angles must be distinct: for example price/deal, practical daily use, and a
 persona-driven story. Keep every sentence natural to read aloud by TTS. Do not
-include the affiliate disclosure; it is added separately."""
+include the affiliate disclosure; it is added separately.
+
+Also add two top-level fields:
+- "title": a Shorts headline of at most 30 characters with the key phrase in
+  square brackets, e.g. "코카콜라 30캔이 [13,200원]"; it is drawn on the video.
+- "description": one or two sentences for the upload description (at most 150
+  characters) followed by two or three hashtags. Do not include the disclosure."""
 
 
 def build_user_prompt(facts: ProductFacts, notes: str | None) -> str:
@@ -83,9 +92,37 @@ def build_user_prompt(facts: ProductFacts, notes: str | None) -> str:
     ]
     if facts.group:
         lines.append(f"- 판매 그룹: {facts.group}")
+    if facts.description:
+        lines.append(f"크리에이터가 적은 상품 설명: {facts.description[:600]}")
     if notes:
         lines.append(f"크리에이터 메모: {notes.strip()[:500]}")
     return "\n".join(lines)
+
+
+def _clean_text(value: Any, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    lines = [" ".join(line.split()) for line in value.replace("\r", "").split("\n")]
+    cleaned = "\n".join(line for line in lines if line).strip().strip('"\u201c\u201d')
+    return cleaned[:limit].rstrip() or None
+
+
+def suggest_title(facts: ProductFacts) -> str:
+    """Headline without a model: short name, price in brackets when known."""
+    name = facts.title.split(",")[0].strip()
+    name = name if len(name) <= 22 else name[:21].rstrip() + "\u2026"
+    if facts.sales_price is not None:
+        return f"{name}\n[{facts.sales_price:,}원]"
+    return f"[{name}]"
+
+
+def suggest_description(facts: ProductFacts) -> str:
+    bits = [facts.title]
+    if facts.sales_price is not None:
+        bits.append(f"{facts.sales_price:,}원")
+    if facts.discount_rate:
+        bits.append(f"{facts.discount_rate}% 할인")
+    return " · ".join(bits) + " 자세한 내용은 링크에서 확인하세요. #쇼츠 #추천템 #득템"
 
 
 def _clean_list(value: Any, *, limit: int) -> list[str]:
@@ -152,6 +189,8 @@ class OpenAIProductContentGenerator:
             generator=f"openai:{self._model}",
             selling_points=_clean_list(payload.get("selling_points"), limit=5) or facts.facts[:3],
             angles=angles[:3],
+            title=_clean_text(payload.get("title"), 100) or suggest_title(facts),
+            description=_clean_text(payload.get("description"), 500) or suggest_description(facts),
         )
 
 
@@ -222,4 +261,6 @@ class TemplateProductContentGenerator:
             generator="template",
             selling_points=facts.facts[:3] or [facts.title],
             angles=[deal, daily, story],
+            title=suggest_title(facts),
+            description=suggest_description(facts),
         )

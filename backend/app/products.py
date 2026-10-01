@@ -30,11 +30,91 @@ class ProductFacts(BaseModel):
     sales_price: int | None = None
     discount_rate: int | None = None
     image_url: str
+    # Every picture for the slideshow (first == image_url); https or upload:// URLs.
+    image_urls: list[str] = []
     thumbnail_url: str | None = None
     delivery_badge_url: str | None = None
     group: str | None = None
     product_url: str
     facts: list[str] = []
+    # Free text the creator typed (manual input); feeds the AI, not the facts list.
+    description: str | None = None
+
+    @property
+    def all_image_urls(self) -> list[str]:
+        urls = [self.image_url, *self.image_urls]
+        seen: list[str] = []
+        for url in urls:
+            if url and url not in seen:
+                seen.append(url)
+        return seen
+
+
+MAX_PRODUCT_IMAGES = 3
+MAX_DESCRIPTION_CHARS = 1000
+
+
+class ManualProductInput(BaseModel):
+    """What a creator types when no link can be read: name, price, blurb, pictures."""
+
+    title: str = Field(min_length=1, max_length=120)
+    sales_price: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    origin_price: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    description: str | None = Field(default=None, max_length=MAX_DESCRIPTION_CHARS)
+    image_urls: list[str] = Field(min_length=1, max_length=MAX_PRODUCT_IMAGES)
+    product_url: str | None = Field(default=None, max_length=2048)
+    provider_label: str | None = Field(default=None, max_length=40)
+
+
+def _manual_image(url: str) -> str:
+    cleaned = url.strip()
+    parsed = urlparse(cleaned)
+    if parsed.scheme == "upload" or (parsed.scheme == "https" and parsed.hostname):
+        return cleaned
+    raise ProductSourceError("이미지는 https 주소이거나 업로드한 파일이어야 합니다.")
+
+
+def manual_product_facts(payload: ManualProductInput) -> ProductFacts:
+    """Facts for a hand-entered product; the first image leads the slideshow."""
+    images = [_manual_image(url) for url in payload.image_urls if url and url.strip()]
+    if not images:
+        raise ProductSourceError("상품 이미지를 1장 이상 넣어 주세요.")
+    title = " ".join(payload.title.split())
+    description = " ".join(payload.description.split()) if payload.description else None
+    sales, origin = payload.sales_price, payload.origin_price
+    discount = None
+    if sales is not None and origin is not None and origin > sales > 0:
+        discount = round((origin - sales) * 100 / origin)
+    facts: list[str] = []
+    if sales is not None:
+        facts.append(f"판매가 {sales:,}원")
+    if discount:
+        facts.append(f"정가 {origin:,}원에서 {origin - sales:,}원 절약")
+        facts.append(f"{discount}% 할인")
+    if description:
+        # Up to three short statements from the blurb, so the AI has concrete claims.
+        for sentence in re.split(r"(?<=[.!?。])\s+|\n+", description):
+            sentence = sentence.strip(" -•·")
+            if 4 <= len(sentence) <= 80 and len(facts) < 6:
+                facts.append(sentence)
+    product_url = (payload.product_url or "").strip()
+    if product_url and urlparse(product_url).scheme not in {"http", "https"}:
+        raise ProductSourceError("상품 링크는 http(s) 주소여야 합니다.")
+    return ProductFacts(
+        provider="manual",
+        product_id=re.sub(r"[^0-9A-Za-z]+", "-", title)[:40].strip("-").lower() or "manual",
+        title=title,
+        origin_price=origin,
+        sales_price=sales,
+        discount_rate=discount,
+        image_url=images[0],
+        image_urls=images,
+        thumbnail_url=images[0],
+        group=payload.provider_label,
+        product_url=product_url,
+        facts=facts,
+        description=description,
+    )
 
 
 @dataclass(frozen=True)
@@ -168,6 +248,7 @@ class CoupangPartnersLinkProvider:
             sales_price=sales_price,
             discount_rate=discount_rate,
             image_url=coupang_image_at(image),
+            image_urls=[coupang_image_at(image)],
             thumbnail_url=image,
             delivery_badge_url=_https_image(params.get("product[deliveryBadgeImage]")),
             group=params.get("group") or params.get("product[group]"),

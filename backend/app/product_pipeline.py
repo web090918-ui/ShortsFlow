@@ -11,11 +11,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.acquisition import AcquisitionError, download_to_file
-from app.captions import CaptionCue, build_product_ass
-from app.templates import RenderTemplate
+from app.acquisition import AcquisitionError, download_to_file, is_upload_url
+from app.captions import TEMPLATE_STYLES, CaptionCue, build_product_ass
+from app.templates import CaptionPosition, RenderTemplate
 from app.product_content import ContentAngle, DISCLOSURE
-from app.products import ProductFacts
+from app.products import MAX_PRODUCT_IMAGES, ProductFacts
 from app.shorts_pipeline import (
     ArtifactStorage,
     ProgressReporter,
@@ -41,12 +41,13 @@ class ProductComposer(Protocol):
 
     def compose_product_short(
         self,
-        image_path: Path,
+        image_paths: list[Path],
         audio_path: Path,
         output_path: Path,
         *,
         duration_seconds: float,
         subtitles_path: Path | None = None,
+        stage_color: str = "#000000",
     ) -> None: ...
 
 
@@ -88,11 +89,15 @@ class ProductShortPipeline:
         template: RenderTemplate,
         report: ProgressReporter,
         cta_url: str | None = None,
+        headline: str | None = None,
+        brand_color: str | None = None,
+        caption_position: CaptionPosition = CaptionPosition.BOTTOM,
     ) -> ShortArtifact:
         try:
             return self._run(
                 job_id=job_id, facts=facts, angle=angle, template=template, report=report,
-                cta_url=cta_url,
+                cta_url=cta_url, headline=headline, brand_color=brand_color,
+                caption_position=caption_position,
             )
         except ShortPipelineError:
             raise
@@ -124,21 +129,17 @@ class ProductShortPipeline:
         template: RenderTemplate,
         report: ProgressReporter,
         cta_url: str | None,
+        headline: str | None,
+        brand_color: str | None,
+        caption_position: CaptionPosition,
     ) -> ShortArtifact:
         sentences = [angle.hook, *angle.script, angle.cta]
         with tempfile.TemporaryDirectory(
             prefix=f"shortsflow-product-{job_id}-", ignore_cleanup_errors=True
         ) as temp:
             temp_path = Path(temp)
-            image_path = temp_path / "product.jpg"
             report(ShortStage.DOWNLOADING, 3)
-            download_to_file(
-                facts.image_url,
-                image_path,
-                max_bytes=MAX_IMAGE_BYTES,
-                timeout_seconds=60,
-                progress=lambda value: report(ShortStage.DOWNLOADING, 3 + value * 7 // 100),
-            )
+            image_paths = self._fetch_images(facts, temp_path, report)
 
             # One TTS clip per sentence; measured durations drive the caption cues.
             report(ShortStage.PROCESSING, 12)
@@ -181,16 +182,20 @@ class ProductShortPipeline:
                     price_line=price_line(facts),
                     cta=cta_text,
                     disclosure=DISCLOSURE,
+                    headline=headline,
+                    brand_color=brand_color,
+                    caption_position=caption_position,
                 ),
                 encoding="utf-8",
             )
             output_path = temp_path / "output.mp4"
             self._composer.compose_product_short(
-                image_path,
+                image_paths,
                 audio_path,
                 output_path,
                 duration_seconds=total,
                 subtitles_path=subtitles_path,
+                stage_color=TEMPLATE_STYLES[template].stage_color,
             )
             output_bytes = output_path.stat().st_size
             info = self._composer.probe(output_path)
@@ -218,13 +223,40 @@ class ProductShortPipeline:
             local_path=str(stored.local_path) if stored.local_path else None,
             expires_at=stored.expires_at,
             template_id=template.value,
-            captions_applied=len(cues),
+            title=(headline or "").strip() or facts.title,
+            brand_color=brand_color,
+            caption_position=caption_position.value,
+            captions_applied=len(cues) if TEMPLATE_STYLES[template].show_caption else 0,
             source_title=facts.title,
             source_duration_seconds=info.duration_seconds,
             source_width=info.width,
             source_height=info.height,
             output_bytes=output_bytes,
         )
+
+    def _fetch_images(
+        self, facts: ProductFacts, temp_path: Path, report: ProgressReporter
+    ) -> list[Path]:
+        """Every product picture: uploaded ones from our storage, the rest over HTTPS."""
+        urls = facts.all_image_urls[:MAX_PRODUCT_IMAGES]
+        paths: list[Path] = []
+        for index, url in enumerate(urls):
+            suffix = Path(url.split("?")[0]).suffix.lower() or ".jpg"
+            destination = temp_path / f"product-{index}{suffix if len(suffix) <= 5 else '.jpg'}"
+            if is_upload_url(url):
+                self._storage.fetch_to(url.removeprefix("upload://"), destination)
+            else:
+                download_to_file(
+                    url,
+                    destination,
+                    max_bytes=MAX_IMAGE_BYTES,
+                    timeout_seconds=60,
+                    progress=lambda value, i=index: report(
+                        ShortStage.DOWNLOADING, 3 + (i * 100 + value) * 7 // (100 * len(urls))
+                    ),
+                )
+            paths.append(destination)
+        return paths
 
     def _with_gaps(self, parts: list[Path], temp_path: Path) -> list[Path]:
         """Insert a short silence clip between spoken lines so cues match the audio."""
@@ -252,11 +284,19 @@ def render_input_for(
     *,
     cta_url: str | None,
     content_generator: str,
+    title: str | None = None,
+    description: str | None = None,
+    brand_color: str | None = None,
+    caption_position: str = CaptionPosition.BOTTOM.value,
 ) -> dict[str, Any]:
     return {
         "kind": "product",
         "facts": facts.model_dump(mode="json"),
         "angle": angle.model_dump(mode="json"),
         "cta_url": cta_url,
+        "title": title,
+        "description": description,
+        "brand_color": brand_color,
+        "caption_position": caption_position,
         "content_generator": content_generator,
     }

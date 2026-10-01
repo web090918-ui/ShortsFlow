@@ -13,7 +13,7 @@ export function StudioShell({ kind, children }: { kind: "video" | "affiliate"; c
       <main className={`studio-page ${video ? "video-studio" : "affiliate-studio"}`} id="main-content">
         <div className="studio-shell">
           <div className="studio-breadcrumb"><Link href="/">홈</Link><span aria-hidden="true">/</span><span>{video ? "영상 쇼츠" : "어필리에이트 쇼츠"}</span></div>
-          <header className="studio-heading"><div><p className="eyebrow">{video ? "VIDEO STUDIO" : "AFFILIATE STUDIO"}</p><h1>{video ? "긴 영상에서, 빛나는 한 장면." : "상품의 매력을, 한 편의 쇼츠로."}</h1><p>{video ? "영상을 가져오고, 마음에 드는 구간을 골라보세요." : "상품을 확인하고, 내 콘텐츠에 맞는 소개 방식을 골라보세요."}</p></div><span className="studio-format">9:16 <span>MP4</span></span></header>
+          <header className="studio-heading"><div><p className="eyebrow">{video ? "VIDEO STUDIO" : "AFFILIATE STUDIO"}</p><h1>{video ? "긴 영상에서, 빛나는 한 장면." : "정보·이야기·사진을, 짧은 영상으로."}</h1><p>{video ? "영상을 가져오고, 마음에 드는 구간을 골라보세요." : "제목과 사진을 넣고, 내 콘텐츠에 맞는 소개 방식을 골라보세요."}</p></div><span className="studio-format">9:16 <span>MP4</span></span></header>
           <div className="studio-grid">
             <div className="studio-workspace"><Suspense fallback={null}><LoginGate>{children}</LoginGate></Suspense></div>
             {!video ? <aside className="studio-guide" aria-label="제작 안내">

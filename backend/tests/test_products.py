@@ -194,3 +194,98 @@ def test_product_content_endpoint_caches_angles(monkeypatch) -> None:
     youtube = client.post("/sources", json={"url": "https://youtu.be/abc12345678"}).json()
     denied = client.post(f"/sources/{youtube['id']}/product-content", json={})
     assert denied.status_code == 409
+
+
+def test_manual_product_input_builds_facts_and_a_ready_source() -> None:
+    from app.products import ManualProductInput, manual_product_facts
+
+    facts = manual_product_facts(
+        ManualProductInput(
+            title="  수제 그래놀라  500g ",
+            sales_price=12900,
+            origin_price=18000,
+            description="국내산 귀리로 만들었어요. 설탕 대신 꿀을 썼습니다.\n아침 대용으로 딱.",
+            image_urls=["https://images.example.com/granola.jpg", "upload://uploads/img-a.png"],
+            product_url="https://smartstore.naver.com/x/products/1",
+        )
+    )
+
+    assert facts.provider == "manual" and facts.title == "수제 그래놀라 500g"
+    assert facts.discount_rate == 28
+    assert facts.image_url == "https://images.example.com/granola.jpg"
+    assert facts.all_image_urls == ["https://images.example.com/granola.jpg", "upload://uploads/img-a.png"]
+    assert facts.facts[:3] == ["판매가 12,900원", "정가 18,000원에서 5,100원 절약", "28% 할인"]
+    assert "국내산 귀리로 만들었어요." in facts.facts and "아침 대용으로 딱." in facts.facts
+    assert facts.description.startswith("국내산 귀리로")
+
+    with pytest.raises(ProductSourceError):
+        manual_product_facts(
+            ManualProductInput(title="x", image_urls=["ftp://images.example.com/a.jpg"])
+        )
+
+
+def test_manual_product_source_and_picture_upload_via_api(tmp_path, monkeypatch) -> None:
+    import app.sources as sources_module
+    from app.shorts_pipeline import LocalArtifactStorage
+
+    monkeypatch.setattr(sources_module, "upload_storage", LocalArtifactStorage(tmp_path))
+
+    registered = client.post(
+        "/sources/product-images",
+        json={"filename": "photo.PNG", "content_type": "image/png", "size_bytes": 3},
+    )
+    assert registered.status_code == 201
+    upload = registered.json()
+    assert upload["image_url"].startswith("upload://uploads/img-") and upload["image_url"].endswith(".png")
+    assert upload["upload"]["mode"] == "direct"
+
+    # Before the bytes arrive the Source cannot be created.
+    pending = client.post(
+        "/sources/product",
+        json={"title": "사진으로 만든 상품", "image_urls": [upload["image_url"]]},
+    )
+    assert pending.status_code == 409
+
+    stored = client.put(upload["upload"]["url"], content=b"png")
+    assert stored.status_code == 204
+
+    created = client.post(
+        "/sources/product",
+        json={
+            "title": "사진으로 만든 상품",
+            "sales_price": 9900,
+            "description": "직접 찍은 사진 세 장으로 소개합니다.",
+            "image_urls": [upload["image_url"]],
+        },
+    )
+    assert created.status_code == 201
+    source = created.json()
+    assert source["type"] == "PRODUCT" and source["status"] == "READY"
+    assert source["metadata"]["product"]["provider"] == "manual"
+    assert source["metadata"]["product"]["image_urls"] == [upload["image_url"]]
+    assert "processing_reference" not in source
+
+    bad = client.post("/sources/product", json={"title": "", "image_urls": []})
+    assert bad.status_code == 422
+
+
+def test_content_generators_suggest_title_and_description() -> None:
+    from app.product_content import TemplateProductContentGenerator, suggest_title
+
+    facts = _facts() if "_facts" in globals() else None
+    if facts is None:
+        from app.products import ProductFacts
+
+        facts = ProductFacts(
+            provider="manual",
+            product_id="x",
+            title="코카콜라 오리지널, 190ml, 30개",
+            sales_price=13200,
+            discount_rate=39,
+            image_url="https://images.example.com/c.jpg",
+            product_url="",
+        )
+    content = TemplateProductContentGenerator().generate(facts)
+
+    assert content.title == suggest_title(facts) == "코카콜라 오리지널\n[13,200원]"
+    assert content.description and "#쇼츠" in content.description and "13,200원" in content.description

@@ -55,7 +55,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
       : settings
         ? "settings"
         : "projects";
-  const topbarTitle = { projects: "내 작업실", video: "영상 쇼츠 만들기", affiliate: "상품 쇼츠 만들기", settings: "계정 · 제작 설정" }[section];
+  const topbarTitle = { projects: "내 작업실", video: "영상 쇼츠 만들기", affiliate: "글·사진으로 만들기", settings: "계정 · 제작 설정" }[section];
   return <div className={styles.workspace}>
     <aside className={styles.sidebar}>
       <Link href="/my" className={styles.brand} aria-label="Cutpick 회원 작업실"><span className={styles.symbol} aria-hidden="true"><i /><i /></span>cutpick.</Link>
@@ -63,7 +63,7 @@ export function MemberWorkspace({ children }: { children: ReactNode }) {
       <nav aria-label="회원 메뉴">
         <Link href="/my" aria-current={section === "projects" ? "page" : undefined}><span aria-hidden="true">▦</span> 내 프로젝트</Link>
         <Link href="/my/video" aria-current={section === "video" ? "page" : undefined}><span aria-hidden="true">▷</span> 영상 쇼츠 만들기</Link>
-        <Link href="/my/affiliate" aria-current={section === "affiliate" ? "page" : undefined}><span aria-hidden="true">◇</span> 상품 쇼츠 만들기</Link>
+        <Link href="/my/affiliate" aria-current={section === "affiliate" ? "page" : undefined}><span aria-hidden="true">◇</span> 글·사진으로 만들기</Link>
       </nav>
       <div className={styles.sidebarBottom}>
         <section className={styles.balance} aria-label="내 플랜과 크레딧">
@@ -103,7 +103,7 @@ export function MemberWelcome() {
     <span className={styles.label}>LET’S MAKE A SHORT</span><h1>오늘은 어떤 쇼츠를 만들까요?</h1>
     <p>영상이나 상품 링크로 시작하고, 완성한 쇼츠는 아래에서 다시 확인하세요.</p>
     <LandingSourceForm target="/my/video" />
-    <div className={styles.quickLinks}><Link href="/my/video">YouTube · 영상 업로드 →</Link><Link href="/my/affiliate">상품 링크로 만들기 →</Link></div>
+    <div className={styles.quickLinks}><Link href="/my/video">YouTube · 영상 업로드 →</Link><Link href="/my/affiliate">글·사진으로 만들기 →</Link></div>
     <Link className={styles.preferred} href={`/my/${source}`}>내 기본 제작 방식으로 시작 →</Link>
   </section>;
 }
@@ -113,9 +113,9 @@ export function MemberStudio({ kind, children }: { kind: "video" | "affiliate"; 
   const video = kind === "video";
   return <div className={styles.studio}>
     <div className={styles.studioHeading}>
-      <span className={styles.label}>{video ? "VIDEO STUDIO" : "AFFILIATE STUDIO"}</span>
-      <h1>{video ? "영상 쇼츠 만들기" : "상품 쇼츠 만들기"}</h1>
-      <p>{video ? "YouTube 링크나 내 영상 파일에서 구간을 고르고, AI 추천 Top 3로 세로 쇼츠를 만드세요." : "쿠팡 파트너스 상품 링크에서 콘텐츠 앵글을 고르고, 내레이션이 들어간 상품 쇼츠를 만드세요."}</p>
+      <span className={styles.label}>{video ? "VIDEO STUDIO" : "TEXT · PHOTO STUDIO"}</span>
+      <h1>{video ? "영상 쇼츠 만들기" : "글·사진으로 만들기"}</h1>
+      <p>{video ? "YouTube 링크나 내 영상 파일에서 구간을 고르고, AI 추천 Top 3로 세로 쇼츠를 만드세요." : "정보·이야기·사진을 짧은 영상으로. 제목과 사진을 넣으면 AI가 대본과 제목·설명을 추천하고 내레이션까지 넣어 드려요."}</p>
       <span className={styles.studioFormat}>9:16 · MP4</span>
     </div>
     {children}
@@ -145,7 +145,7 @@ export function MemberSettings() {
   return <div className={styles.settings}>
     <div><span className={styles.label}>YOUR WORKSPACE</span><h1>계정 · 제작 설정</h1><p>연결된 계정과 크레딧을 확인하고, 자주 쓰는 제작 방식을 설정하세요.</p></div>
     <section className={styles.panel}><h2>내 계정</h2><dl className={styles.info}><div><dt>로그인 방식</dt><dd>Google 계정</dd></div><div><dt>이메일</dt><dd>{status.user.email ?? "등록된 이메일 없음"}</dd></div></dl><p>계정 정보는 Google 로그인 정보를 기준으로 표시됩니다.</p></section>
-    <section className={styles.panel}><h2>제작 시작 설정</h2><label htmlFor="default-source">기본 제작 방식</label><select id="default-source" value={source} onChange={event => save(event.target.value)}><option value="video">영상 쇼츠 (YouTube · 업로드)</option><option value="affiliate">상품 쇼츠 (어필리에이트)</option></select><p>작업실의 ‘내 기본 제작 방식으로 시작’에 적용됩니다. 이 브라우저에 계정별로 저장됩니다.</p><p role="status">{notice}</p></section>
+    <section className={styles.panel}><h2>제작 시작 설정</h2><label htmlFor="default-source">기본 제작 방식</label><select id="default-source" value={source} onChange={event => save(event.target.value)}><option value="video">영상 쇼츠 (YouTube · 업로드)</option><option value="affiliate">글·사진으로 만들기</option></select><p>작업실의 ‘내 기본 제작 방식으로 시작’에 적용됩니다. 이 브라우저에 계정별로 저장됩니다.</p><p role="status">{notice}</p></section>
     <section className={styles.panel} id="credit-rules"><h2>크레딧</h2><strong className={styles.creditNumber} title={summarizeCreditBudget(status) ?? undefined}>{status.credits ?? "—"} C</strong><dl className={styles.info}>{prices.map(([label, cost, unit]) => <div key={label}><dt>{label}</dt><dd>{cost === null ? "확인 중" : cost === 0 ? "무료" : `${cost} C${unit}`}</dd></div>)}</dl><h3 className={styles.subheading}>차감 기준</h3><ul className={styles.rules}>{CREDIT_RULES.map(rule => <li key={rule}>{rule}</li>)}</ul><Link href="/my#credit-heading">크레딧 사용 내역 보기 →</Link></section>
     <section className={styles.panel}><h2>계정 관리</h2><div className={styles.accountAction}><div><strong>로그아웃</strong><p>이 기기의 로그인 세션을 종료합니다.</p></div><button onClick={signOut} disabled={busy}>{busy ? "처리 중..." : "Logout"}</button></div>{error ? <p role="alert">{error}</p> : null}</section>
   </div>;

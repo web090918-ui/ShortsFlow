@@ -706,6 +706,9 @@ def _run_step(job: ProcessingJobRecord) -> dict[str, Any]:
             template=job.template_id,
             report=report_product,
             cta_url=render_input.get("cta_url"),
+            headline=render_input.get("title") if isinstance(render_input.get("title"), str) else None,
+            brand_color=job.brand_color,
+            caption_position=job.caption_position,
         )
         return {"next_step": "DOWNLOAD", "short": artifact.model_dump(mode="json")}
 
