@@ -31,7 +31,7 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
             크레딧 <strong>{status.credits}</strong>
           </Link>
         ) : null}
-        {(!compact || status.user.picture) ? <span className="auth-user" title={status.user.email ?? undefined}>
+        {!compact ? <span className="auth-user" title={status.user.email ?? undefined}>
           {status.user.picture ? (
             // Google avatar hosts vary; a plain image avoids remote-pattern config.
             // eslint-disable-next-line @next/next/no-img-element
