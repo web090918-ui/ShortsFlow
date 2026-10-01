@@ -1062,3 +1062,51 @@ h2 {
   place-items: center;
   text-decoration: none;
 }
+
+.credit-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(215 255 79 / 14%);
+  color: var(--accent) !important;
+  font-size: 0.78rem;
+}
+
+.credit-badge strong {
+  margin-left: 4px;
+}
+
+.credit-card {
+  margin-bottom: 16px;
+}
+
+.credit-entries {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credit-entries li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.credit-entries strong.debit {
+  color: var(--text);
+}
+
+.credit-entries strong.credit {
+  color: var(--accent);
+}
+
+.credit-entries time {
+  font-family: monospace;
+  font-size: 0.72rem;
+}

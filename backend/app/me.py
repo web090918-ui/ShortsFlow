@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app import processing_jobs as jobs
-from app.auth import UserRecord, current_user
+from app.auth import UserRecord, credits, current_user
+from app.credits import CreditEntry
 from app.processing_jobs import ProcessingJobRecord, ProcessingJobStatus, ProcessingStep
 from app.shorts import ShortJobResponse, _to_response
 
@@ -43,6 +44,12 @@ class WorkList(BaseModel):
     items: list[WorkItem]
 
 
+class CreditSummary(BaseModel):
+    balance: int
+    costs: dict[str, int]
+    entries: list[CreditEntry]
+
+
 def _analysis_summary(job: ProcessingJobRecord) -> AnalysisSummary:
     result: dict[str, Any] = job.result or {}
     ranking = result.get("ranking") or {}
@@ -62,6 +69,24 @@ def _analysis_summary(job: ProcessingJobRecord) -> AnalysisSummary:
         error_message=job.error_message if job.status == ProcessingJobStatus.FAILED else None,
         created_at=job.created_at,
         completed_at=job.completed_at,
+    )
+
+
+@router.get("/credits", response_model=CreditSummary)
+def my_credits(user: UserRecord | None = Depends(current_user)) -> CreditSummary:
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="로그인이 필요합니다.")
+    balance = credits.ensure_signup_grant(user.id)
+    return CreditSummary(
+        balance=balance,
+        costs={
+            "analysis_per_minute": credits.analysis_per_minute,
+            "manual_short_per_minute": credits.manual_short_per_minute,
+            "candidate_render": credits.candidate_render_cost,
+            "product_short": credits.product_short_cost,
+            "signup_grant": credits.signup_grant,
+        },
+        entries=credits.ledger.entries(user.id, limit=50),
     )
 
 

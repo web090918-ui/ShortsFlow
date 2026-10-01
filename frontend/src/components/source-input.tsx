@@ -7,6 +7,8 @@ import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
+import { creditCost, minutesRoundedUp } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/auth-context";
 import { currentDurationReader, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
 
@@ -178,6 +180,17 @@ function isAffiliateUrl(value: string) {
   }
 }
 
+function costHint(authStatus: ReturnType<typeof useAuthStatus>["status"], rangeDuration: number) {
+  const minutes = minutesRoundedUp(rangeDuration);
+  const analysis = creditCost(authStatus, "analysis_per_minute", minutes);
+  if (analysis === null) return "";
+  const direct = creditCost(authStatus, "manual_short_per_minute", minutes);
+  const directText =
+    direct !== null && rangeDuration <= MAX_DIRECT_CLIP_SECONDS ? `, 직접 만들기 ${direct}크레딧` : "";
+  const balance = typeof authStatus.credits === "number" ? ` (보유 ${authStatus.credits})` : "";
+  return ` · AI 분석 ${analysis}크레딧${directText}${balance}`;
+}
+
 function isTerminalAnalysis(job: AnalysisJob | null) {
   return !job || job.status === "COMPLETED" || job.status === "FAILED";
 }
@@ -205,6 +218,7 @@ export function SourceInput() {
   const [lastCandidate, setLastCandidate] = useState<RankedCandidate | null>(null);
   const [directJob, setDirectJob] = useState<RenderJob | null>(null);
   const [isStartingDirect, setIsStartingDirect] = useState(false);
+  const { status: authStatus } = useAuthStatus();
 
   const sourceDuration =
     source?.metadata?.youtube?.duration_seconds ??
@@ -692,6 +706,7 @@ export function SourceInput() {
               <p className={rangeTooLong ? "range-help range-error" : "range-help"}>
                 선택 {formatDuration(rangeDuration)}
                 {rangeTooLong ? " · 최대 60분을 초과했습니다." : ""}
+                {costHint(authStatus, rangeDuration)}
               </p>
 
               <label className="field language-field">

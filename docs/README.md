@@ -17,3 +17,4 @@ ShortsFlow product and delivery decisions are maintained here:
 - [Task 09 download UX](TASK_09_DOWNLOAD.md) records the artifact states (ready, expired, unavailable, failed), the retry actions, and the end-to-end acceptance evidence.
 - [Task 11 upload sources](TASK_11_UPLOAD.md) records direct-to-storage uploads, the upload acquisition route, and the bucket CORS setup.
 - [Task 12A login](TASK_12A_LOGIN.md) records Google sign-in, the session cookie and same-origin API proxy, per-user ownership, and the work history page.
+- [Credits and pricing](CREDITS_PRICING.md) records the competitor comparison, the credit unit and defaults, refund rules, and the payment plan.

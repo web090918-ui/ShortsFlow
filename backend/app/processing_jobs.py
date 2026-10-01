@@ -26,7 +26,8 @@ from app.acquisition import (
     titan_acquirer_from_settings,
     titan_provider_from_settings,
 )
-from app.auth import UserRecord, require_user
+from app.auth import UserRecord, credits, require_user
+from app.credits import InsufficientCreditsError
 from app.candidates import CandidateGenerator, HeuristicCandidateGenerator
 from app.source_media import (
     SourceMediaRepository,
@@ -118,6 +119,8 @@ class ProcessingJobRecord(ProcessingJobResponse):
     render_input: dict[str, Any] | None = None
     # Times the job was re-delivered while waiting on the media provider.
     resume_count: int = 0
+    # Credits taken when the job was created; refunded if it fails for good.
+    credits_charged: int = 0
 
 
 @dataclass(frozen=True)
@@ -629,9 +632,30 @@ def process_job(job_id: UUID, retry_count: int) -> ProcessingJobRecord | None:
             }
         )
         saved = repository.save(failed)
+        if terminal:
+            _refund_credits(saved)
         if not retryable:
             return saved
         raise
+
+
+def _refund_credits(job: ProcessingJobRecord) -> None:
+    if job.user_id is None or job.credits_charged <= 0:
+        return
+    try:
+        credits.refund(job.user_id, job.credits_charged, job_id=job.id)
+    except Exception as exc:  # never let a ledger problem mask the job failure
+        logger.warning("Credit refund failed for job %s: %s", job.id, exc)
+
+
+def charge_or_402(user: UserRecord | None, cost: int, *, reason: str, job_id: UUID, note: str | None = None) -> int:
+    """Take credits for a new job; 402 with the shortfall when the balance is too low."""
+    if user is None or cost <= 0:
+        return 0
+    try:
+        return credits.charge(user.id, cost, reason=reason, job_id=job_id, note=note)  # type: ignore[arg-type]
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc)) from exc
 
 
 def _save_stage(job: ProcessingJobRecord, stage: ShortStage, progress: int) -> None:
@@ -814,10 +838,19 @@ def create_processing_job(
         )
 
     now = _now()
+    job_id = uuid4()
+    charged = charge_or_402(
+        user,
+        credits.analysis_cost(duration),
+        reason="analysis",
+        job_id=job_id,
+        note=f"AI 분석 {round(duration)}초",
+    )
     job = ProcessingJobRecord(
-        id=uuid4(),
+        id=job_id,
         source_id=payload.source_id,
         user_id=user.id if user else None,
+        credits_charged=charged,
         source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.TRANSCRIPT,

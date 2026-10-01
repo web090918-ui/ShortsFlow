@@ -278,6 +278,14 @@ Status: Implemented — Cloud Run validation pending the OAuth client and secret
 - `Source.user_id` and the new `ProcessingJob.user_id` record the owner; `GET /me/jobs` and the `/my` page list the account's analyses and Shorts newest first.
 - `SHORTSFLOW_AUTH_MODE=google` requires login on every creation endpoint; `disabled` keeps local development open. See [Task 12A](TASK_12A_LOGIN.md).
 
+## Credits (2026-10-01)
+
+Status: Implemented — payments not yet
+
+- 1 credit = 1 minute of source video analysed. Signup grants 30 once per Google account; AI analysis costs 1 per source minute, "이 구간 그대로 만들기" 1 per clip minute, rendering a recommended candidate 0, product Short 5. Charged at job creation, refunded once on a final failure, `402` when the balance is too low.
+- Ledger in Firestore (`credit_balances`, `credit_entries`, transactional) with `GET /me/credits`; prices and balance travel in `/auth/status` so the UI shows costs before starting.
+- Competitor comparison, cost drivers, pack and subscription proposals, and the payment-provider plan are in [Credits and Pricing](CREDITS_PRICING.md).
+
 ## Task 12B — Publish to YouTube (requested; changes the MVP1 exclusion on automatic publishing)
 
 Not started. Requires channel connection with Google OAuth, the `youtube.upload` scope, storing refresh tokens, and uploading the finished MP4 with title, description (affiliate link and disclosure), and Shorts-compatible settings. The scope is sensitive, so an unverified app works only for test users until Google verifies it.

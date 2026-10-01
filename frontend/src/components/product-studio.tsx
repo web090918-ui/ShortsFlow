@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
+import { creditCost } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/auth-context";
 
 type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
 
@@ -74,6 +76,8 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [isStartingRender, setIsStartingRender] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { status: authStatus } = useAuthStatus();
+  const productCost = creditCost(authStatus, "product_short");
 
   const selectedAngle = content?.angles.find((angle) => angle.id === selectedAngleId) ?? null;
   const renderActive =
@@ -302,6 +306,13 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
           >
             {isStartingRender ? "작업 등록 중..." : renderActive ? "렌더링 중..." : "상품 쇼츠 만들기"}
           </button>
+          {productCost !== null ? (
+            <p className="range-help">
+              상품 쇼츠 1편에 {productCost}크레딧이 차감됩니다
+              {typeof authStatus.credits === "number" ? ` (보유 ${authStatus.credits})` : ""}. 실패 시 자동
+              환불됩니다.
+            </p>
+          ) : null}
 
           {renderJob ? (
             <RenderResult job={renderJob} onRetry={startRender} retryDisabled={isStartingRender} />

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-import { loginUrl, logout, useAuthStatus } from "@/lib/auth";
+import { loginUrl, logout } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/auth-context";
 
 export function AuthMenu() {
   const pathname = usePathname() ?? "/";
@@ -19,6 +20,11 @@ export function AuthMenu() {
         <Link href="/my" className={pathname === "/my" ? "active" : ""}>
           내 작업
         </Link>
+        {typeof status.credits === "number" ? (
+          <Link href="/my" className="credit-badge" title="남은 크레딧">
+            크레딧 <strong>{status.credits}</strong>
+          </Link>
+        ) : null}
         <span className="auth-user" title={status.user.email ?? undefined}>
           {status.user.picture ? (
             // Google avatar hosts vary; a plain image avoids remote-pattern config.

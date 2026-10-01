@@ -6,6 +6,8 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("login=failed"),
 }));
 
+import { AuthProvider } from "@/lib/auth-context";
+
 import { LoginGate } from "./login-gate";
 
 function statusResponse(body: unknown) {
@@ -27,9 +29,11 @@ describe("LoginGate", () => {
     );
 
     render(
-      <LoginGate>
-        <p>wizard</p>
-      </LoginGate>,
+      <AuthProvider>
+        <LoginGate>
+          <p>wizard</p>
+        </LoginGate>
+      </AuthProvider>,
     );
 
     const link = await screen.findByRole("link", { name: "Google로 로그인" });
@@ -50,9 +54,11 @@ describe("LoginGate", () => {
     );
 
     render(
-      <LoginGate>
-        <p>wizard</p>
-      </LoginGate>,
+      <AuthProvider>
+        <LoginGate>
+          <p>wizard</p>
+        </LoginGate>
+      </AuthProvider>,
     );
 
     expect(await screen.findByText("wizard")).toBeTruthy();
@@ -64,9 +70,11 @@ describe("LoginGate", () => {
     );
 
     render(
-      <LoginGate>
-        <p>wizard</p>
-      </LoginGate>,
+      <AuthProvider>
+        <LoginGate>
+          <p>wizard</p>
+        </LoginGate>
+      </AuthProvider>,
     );
 
     expect(await screen.findByText("wizard")).toBeTruthy();

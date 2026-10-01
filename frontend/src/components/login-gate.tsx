@@ -3,7 +3,8 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { loginUrl, useAuthStatus } from "@/lib/auth";
+import { loginUrl } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/auth-context";
 
 /** Shows the wizard when the API allows it, otherwise a sign-in card. */
 export function LoginGate({ children }: { children: ReactNode }) {

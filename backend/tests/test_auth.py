@@ -90,11 +90,10 @@ def test_callback_creates_the_user_sets_the_cookie_and_redirects(google_auth) ->
     assert me.status_code == 200
     assert me.json()["email"] == "me@example.com"
     status = client.get("/auth/status").json()
-    assert status == {
-        "auth_required": True,
-        "login_available": True,
-        "user": {"id": me.json()["id"], "email": "me@example.com", "name": "Me", "picture": None},
-    }
+    assert status["auth_required"] is True and status["login_available"] is True
+    assert status["user"] == {"id": me.json()["id"], "email": "me@example.com", "name": "Me", "picture": None}
+    assert status["credits"] == 30
+    assert status["costs"]["analysis_per_minute"] == 1
     user = users.get_by_google_sub("google-sub-1")
     assert user is not None and user.email == "me@example.com"
 

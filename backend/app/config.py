@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     session_secret: SecretStr | None = None
     session_cookie_name: str = "sf_session"
     session_ttl_seconds: int = 30 * 24 * 60 * 60
+    # Credits: 1 credit = 1 minute of source video analysed (industry unit). See
+    # docs/CREDITS_PRICING.md for the competitor comparison behind these defaults.
+    credit_signup_grant: int = 30
+    credit_analysis_per_minute: int = 1
+    credit_manual_short_per_minute: int = 1
+    credit_candidate_render: int = 0
+    credit_product_short: int = 5
     # Public site origin and the path the frontend proxies to this API (OAuth redirect URI).
     app_public_origin: str = "http://localhost:3000"
     api_public_prefix: str = "/api"

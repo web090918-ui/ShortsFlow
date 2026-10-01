@@ -8,7 +8,8 @@ import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { formatTimecode } from "@/lib/timecode";
-import { loginUrl, useAuthStatus } from "@/lib/auth";
+import { loginUrl } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/auth-context";
 
 type AnalysisSummary = {
   id: string;
@@ -24,6 +25,27 @@ type AnalysisSummary = {
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
+};
+
+type CreditEntry = {
+  id: string;
+  delta: number;
+  reason: "signup" | "analysis" | "short" | "product_short" | "refund" | "purchase" | "adjustment";
+  note: string | null;
+  balance_after: number;
+  created_at: string;
+};
+
+type CreditSummary = { balance: number; entries: CreditEntry[] };
+
+const CREDIT_REASONS: Record<CreditEntry["reason"], string> = {
+  signup: "가입 보너스",
+  analysis: "AI 분석",
+  short: "쇼츠 렌더",
+  product_short: "상품 쇼츠",
+  refund: "환불",
+  purchase: "구매",
+  adjustment: "조정",
 };
 
 type WorkItem =
@@ -64,11 +86,18 @@ export function MyWorks() {
   const router = useRouter();
   const { status, loading } = useAuthStatus();
   const [items, setItems] = useState<WorkItem[] | null>(null);
+  const [credits, setCredits] = useState<CreditSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || !status.user) return;
     let cancelled = false;
+    fetch(`${API_URL}/me/credits`, { credentials: "include" })
+      .then(async (response) => (response.ok ? ((await response.json()) as CreditSummary) : null))
+      .then((summary) => {
+        if (!cancelled && summary) setCredits(summary);
+      })
+      .catch(() => undefined);
     fetch(`${API_URL}/me/jobs`, { credentials: "include" })
       .then(async (response) => {
         if (!response.ok) throw new Error("작업 목록을 불러오지 못했습니다.");
@@ -100,21 +129,56 @@ export function MyWorks() {
   if (items === null) {
     return <section className="source-panel" aria-busy="true"><p className="range-help">작업 목록을 불러오는 중...</p></section>;
   }
+  const creditCard = credits ? (
+    <section className="source-panel credit-card" aria-labelledby="credit-heading">
+      <div className="source-heading">
+        <div>
+          <p className="section-label">CREDITS</p>
+          <h2 id="credit-heading">남은 크레딧 {credits.balance}</h2>
+        </div>
+      </div>
+      <p className="range-help">
+        1크레딧 = 원본 영상 1분 분석. 추천 구간 렌더는 무료, 실패한 작업은 자동 환불됩니다.
+      </p>
+      {credits.entries.length > 0 ? (
+        <ul className="credit-entries">
+          {credits.entries.slice(0, 10).map((entry) => (
+            <li key={entry.id}>
+              <span>
+                {CREDIT_REASONS[entry.reason] ?? entry.reason}
+                {entry.note ? ` · ${entry.note}` : ""}
+              </span>
+              <strong className={entry.delta < 0 ? "debit" : "credit"}>
+                {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+              </strong>
+              <time dateTime={entry.created_at}>{formatDate(entry.created_at)}</time>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  ) : null;
+
   if (items.length === 0) {
     return (
-      <section className="source-panel">
-        <h2>아직 만든 작업이 없습니다</h2>
+      <>
+        {creditCard}
+        <section className="source-panel">
+          <h2>아직 만든 작업이 없습니다</h2>
         <p className="range-help">영상이나 상품 링크로 첫 쇼츠를 만들어 보세요.</p>
         <div className="my-works-actions">
           <Link className="submit-button" href="/video">영상으로 만들기</Link>
           <Link className="submit-button secondary-button" href="/affiliate">상품 링크로 만들기</Link>
         </div>
-      </section>
+        </section>
+      </>
     );
   }
 
   return (
-    <section className="my-works" aria-label="내 작업 목록">
+    <>
+      {creditCard}
+      <section className="my-works" aria-label="내 작업 목록">
       {items.map((item) =>
         item.kind === "short" ? (
           <article key={item.short.id} className="work-card">
@@ -153,6 +217,7 @@ export function MyWorks() {
           </article>
         ),
       )}
-    </section>
+      </section>
+    </>
   );
 }

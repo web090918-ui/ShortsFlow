@@ -18,6 +18,10 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 4. **Cloud Run settings** can return to defaults now that acquisition is resumable: `SHORTSFLOW_PROCESSING_LEASE_SECONDS=600`, `SHORTSFLOW_APIFY_RUN_TIMEOUT_SECONDS=480`, `--timeout=900`; keep `SHORTSFLOW_APIFY_TITAN_QUALITY=720`.
 5. **For Task 12A (Google login)**: OAuth consent screen (External, Testing, owner as test user), a Web OAuth client with redirect URIs `https://www.cutpick.com/api/auth/google/callback` and `http://localhost:3000/api/auth/google/callback`, client id and secret in Secret Manager, YouTube Data API v3 enabled for 12B.
 
+## Credits (added 2026-10-01)
+
+1 credit = 1 source minute analysed; signup grant 30 once per account; analysis 1 per minute, manual Short 1 per clip minute, candidate render 0, product Short 5; charged at creation, refunded once on final failure, 402 when short. Competitor research, cost drivers, pack and subscription proposals, and the payment-provider plan (Toss Payments or PortOne first, Stripe later) are in [CREDITS_PRICING.md](CREDITS_PRICING.md). Payments themselves are not implemented; the ledger already has a `purchase` reason for the webhook to use.
+
 ## Agreed next order
 
 1. Task 12A — implemented 2026-10-01 (Google sign-in, session cookie, `user_id` on Sources and jobs, `/my` work history, login enforced in google mode); production check pending the OAuth client.

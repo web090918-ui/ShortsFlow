@@ -24,6 +24,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
+from app.credits import CreditService, credit_ledger_from_settings
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ class AuthStatus(BaseModel):
     auth_required: bool
     login_available: bool
     user: UserResponse | None
+    credits: int | None = None
+    # Credit prices so the UI can show what an action costs before it is started.
+    costs: dict[str, int] = {}
 
 
 class UserRepository(Protocol):
@@ -214,6 +218,7 @@ settings = get_settings()
 auth_required: bool = settings.auth_mode == "google"
 users: UserRepository = _user_repository_from_settings(settings)
 oauth: GoogleOAuth | None = _oauth_from_settings(settings)
+credits: CreditService = CreditService(credit_ledger_from_settings(settings), settings)
 signer = SessionSigner(
     settings.session_secret.get_secret_value()
     if settings.session_secret
@@ -293,6 +298,14 @@ def auth_status(user: UserRecord | None = Depends(current_user)) -> AuthStatus:
         auth_required=auth_required,
         login_available=oauth is not None,
         user=_to_user_response(user) if user else None,
+        credits=credits.ledger.balance(user.id) if user else None,
+        costs={
+            "analysis_per_minute": credits.analysis_per_minute,
+            "manual_short_per_minute": credits.manual_short_per_minute,
+            "candidate_render": credits.candidate_render_cost,
+            "product_short": credits.product_short_cost,
+            "signup_grant": credits.signup_grant,
+        },
     )
 
 
@@ -355,6 +368,10 @@ def google_callback(code: str | None = None, state: str | None = None, error: st
             }
         )
     users.save(user)
+    try:
+        credits.ensure_signup_grant(user.id)
+    except Exception as exc:  # a ledger hiccup must not block sign-in
+        logger.warning("Signup credit grant failed for %s: %s", user.id, exc)
     response = RedirectResponse(destination, status_code=status.HTTP_302_FOUND)
     _set_session_cookie(response, user)
     return response

@@ -112,6 +112,7 @@ Source endpoints:
 - `POST /shorts/product` — render a narrated product Short from a product Source and one angle
 - `GET /auth/google/start`, `GET /auth/google/callback`, `GET /auth/status`, `GET /auth/me`, `POST /auth/logout` — Google sign-in and session (Task 12A)
 - `GET /me/jobs` — the signed-in account's analyses and Shorts, newest first
+- `GET /me/credits` — balance, prices, and the credit ledger (1 credit = 1 source minute analysed; see [Credits and pricing](docs/CREDITS_PRICING.md))
 
 Environment variables use the `SHORTSFLOW_` prefix:
 

@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 from app import processing_jobs as jobs
-from app.auth import UserRecord, require_user
+from app.auth import UserRecord, credits, require_user
 from app.candidates import clean_caption_text
 from app.config import get_settings
 from app.downloads import RenderTemplate
@@ -26,6 +26,7 @@ from app.processing_jobs import (
     ProcessingStep,
     _is_youtube_url,
     _now,
+    charge_or_402,
     enqueue_job,
 )
 from app.product_content import ContentAngle
@@ -242,10 +243,15 @@ def create_product_short(
     angle_model = ContentAngle.model_validate(angle)
 
     now = _now()
+    job_id = uuid4()
+    charged = charge_or_402(
+        user, credits.product_cost(), reason="product_short", job_id=job_id, note="상품 쇼츠"
+    )
     job = ProcessingJobRecord(
-        id=uuid4(),
+        id=job_id,
         source_id=source.id,
         user_id=user.id if user else None,
+        credits_charged=charged,
         source_url=source.url or facts.product_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.PRODUCT_RENDER,
@@ -394,10 +400,20 @@ def create_short(
         )
 
     now = _now()
+    job_id = uuid4()
+    from_candidate = payload.processing_job_id is not None
+    charged = charge_or_402(
+        user,
+        credits.short_cost(duration, from_candidate=from_candidate),
+        reason="short",
+        job_id=job_id,
+        note="추천 구간 렌더" if from_candidate else f"직접 지정 {round(duration)}초",
+    )
     job = ProcessingJobRecord(
-        id=uuid4(),
+        id=job_id,
         source_id=source_id,
         user_id=user.id if user else None,
+        credits_charged=charged,
         source_url=source_url,
         status=ProcessingJobStatus.QUEUED,
         step=ProcessingStep.SHORT_RENDER,
