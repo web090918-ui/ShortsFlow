@@ -135,7 +135,7 @@ Task 04 Cloud Run, Firestore, Cloud Tasks, and Worker environment settings are d
 
 Current deployed entry points are `https://www.cutpick.com` for the frontend and `https://shortflow-268642207702.asia-northeast3.run.app` for the Cloud Run backend. Secret values are stored outside the repository.
 
-Since Task 12A the frontend calls the API through a same-origin `/api/*` rewrite (see `frontend/next.config.ts`), so the Vercel project needs `API_PROXY_TARGET=https://shortflow-268642207702.asia-northeast3.run.app` and a redeploy; `NEXT_PUBLIC_API_URL` is no longer used in production and should be removed. Before this change the deployed bundle pointed at the retired Vercel backend `shortsflow-api.vercel.app` (yt-dlp, no Titan), which produced "YouTube가 현재 서버 요청을 제한했습니다" for every YouTube URL even though Cloud Run worked. Cloud Run's `SHORTSFLOW_FRONTEND_ORIGIN` still allows `https://www.cutpick.com` for any direct calls.
+Since Task 12A the frontend calls the API through a same-origin `/api/*` rewrite (see `frontend/next.config.ts`), so the Vercel project needs `API_PROXY_TARGET=https://shortflow-268642207702.asia-northeast3.run.app` and a redeploy. Production builds always use `/api`; `NEXT_PUBLIC_API_URL` is honoured only by tests, because a leftover absolute value made the deployed site call Cloud Run directly and drop the session cookie on 2026-10-01. Before this change the deployed bundle pointed at the retired Vercel backend `shortsflow-api.vercel.app` (yt-dlp, no Titan), which produced "YouTube가 현재 서버 요청을 제한했습니다" for every YouTube URL even though Cloud Run worked. Cloud Run's `SHORTSFLOW_FRONTEND_ORIGIN` still allows `https://www.cutpick.com` for any direct calls.
 
 ## Validation
 
