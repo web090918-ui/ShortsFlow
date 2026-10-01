@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useId, useRef, type CSSProperties } from "react";
 
 import { headlineLines, isLightColor, longestWord } from "@/lib/render-options";
 import type { BrandSwatch, CaptionPosition, CaptionTemplate, FrameLayout } from "@/lib/render-options";
@@ -74,7 +74,7 @@ export function CaptionSample({
   const captionBase: CSSProperties = {
     color: textColor,
     fontWeight: Number(preview.weight ?? "800"),
-    fontSize: captionKind === "pop" ? "0.74rem" : "0.6rem",
+    fontSize: captionKind === "pop" ? "6.67cqw" : captionKind === "karaoke" ? "5.74cqw" : "5.19cqw",
     textShadow: outline,
   };
   if (preview.background && !onStage) {
@@ -84,7 +84,7 @@ export function CaptionSample({
   }
   return (
     <span
-      className={`caption-sample caption-sample-${layout.toLowerCase()} caption-sample-${captionPosition.toLowerCase()}${leftAligned ? " caption-sample-left" : ""}`}
+      className={`caption-sample caption-sample-${layout.toLowerCase()} caption-sample-${preview.positionable === "true" ? captionPosition.toLowerCase() : "bottom"}${leftAligned ? " caption-sample-left" : ""}${onStage && preview.tagline ? " caption-sample-social" : ""}${onStage && preview.kicker ? " caption-sample-community" : ""}`}
       style={{ background: stageColor }}
       aria-hidden="true"
     >
@@ -176,16 +176,29 @@ export function TemplatePicker({
   channelName,
 }: TemplatePickerProps) {
   const selected = templates.find((template) => template.id === value);
+  const strip = useRef<HTMLDivElement>(null);
+  const stripId = useId();
+  const scroll = (direction: number) => {
+    const element = strip.current;
+    if (element) element.scrollBy({ left: direction * element.clientWidth * 0.8, behavior: "smooth" });
+  };
   return (
     <fieldset className="template-picker">
       <legend>
         템플릿 {selected ? <em className="template-selected-name">{selected.name}</em> : null}
       </legend>
       <p>
-        {description ?? "내 영상 위에 어떻게 보이는지 그대로 미리 보여 드려요."}
+        {description ?? "스타일을 고르면 제목과 자막 디자인에 적용됩니다. 카드는 배치 예시이며 실제 자막은 영상에 맞춰 생성돼요."}
         {imageUrl ? null : " 영상을 불러오면 그 장면이 미리보기에 들어갑니다."}
       </p>
-      <div className="template-options template-scroll">
+      <div className="template-browse">
+        <span>{templates.length}가지 스타일 · 옆으로 넘겨 비교하세요</span>
+        <div>
+          <button type="button" aria-label="이전 스타일 보기" aria-controls={stripId} onClick={() => scroll(-1)}>←</button>
+          <button type="button" aria-label="다음 스타일 보기" aria-controls={stripId} onClick={() => scroll(1)}>→</button>
+        </div>
+      </div>
+      <div ref={strip} id={stripId} className="template-options template-scroll">
         {templates.map((template) => (
           <button
             key={template.id}
@@ -194,7 +207,9 @@ export function TemplatePicker({
             aria-pressed={value === template.id}
             aria-label={`${template.name} 템플릿`}
             onClick={() => onChange(template.id)}
+            onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" })}
           >
+            <span className="template-selection-mark" aria-hidden="true">{value === template.id ? "✓ 선택됨" : "선택"}</span>
             <CaptionSample
               template={template}
               layout={layout}

@@ -238,6 +238,10 @@ describe("SourceInput", () => {
     const descriptionBox = screen.getByLabelText("쇼츠 설명 추천") as HTMLTextAreaElement;
     expect(titleBox.value).toBe("호텔 바우처, [처음] 받아봤습니다");
     expect(descriptionBox.value).toBe("호텔 바우처 받은 썰. 댓글로 경험 공유해 주세요! #여행 #쇼츠");
+    // Changes made after analysis must reach the final render, too.
+    await user.click(screen.getByRole("button", { name: "자막 강조형 템플릿" }));
+    await user.click(screen.getByRole("button", { name: "골드 컬러" }));
+    await user.click(screen.getByRole("button", { name: "자막 중앙" }));
     await user.clear(descriptionBox);
     await user.type(descriptionBox, "수정한 설명 #쇼츠");
     await user.click(screen.getByRole("button", { name: "이 제목으로 쇼츠 만들기" }));
@@ -251,6 +255,10 @@ describe("SourceInput", () => {
           processing_job_id: "analysis-1",
           candidate_id: "cand-1",
           rights_confirmed: true,
+          template_id: "CAPTION_ACCENT",
+          layout_id: "STAGE",
+          brand_color: "#FFD23F",
+          caption_position: "MIDDLE",
           title: "호텔 바우처, [처음] 받아봤습니다",
           description: "수정한 설명 #쇼츠",
         }),

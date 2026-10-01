@@ -109,6 +109,12 @@ describe("TemplatePicker", () => {
       DEFAULT_RENDER_OPTIONS.templates.length,
     );
   });
+
+  it("only moves captions on templates that support position changes", () => {
+    render(<TemplatePicker templates={DEFAULT_RENDER_OPTIONS.templates} value="CAPTION_ACCENT" onChange={() => {}} imageUrl={IMAGE} captionPosition="MIDDLE" />);
+    expect(screen.getByRole("button", { name: "자막 강조형 템플릿" }).querySelector(".caption-sample-middle")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "페이퍼 템플릿" }).querySelector(".caption-sample-bottom")).not.toBeNull();
+  });
 });
 
 describe("LayoutPicker", () => {
