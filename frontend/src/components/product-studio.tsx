@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
-import { creditCost } from "@/lib/auth";
+import { creditBudget, creditCost } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 
 type TemplateId = "CLEAN_CAPTION" | "BOLD_HIGHLIGHT" | "MINIMAL";
@@ -309,8 +309,10 @@ export function ProductStudio({ sourceId, product, content, onContent, onRenderS
           {productCost !== null ? (
             <p className="range-help">
               상품 쇼츠 1편에 {productCost}크레딧이 차감됩니다
-              {typeof authStatus.credits === "number" ? ` (보유 ${authStatus.credits})` : ""}. 실패 시 자동
-              환불됩니다.
+              {typeof authStatus.credits === "number"
+                ? ` (보유 ${authStatus.credits}, 약 ${creditBudget(authStatus)?.productShorts ?? 0}편 가능)`
+                : ""}
+              . 실패 시 자동 환불됩니다.
             </p>
           ) : null}
 

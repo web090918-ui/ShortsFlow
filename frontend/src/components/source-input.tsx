@@ -7,7 +7,7 @@ import { API_URL } from "@/config";
 import { formatTimecode } from "@/lib/timecode";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
-import { creditCost, minutesRoundedUp } from "@/lib/auth";
+import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 import { currentDurationReader, putUpload } from "@/lib/upload";
 import type { UploadTarget } from "@/lib/upload";
@@ -559,6 +559,14 @@ export function SourceInput() {
           );
         })}
       </ol>
+
+      {typeof authStatus.credits === "number" ? (
+        <p className="credit-summary">
+          남은 크레딧 <strong>{authStatus.credits}</strong>
+          {describeCreditBudget(authStatus) ? ` · ${describeCreditBudget(authStatus)}` : ""}
+          {" · 추천 구간 렌더는 무료"}
+        </p>
+      ) : null}
 
       <form onSubmit={handleSubmit}>
         <p className="form-intro">{mode === "url" ? "쇼츠로 만들 YouTube 영상 링크를 붙여 넣으세요." : "내 기기에 있는 영상 파일로 쇼츠를 만들어보세요."}</p>

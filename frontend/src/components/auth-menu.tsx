@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-import { loginUrl, logout } from "@/lib/auth";
+import { describeCreditBudget, loginUrl, logout } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 
 export function AuthMenu() {
@@ -21,7 +21,11 @@ export function AuthMenu() {
           내 작업
         </Link>
         {typeof status.credits === "number" ? (
-          <Link href="/my" className="credit-badge" title="남은 크레딧">
+          <Link
+            href="/my"
+            className="credit-badge"
+            title={describeCreditBudget(status) ?? "남은 크레딧"}
+          >
             크레딧 <strong>{status.credits}</strong>
           </Link>
         ) : null}

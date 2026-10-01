@@ -8,7 +8,7 @@ import { API_URL } from "@/config";
 import { RenderResult } from "@/components/render-result";
 import type { RenderJob } from "@/components/render-result";
 import { formatTimecode } from "@/lib/timecode";
-import { loginUrl } from "@/lib/auth";
+import { describeCreditBudget, loginUrl } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 
 type AnalysisSummary = {
@@ -137,9 +137,16 @@ export function MyWorks() {
           <h2 id="credit-heading">남은 크레딧 {credits.balance}</h2>
         </div>
       </div>
-      <p className="range-help">
-        1크레딧 = 원본 영상 1분 분석. 추천 구간 렌더는 무료, 실패한 작업은 자동 환불됩니다.
+      <p className="credit-summary">
+        지금 잔액으로 {describeCreditBudget({ ...status, credits: credits.balance }) ?? "작업"}
+        을 만들 수 있어요.
       </p>
+      <ul className="credit-rules">
+        <li>1크레딧 = 원본 영상 1분 분석 (올림). 15분 구간이면 15크레딧.</li>
+        <li>추천 Top 3 중 하나를 렌더하는 것은 무료. 직접 지정 쇼츠는 클립 1분당 1크레딧.</li>
+        <li>상품 쇼츠는 1편 5크레딧. 콘텐츠 앵글 만들기는 무료.</li>
+        <li>작업 생성 시 차감되고, 최종 실패하면 자동으로 되돌려 드립니다.</li>
+      </ul>
       {credits.entries.length > 0 ? (
         <ul className="credit-entries">
           {credits.entries.slice(0, 10).map((entry) => (
