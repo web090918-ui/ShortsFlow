@@ -21,10 +21,10 @@
 .creditRow { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; color:#76727f!important; }
 .creditRow > span:last-child { white-space:nowrap; font-size:14px; }
 .creditRow strong { color:#19191c; font-weight:700; }
-.creditTrack { height:6px; background:#e9e5ee; border-radius:99px; overflow:hidden; }
-.creditTrack > span { display:block; height:100%; background:#9437ed; border-radius:inherit; }
-.upgradeButton { display:flex; align-items:center; justify-content:center; gap:6px; min-height:40px; margin-top:8px; padding:8px; border:0; border-radius:5px; background:#19191c; color:#fff; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
-.upgradeButton:hover { background:#333238; }
+.creditTrack { height:6px; background:#f8ded8; border-radius:99px; overflow:hidden; }
+.creditTrack > span { display:block; height:100%; background:var(--accent); border-radius:inherit; }
+.upgradeButton { display:flex; align-items:center; justify-content:center; gap:6px; min-height:40px; margin-top:8px; padding:8px; border:0; border-radius:5px; background:#c92810; color:#fff; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+.upgradeButton:hover { background:#ad230e; }
 .balance .upgradeNotice { margin:0; font-size:12px; line-height:1.5; }
 .creditNumber { color:var(--accent); font-size:32px; }
 .homeLink { font-size:12px; color:var(--muted)!important; padding:0 10px; }
