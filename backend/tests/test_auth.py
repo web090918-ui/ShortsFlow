@@ -138,6 +138,18 @@ def test_creation_requires_login_when_auth_mode_is_google(google_auth, monkeypat
     client.cookies.clear()
 
 
+def test_misconfigured_google_mode_fails_closed_but_keeps_serving(monkeypatch) -> None:
+    monkeypatch.setattr(auth_module, "auth_required", True)
+    monkeypatch.setattr(auth_module, "oauth", None)
+    client.cookies.clear()
+
+    assert client.get("/health").status_code == 200
+    status = client.get("/auth/status").json()
+    assert status["auth_required"] is True and status["login_available"] is False
+    assert client.get("/auth/google/start", follow_redirects=False).status_code == 503
+    assert client.post("/sources", json={"url": "https://youtu.be/abc12345678"}).status_code == 401
+
+
 class StubDispatcher:
     def enqueue(self, job_id, background_tasks) -> str:
         return "task"

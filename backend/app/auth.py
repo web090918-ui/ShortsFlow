@@ -220,10 +220,15 @@ signer = SessionSigner(
     else "development-only-session-secret"
 )
 if auth_required and (oauth is None or settings.session_secret is None):
-    raise RuntimeError(
-        "SHORTSFLOW_AUTH_MODE=google requires SHORTSFLOW_GOOGLE_OAUTH_CLIENT_ID, "
-        "SHORTSFLOW_GOOGLE_OAUTH_CLIENT_SECRET, and SHORTSFLOW_SESSION_SECRET."
+    # Fail closed but keep serving: creation stays blocked (login required) and
+    # /auth/status reports login_available=false so the misconfiguration is visible
+    # instead of a revision that never starts.
+    logger.critical(
+        "SHORTSFLOW_AUTH_MODE=google but SHORTSFLOW_GOOGLE_OAUTH_CLIENT_ID, "
+        "SHORTSFLOW_GOOGLE_OAUTH_CLIENT_SECRET, or SHORTSFLOW_SESSION_SECRET is missing; "
+        "sign-in is unavailable until they are set."
     )
+    oauth = None
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
