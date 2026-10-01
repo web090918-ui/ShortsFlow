@@ -8,7 +8,7 @@ import { formatTimecode } from "@/lib/timecode";
 import { RenderResult } from "@/components/render-result";
 import { SourcePlayer } from "@/components/source-player";
 import type { RenderJob } from "@/components/render-result";
-import { creditCost, describeCreditBudget, minutesRoundedUp } from "@/lib/auth";
+import { creditCost, minutesRoundedUp } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/auth-context";
 import {
   BrandColorPicker,
@@ -88,7 +88,6 @@ type AnalysisJob = {
 
 const DEFAULT_RANGE_SECONDS = 15 * 60;
 const MAX_DIRECT_CLIP_SECONDS = 180;
-const STEPS = ["소스", "구간·옵션", "추천", "결과"];
 const MAX_RANGE_SECONDS = 60 * 60;
 const POLL_INTERVAL_MS = 1500;
 const SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -563,14 +562,6 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
   const analysisActive = analysisJob !== null && !isTerminalAnalysis(analysisJob);
   const renderActive = renderJob !== null && !isTerminalRender(renderJob);
   const directActive = directJob !== null && !isTerminalRender(directJob);
-  const currentStep =
-    renderJob || directJob
-      ? 4
-      : analysisJob?.status === "COMPLETED"
-        ? 3
-        : source?.status === "READY"
-          ? 2
-          : 1;
 
   return (
     <section className="source-panel" aria-labelledby="source-heading">
@@ -579,6 +570,9 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
           <p className="section-label">LET’S MAKE A SHORT</p>
           <h2 id="source-heading">어떤 영상으로 만들까요?</h2>
         </div>
+      </div>
+
+      <form className={`source-entry-form${mode === "upload" ? " source-entry-upload" : ""}`} onSubmit={handleSubmit}>
         <div className="mode-switch" aria-label="영상 입력 방식">
           <button
             className={mode === "url" ? "active" : ""}
@@ -597,31 +591,6 @@ export function SourceInput({ initialUrl = "" }: { initialUrl?: string } = {}) {
             파일 업로드
           </button>
         </div>
-      </div>
-
-      <ol className="stepper" aria-label="진행 단계">
-        {STEPS.map((label, index) => {
-          const number = index + 1;
-          const state = number < currentStep ? "done" : number === currentStep ? "current" : "";
-          return (
-            <li key={label} className={state} aria-current={number === currentStep ? "step" : undefined}>
-              <span>{number}</span>
-              {label}
-            </li>
-          );
-        })}
-      </ol>
-
-      {typeof authStatus.credits === "number" ? (
-        <p className="credit-summary">
-          남은 크레딧 <strong>{authStatus.credits}</strong>
-          {describeCreditBudget(authStatus) ? ` · ${describeCreditBudget(authStatus)}` : ""}
-          {" · 추천 구간 렌더는 무료"}
-        </p>
-      ) : null}
-
-      <form className={`source-entry-form${mode === "upload" ? " source-entry-upload" : ""}`} onSubmit={handleSubmit}>
-        <p className="form-intro">{mode === "url" ? "쇼츠로 만들 YouTube 영상 링크를 붙여 넣으세요." : "내 기기에 있는 영상 파일로 쇼츠를 만들어보세요."}</p>
         {mode === "url" ? (
           <label className="field">
             <span>YouTube URL</span>

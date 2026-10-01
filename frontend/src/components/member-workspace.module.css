@@ -48,6 +48,7 @@
 .studio :global(.secondary-button) { background:#fff; color:#b52418; border-color:#d8b5ae; }
 .studio :global(.source-entry-form) { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:12px; }
 .studio :global(.source-entry-form > .form-intro) { grid-column:1 / -1; margin:0 0 8px; }
+.studio :global(.source-entry-form > .mode-switch) { grid-column:1 / -1; grid-row:1; justify-self:start; width:fit-content; margin-bottom:6px; }
 .studio :global(.source-entry-form > .field) { grid-column:1; grid-row:2; min-width:0; }
 .studio :global(.source-entry-form > .source-entry-submit) { grid-column:2; grid-row:2; min-height:52px; padding:14px 24px; font-size:14px; white-space:nowrap; border-radius:8px; }
 .studio :global(.source-entry-form > .range-help),.studio :global(.source-entry-form > .input-footnote) { grid-column:1 / -1; margin:0; font-size:12px; text-align:left; justify-content:flex-start; overflow-wrap:anywhere; }
