@@ -1,10 +1,11 @@
-from dataclasses import asdict
 """Public API for rendering a Short: manual range or a ranked candidate -> 9:16 MP4.
 
 This router is a thin facade over the Task 04 processing-job infrastructure. It
 creates a ``SHORT_RENDER`` job, exposes user-facing status, and serves or redirects
 to the finished artifact for download and inline preview.
 """
+
+from dataclasses import asdict
 
 from datetime import datetime
 from enum import Enum

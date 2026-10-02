@@ -1,4 +1,4 @@
-# Handoff (2026-10-01, evening)
+# Handoff (2026-10-02)
 
 Where the project stands, what is waiting on the owner, and what comes next. Read this first when continuing from another machine.
 
@@ -12,7 +12,28 @@ Where the project stands, what is waiting on the owner, and what comes next. Rea
 - 글·사진으로 만들기 (Task 14, 2026-10-01): typed title/price/description plus up to three pictures (upload or URL) become a READY product Source; AI suggests angles, title and description; product Shorts render on the same stage templates with brand colour and a picture slideshow. The Coupang link is now a shortcut inside that flow. See [Task 14](TASK_14_TEXT_PHOTO_SHORTS.md).
 - Member workspace (2026-10-01, owner's commits `dd32db6`…`20d7bc0` plus follow-ups): `/my` is a light-themed workspace with a sidebar (내 프로젝트 / 영상 쇼츠 만들기 / 글·사진으로 만들기), a red 크레딧 button in the top bar, and the studios rendered inside it at `/my/video` and `/my/affiliate`. 내 프로젝트 groups work per source video (`GET /me/projects`, `/my/{source_id}`). Credit charging rules live in 계정 · 제작 설정; the balance carries a "?" tooltip with what it can make.
 - Picking a clip (2026-10-01): each Top 3 card shows a miniature of the finished Short in the chosen template/brand colour (upload: a frame captured at the clip start; YouTube: a muted player paused at that second), the AI title/description, hook, reason and tags. Starting any render opens a layer popup: it keeps going on the server; the file is in 내 프로젝트.
-- Tests at the last run: backend 190 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 44 (`vitest`), lint and `next build` clean. Last commit `4e14f1e`.
+- Tests at the last run (2026-10-02, after the pull): backend 228 (`pytest`, run in the backend Docker image because this machine has no Python), frontend 47 (`vitest`), lint and `next build` clean.
+
+## Pulled from the other machine on 2026-10-02 (commits `8bece0a`…`75529c9`)
+
+Five commits made elsewhere, reviewed here; all suites pass on them (backend 228, frontend 47, lint and `next build` clean).
+
+1. **Cleaner clip boundaries** (`8bece0a`): candidates no longer open on a connective (그래서/근데/so…) and end on a sentence end or pause near the target length; each carries two speech units of context before/after and the set keeps the unit list (`CandidateSet.units`). The AI ranker may propose a new start/end; `adjust_boundaries` snaps it to unit edges, refuses shifts over 12 s or lengths outside 15–60 s, refreshes the hook, and `_resolve_candidate` renders the adjusted range (`RankedCandidate.boundary_adjusted`). Generator/criteria versions bumped to `heuristic_v2` / `generic_v2`.
+2. **Replay-based range suggestions, silence removal, title intro** (`2b20922`): Titan metadata now keeps the yt-dlp `heatmap` and `chapters`; `range_recommendation.py` derives up to three 5-minute analysis windows around replay peaks (snapped to a 1–10 min chapter) into `metadata.youtube.recommended_ranges`, shown as chips plus a heatmap under the range slider (first one preselected). `remove_silence` (off by default) runs FFmpeg `silencedetect` (−35 dB, ≥0.6 s), keeps 0.12 s of air per cut, joins the kept stretches with trim/concat and retimes captions with `remap_cues`; skipped when under 0.5 s would go, the result would drop below 15 s, or there is no audio stream. `title_intro` (on in the UI) shows the headline full-frame over a dimmed picture for 2.4 s. Both flags live on analysis and render jobs; candidate renders inherit unless overridden.
+3. **Readable API errors** (`89e955b`): `frontend/src/lib/api.ts` `readJsonResponse` parses text first and explains 429/5xx in plain words.
+4. **Credit top-up script** (`880c73b`): `backend/scripts/grant_credits.py --email … --amount …` writes an `adjustment` ledger entry (Firestore only).
+5. **Taller stage picture + templates from screenshots** (`75529c9`): `CaptionStyle.picture_height` with presets 608/900/1180 (default 1180, centre-cropped; captions overlap the lower picture edge from 900 up); every stage coordinate derives from it, previews follow via a `--picture` CSS variable. `POST /templates/from-image` sends a screenshot data URL to the vision model (`SHORTSFLOW_OPENAI_VISION_MODEL`, default `gpt-4.1-mini`), snaps the measured band to the presets and stores a per-user `UserTemplate` (Firestore `user_templates`, max 10). `GET /templates` now takes the session cookie and returns `user_templates`; jobs carry `custom_template_id` plus the resolved style in `render_input["style"]`. The picker shows a "스크린샷으로 만들기" card and custom templates first, with delete.
+
+Review notes (nothing blocking):
+
+- Product Shorts keep their own 900 px box and do not use `picture_height`, `remove_silence`, `title_intro` or custom templates; fine for now, but the two studios will drift if more render options land only on the video path.
+- The 1180 px default crops a 16:9 source to its centre 61 %; sources with burned-in side text or two-person framing lose the edges. The FIT layout and the 608 preset (via a screenshot template) remain the escape hatches; consider exposing the band height as a direct option if users ask.
+- `GET /templates` is called with `credentials: "include"`, so logged-out visitors get an empty `user_templates`; Firestore queries with `user_id == None` return nothing, as intended.
+- The vision extractor trusts the model's JSON; `TemplateSpec` validation bounds colours and fractions, but a wrong measurement produces a wrong-looking template with no edit step (by design: "apply or extract again").
+- Silence removal re-encodes through `filter_complex` trim/concat; long clips with many cuts will take longer. Keep an eye on Cloud Run render times once it is used.
+- `shorts.py` had an import above the module docstring (moved below it in this commit).
+
+Owner checks for these features: run one analysis on a long YouTube video with replay data (chips + heatmap appear, first window preselected), render with 무음 제거 and 제목 인트로 on, and make one template from a screenshot of a Short you like (`/my/video` → template strip → 스크린샷으로 만들기). A 503 from `/templates/from-image` means the OpenAI key is missing on Cloud Run; a 422 means the model could not read the picture.
 
 ## Waiting on the owner (no code change needed)
 
